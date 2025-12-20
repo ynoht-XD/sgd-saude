@@ -1,0 +1,231 @@
+{% extends "layout.html" %}
+{% block title %}Home · SGD{% endblock %}
+
+{% block content %}
+<div class="page-home">
+
+  <header class="home-head">
+    <div>
+      <h2>Visão geral</h2>
+      <p>Competência: <b>{{ competencia }}</b></p>
+      {% if hoje_iso is defined %}
+        <p class="sub">Hoje: <b>{{ hoje_iso }}</b>{% if hoje_dia is defined %} · <span style="text-transform:capitalize">{{ hoje_dia }}</span>{% endif %}</p>
+      {% endif %}
+    </div>
+  </header>
+
+  <section class="kpis">
+    <article class="kpi">
+      <div class="kpi-label">Pacientes ativos</div>
+      <div class="kpi-value">{{ kpi_ativos }}</div>
+    </article>
+
+    <article class="kpi">
+      <div class="kpi-label">Pacientes em espera</div>
+      <div class="kpi-value">{{ kpi_espera }}</div>
+    </article>
+
+    <article class="kpi">
+      <div class="kpi-label">Procedimentos na competência</div>
+      <div class="kpi-value">{{ kpi_procedimentos }}</div>
+    </article>
+  </section>
+
+  <!-- ==========================
+       AGENDADOS DE HOJE
+       ========================== -->
+  <section class="card">
+    <div class="card-head">
+      <h3>Agendados de hoje</h3>
+      {% if hoje_iso is defined %}
+        <span class="pill">{{ hoje_iso }}</span>
+      {% endif %}
+    </div>
+
+    {% if agendados_hoje is defined and agendados_hoje and agendados_hoje|length %}
+      <div class="table-wrap">
+        <table class="t">
+          <thead>
+            <tr>
+              <th style="width:130px">Horário</th>
+              <th>Paciente</th>
+              <th>Profissional</th>
+              <th style="width:260px">Obs.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in agendados_hoje %}
+              <tr>
+                <td>
+                  <b>{{ a.hora_ini }}</b>
+                  {% if a.hora_fim %}–{{ a.hora_fim }}{% endif %}
+                </td>
+                <td>{{ a.paciente }}</td>
+                <td>
+                  {{ a.profissional_nome }}
+                  {% if a.profissional_cpf %}
+                    <span class="muted"> · {{ a.profissional_cpf }}</span>
+                  {% endif %}
+                </td>
+                <td class="muted">{{ a.observacao }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">Nada agendado para hoje (ou todos estão inativos).</p>
+    {% endif %}
+  </section>
+
+  <!-- ==========================
+       ATENDIMENTOS POR PROFISSIONAL
+       (fallback para atend_por_usuario)
+       ========================== -->
+  <section class="card" style="margin-top:14px">
+    <div class="card-head">
+      <h3>Atendimentos por profissional (competência)</h3>
+    </div>
+
+    {% if atend_por_prof is defined and atend_por_prof and atend_por_prof|length %}
+      <div class="table-wrap">
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Profissional</th>
+              <th style="width:140px;text-align:right">Qtd</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in atend_por_prof %}
+              <tr>
+                <td>{{ row.profissional }}</td>
+                <td style="text-align:right"><b>{{ row.qtd }}</b></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% elif atend_por_usuario is defined and atend_por_usuario and atend_por_usuario|length %}
+      <div class="table-wrap">
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Usuário</th>
+              <th style="width:140px;text-align:right">Qtd</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in atend_por_usuario %}
+              <tr>
+                <td>{{ row.usuario }}</td>
+                <td style="text-align:right"><b>{{ row.qtd }}</b></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% else %}
+      <p class="empty">Sem dados de atendimentos nessa competência (ou faltou coluna de usuário/data).</p>
+    {% endif %}
+  </section>
+
+</div>
+
+<style>
+  .page-home{
+    max-width:min(1200px,96vw);
+    margin:18px auto 28px;
+    padding:0 12px 24px;
+    font-family:system-ui,-apple-system,Segoe UI,sans-serif
+  }
+
+  .home-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:12px;
+    margin:10px 0 14px;
+    flex-wrap:wrap
+  }
+  .home-head h2{margin:0;font-size:22px;font-weight:900}
+  .home-head p{margin:4px 0 0;color:#64748b}
+  .home-head .sub{font-size:.92rem;color:#64748b}
+
+  .kpis{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:12px;
+    margin:14px 0 16px
+  }
+  .kpi{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    padding:14px 14px;
+    box-shadow:0 8px 22px rgba(2,6,23,.06)
+  }
+  .kpi-label{font-size:.9rem;color:#64748b}
+  .kpi-value{font-size:28px;font-weight:900;letter-spacing:.2px;margin-top:6px}
+
+  .card{
+    background:#fff;
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    padding:14px;
+    box-shadow:0 8px 22px rgba(2,6,23,.06)
+  }
+  .card-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px
+  }
+  .card-head h3{margin:0;font-size:16px;font-weight:900}
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:.85rem;
+    border:1px solid #e5e7eb;
+    background:#f8fafc;
+    color:#0f172a;
+    white-space:nowrap
+  }
+
+  .table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+  table.t{width:100%;border-collapse:collapse}
+  .t thead th{
+    background:#f8fafc;
+    text-align:left;
+    padding:10px 12px;
+    font-size:.85rem;
+    color:#475569;
+    border-bottom:1px solid #e5e7eb;
+    white-space:nowrap
+  }
+  .t tbody td{
+    padding:10px 12px;
+    border-bottom:1px solid #eef2f7;
+    vertical-align:top
+  }
+  .t tbody tr:hover{background:#fafafa}
+
+  .muted{color:#64748b}
+  .empty{margin:0;color:#64748b}
+
+  @media (max-width: 860px){
+    .kpis{grid-template-columns:1fr;gap:10px}
+    .t thead th:nth-child(4),
+    .t tbody td:nth-child(4){
+      display:none; /* some a coluna Obs no mobile pra ficar limpo */
+    }
+  }
+</style>
+{% endblock %}

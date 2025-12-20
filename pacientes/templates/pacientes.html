@@ -1,0 +1,405 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('pacientes.static', filename='css/pacientes.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<form method="get" class="filtros-form" autocomplete="off">
+  <div class="filtros-grid">
+    <input type="text" name="prontuario" placeholder="Prontuário" value="{{ request.args.get('prontuario', '') }}">
+
+    <input type="text" name="nome" placeholder="Nome" value="{{ request.args.get('nome', '') }}" list="dl-nomes" inputmode="search">
+    <datalist id="dl-nomes">
+      {% if sugestoes_nomes %}
+        {% for n in sugestoes_nomes %}
+          <option value="{{ n.nome }}" label="{{ n.cpf }} • {{ n.idade }} anos"></option>
+        {% endfor %}
+      {% endif %}
+    </datalist>
+
+    <!-- Terapeuta -->
+    <input type="text" name="terapeuta" placeholder="Terapeuta" value="{{ request.args.get('terapeuta','') }}" list="dl-terapeutas">
+    <datalist id="dl-terapeutas">
+      {% if sugestoes_terapeutas %}
+        {% for t in sugestoes_terapeutas %}
+          <option value="{{ t }}"></option>
+        {% endfor %}
+      {% endif %}
+    </datalist>
+
+    <!-- CBO -->
+    <input type="text" name="cbo" placeholder="CBO" value="{{ request.args.get('cbo','') }}" list="dl-cbos" inputmode="numeric">
+    <datalist id="dl-cbos">
+      {% if sugestoes_cbos %}
+        {% for c in sugestoes_cbos %}
+          <option value="{{ c }}"></option>
+        {% endfor %}
+      {% endif %}
+    </datalist>
+
+    <!-- Rua -->
+    <input type="text" name="rua" placeholder="Rua" value="{{ request.args.get('rua','') }}">
+
+    <!-- ✅ Agendamento (dia) — agora bate com o backend: name="ag_dia" -->
+    <select name="ag_dia">
+      <option value="">Agendamento (dia)</option>
+      {% set ds = (request.args.get('ag_dia') or '') %}
+      {% for d in ['segunda','terca','quarta','quinta','sexta','sabado','domingo'] %}
+        <option value="{{ d }}" {{ 'selected' if ds == d else '' }}>
+          {{ d|capitalize }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <input type="number" name="idade_min" placeholder="Idade de" min="0" value="{{ request.args.get('idade_min','') }}">
+    <input type="number" name="idade_max" placeholder="até" min="0" value="{{ request.args.get('idade_max','') }}">
+
+    <select name="mes_nasc">
+      <option value="">Mês de nascimento</option>
+      {% set mes_sel = (request.args.get('mes_nasc') or '') %}
+      <option value="1"  {{ 'selected' if mes_sel == '1'  else '' }}>Janeiro</option>
+      <option value="2"  {{ 'selected' if mes_sel == '2'  else '' }}>Fevereiro</option>
+      <option value="3"  {{ 'selected' if mes_sel == '3'  else '' }}>Março</option>
+      <option value="4"  {{ 'selected' if mes_sel == '4'  else '' }}>Abril</option>
+      <option value="5"  {{ 'selected' if mes_sel == '5'  else '' }}>Maio</option>
+      <option value="6"  {{ 'selected' if mes_sel == '6'  else '' }}>Junho</option>
+      <option value="7"  {{ 'selected' if mes_sel == '7'  else '' }}>Julho</option>
+      <option value="8"  {{ 'selected' if mes_sel == '8'  else '' }}>Agosto</option>
+      <option value="9"  {{ 'selected' if mes_sel == '9'  else '' }}>Setembro</option>
+      <option value="10" {{ 'selected' if mes_sel == '10' else '' }}>Outubro</option>
+      <option value="11" {{ 'selected' if mes_sel == '11' else '' }}>Novembro</option>
+      <option value="12" {{ 'selected' if mes_sel == '12' else '' }}>Dezembro</option>
+    </select>
+
+    <select name="sexo">
+      <option value="">Sexo</option>
+      <option value="M" {{ 'selected' if request.args.get('sexo') == 'M' else '' }}>Masculino</option>
+      <option value="F" {{ 'selected' if request.args.get('sexo') == 'F' else '' }}>Feminino</option>
+    </select>
+
+    <select name="status">
+      <option value="">Status</option>
+      {% for s in ['Ativo', 'Alta', 'Desligado', 'Espera'] %}
+        <option value="{{ s }}" {{ 'selected' if request.args.get('status') == s else '' }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+
+    <input type="text" name="mod" placeholder="Modalidade" value="{{ request.args.get('mod', '') }}" list="dl-mods">
+    <datalist id="dl-mods">
+      {% if sugestoes_modalidades %}
+        {% for m in sugestoes_modalidades %}
+          <option value="{{ m }}"></option>
+        {% endfor %}
+      {% endif %}
+    </datalist>
+
+    <input type="text" name="cid" placeholder="CID" value="{{ request.args.get('cid', '') }}" list="dl-cids" inputmode="search">
+    <datalist id="dl-cids">
+      {% if sugestoes_cids %}
+        {% for c in sugestoes_cids %}
+          <option value="{{ c }}"></option>
+        {% endfor %}
+      {% endif %}
+    </datalist>
+
+    <input type="text" name="cidade" placeholder="Cidade" value="{{ request.args.get('cidade', '') }}">
+    <input type="text" name="bairro" placeholder="Bairro" value="{{ request.args.get('bairro', '') }}">
+  </div>
+
+  <div class="filtros-botoes">
+    <button type="submit" class="botao-filtrar">🔍 Filtrar</button>
+    <a href="{{ url_for('pacientes.exportar_xls') }}" class="botao-exportar">🔽 Exportar XLS</a>
+  </div>
+</form>
+
+
+<div class="pacientes-container">
+
+  {% if pacientes %}
+    <div class="cards-grid">
+
+      {% for p in pacientes %}
+      <article class="pac-card" data-id="{{ p.id }}">
+
+        <!-- =======================
+             CABEÇALHO DO CARD
+             ======================= -->
+        <header class="pac-head">
+
+          <!-- LINHA 1 -->
+          <div class="pac-head-top">
+            <div class="pac-nome">{{ p.nome }}</div>
+            <span class="pac-num-badge" title="Nº da linha">{{ loop.index }}</span>
+          </div>
+
+          <!-- LINHA 2 -->
+          <div class="pac-badges">
+            {% if p.mod %}<span class="chip chip-mod">{{ p.mod }}</span>{% endif %}
+            {% if p.status %}<span class="chip chip-status">{{ p.status }}</span>{% endif %}
+          </div>
+
+          <!-- LINHA 3 -->
+          <div class="pac-actions" aria-label="Ações do paciente">
+            <a class="btn btn-prontuario" href="{{ url_for('pacientes.visualizar_paciente', id=p.id) }}" title="Abrir prontuário">
+              PRONTUÁRIO
+            </a>
+
+            <a class="btn btn-editar" href="{{ url_for('pacientes.editar_paciente', id=p.id) }}" title="Editar paciente">
+              ✏️
+            </a>
+
+            <form method="post"
+                  action="{{ url_for('pacientes.excluir_paciente', id=p.id) }}"
+                  class="form-inline"
+                  onsubmit="return confirm('Excluir definitivamente {{ p.nome }} (ID {{ p.id }})? Esta ação não pode ser desfeita.');">
+              <button type="submit" class="btn btn-excluir" title="Excluir paciente">🗑️</button>
+            </form>
+          </div>
+
+        </header>
+
+
+        <!-- =======================
+             LINHA 2 (DIVIDIDA)
+             ======================= -->
+        <section class="pac-row2">
+
+          <!-- Coluna A: Prontuário + Idade -->
+          <div class="pac-col">
+            <div class="kv">
+              <span class="k">Prontuário</span>
+              <span class="v">{{ p.prontuario or '—' }}</span>
+            </div>
+
+            <div class="kv">
+              <span class="k">Idade</span>
+              <span class="v">
+                {% if p.idade is not none %}{{ p.idade }}{% else %}—{% endif %}
+              </span>
+            </div>
+          </div>
+
+          <!-- Coluna B: END (autosave) + Sexo -->
+          <div class="pac-col">
+            <label class="kv kv-input">
+              <span class="k">END (Prontuário físico)</span>
+              <input
+                type="text"
+                class="inp inp-sm"
+                name="end_prontuario"
+                value="{{ p.end_prontuario or '' }}"
+                placeholder="Ex.: Armário 2 • Pasta 14"
+                data-autosave="end_prontuario"
+                data-id="{{ p.id }}"
+                autocomplete="off">
+            </label>
+
+            <div class="kv">
+              <span class="k">Sexo</span>
+              <span class="v">{{ p.sexo or '—' }}</span>
+            </div>
+          </div>
+
+        </section>
+
+
+        <!-- =======================
+             TERAPEUTA | CBO (chips)
+             ======================= -->
+        <section class="pac-row3">
+
+          <div class="kv">
+            <span class="k">Terapeuta</span>
+            <span class="v">
+              {% if p.terapeuta %}
+                {% set raw = p.terapeuta
+                  |replace(' / ', ',')
+                  |replace('/', ',')
+                  |replace(';', ',')
+                %}
+                {% set parts = raw.split(',') %}
+                {% for t in parts %}
+                  {% set t2 = t.strip() %}
+                  {% if t2 %}
+                    <span class="chip chip-prof">{{ t2 }}</span>
+                  {% endif %}
+                {% endfor %}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+
+          <div class="kv">
+            <span class="k">CBO</span>
+            <span class="v">
+              {% if p.cbo or p.cbo_nome %}
+                <span class="chip chip-cbo">{{ p.cbo or '—' }}</span>
+                <span class="muted">{{ p.cbo_nome or '' }}</span>
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+
+        </section>
+
+
+        <!-- =======================
+             DADOS PRINCIPAIS
+             ======================= -->
+        <section class="pac-grid-info">
+
+          <div class="kv">
+            <span class="k">Nascimento</span>
+            <span class="v">{{ p.nascimento or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">CPF</span>
+            <span class="v">{{ p.cpf or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">CNS</span>
+            <span class="v">{{ p.cns or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">Telefone</span>
+            <span class="v">{{ p.telefone or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">Nome da mãe</span>
+            <span class="v">{{ p.nome_mae or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">Nome do pai</span>
+            <span class="v">{{ p.nome_pai or '—' }}</span>
+          </div>
+
+          <!-- Logradouro -->
+          <div class="kv kv-wide">
+            <span class="k">Logradouro</span>
+            <span class="v">
+              {% set parts = [] %}
+              {% if p.rua %}{% set _ = parts.append(p.rua) %}{% endif %}
+              {% if p.numero %}{% set _ = parts.append(p.numero) %}{% endif %}
+              {% if p.bairro %}{% set _ = parts.append(p.bairro) %}{% endif %}
+              {% if p.cep %}{% set _ = parts.append(p.cep) %}{% endif %}
+              {% if p.cidade %}{% set _ = parts.append(p.cidade) %}{% endif %}
+              {% if p.uf %}{% set _ = parts.append(p.uf) %}{% endif %}
+
+              {% if parts|length %}
+                {{ parts|join(', ') }}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+
+          <!-- ✅ Agendamento (corrigido: usa ag_hora_ini/ag_hora_fim e opcional ag_resumo) -->
+          <div class="kv kv-wide">
+            <span class="k">Agendamento</span>
+            <span class="v">
+              {% if p.ag_resumo %}
+                {{ p.ag_resumo }}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+
+
+          <div class="kv kv-wide">
+            <span class="k">CID</span>
+            <span class="v">{{ p.cid or '—' }}</span>
+          </div>
+
+        </section>
+
+
+        <!-- =======================
+             COMORBIDADES / PROJETOS (autosave)
+             ======================= -->
+        <section class="pac-comorb">
+
+          <div class="section-title">Comorbidades / Projetos</div>
+
+          <div class="chips-grid" role="group" aria-label="Comorbidades e projetos">
+            {% set tags = [
+              ('diabetico','Diabético'),
+              ('bpc','BPC'),
+              ('cardiopata','Cardiopata'),
+              ('obeso','Obeso'),
+              ('hipertenso','Hipertenso'),
+              ('cadeirante','Cadeirante'),
+              ('surdo','Surdo'),
+              ('cego','Cego')
+            ] %}
+
+            {% for key, label in tags %}
+              <label class="chip-toggle">
+                <input
+                  type="checkbox"
+                  class="chip-check"
+                  data-autosave="tag"
+                  data-tag="{{ key }}"
+                  data-id="{{ p.id }}"
+                  {% if p.comorbidades_json and key in p.comorbidades_json %}checked{% endif %}>
+                <span class="chip chip-pick">{{ label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+
+          <div class="pac-notes">
+
+            <label class="kv kv-input">
+              <span class="k">Alergias</span>
+              <input
+                type="text"
+                class="inp inp-sm"
+                name="alergias"
+                value="{{ p.alergias or '' }}"
+                placeholder="Ex.: Dipirona"
+                data-autosave="alergias"
+                data-id="{{ p.id }}"
+                autocomplete="off">
+            </label>
+
+            <label class="kv kv-input">
+              <span class="k">Aviso / Situação</span>
+              <input
+                type="text"
+                class="inp inp-sm"
+                name="aviso"
+                value="{{ p.aviso or '' }}"
+                placeholder="Ex.: precisa de acompanhante"
+                data-autosave="aviso"
+                data-id="{{ p.id }}"
+                autocomplete="off">
+            </label>
+
+          </div>
+
+        </section>
+
+      </article>
+      {% endfor %}
+
+    </div>
+  {% else %}
+    <p>Nenhum paciente cadastrado.</p>
+  {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('pacientes.static', filename='js/pacientes.js') }}" defer></script>
+{% endblock %}

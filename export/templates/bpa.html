@@ -1,0 +1,68 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('export.static', filename='css/bpa.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="export-page">
+  <div class="container">
+    <div class="card">
+      <h1>Gerar TXT do BPA-i</h1>
+      <p class="sub">Informe os dados do cabeçalho e selecione a planilha <span class="chip">.xls / .xlsx</span> com as produções.</p>
+
+      <form id="bpaiForm" action="{{ url_for('export.bpa_convert') }}" method="post" enctype="multipart/form-data" novalidate>
+        <!-- Campos visuais + hidden para enviar no formato esperado pelo backend -->
+        <input type="hidden" name="cpf" id="cpfHidden">
+        <input type="hidden" name="competencia" id="competenciaHidden">
+
+        <div class="grid cols-3">
+          <div>
+            <label for="cpf">CPF do responsável pela informação</label>
+            <input class="field" id="cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14" required>
+            <div class="hint">Somente dígitos; será validado e enviado sem pontuação.</div>
+          </div>
+
+          <div>
+            <label for="competencia">Mês/Ano (MM/AAAA)</label>
+            <input class="field" id="competencia" type="month" required>
+            <div class="hint">Será convertido automaticamente para <strong>MM/AAAA</strong> no envio.</div>
+          </div>
+
+          <div>
+            <label for="sigla">Sigla do órgão (digitação)</label>
+            <input class="field" id="sigla" name="sigla" type="text" placeholder="SIGLA" maxlength="15" required>
+          </div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top:14px">
+          <div>
+            <label for="orgao">Órgão de origem (responsável pela informação)</label>
+            <input class="field" id="orgao" name="orgao" type="text" placeholder="Nome do órgão" required>
+          </div>
+
+          <div class="file">
+            <div>
+              <label for="file">Planilha de produções (XLS/XLSX)</label>
+              <input class="field" id="file" name="file" type="file" accept=".xls,.xlsx" required>
+              <div id="fileInfo" class="hint">Nenhum arquivo selecionado.</div>
+            </div>
+            <div class="row" style="justify-content:flex-end">
+              <button id="submitBtn" type="submit" disabled>Processar e gerar TXT</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="errorBox" class="error">Corrija os campos destacados e tente novamente.</div>
+        <div id="okBox" class="ok">Validado! Enviando…</div>
+      </form>
+
+      <div class="footer">Dica: o campo de competência usa o seletor nativo de mês/ano do navegador.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('export.static', filename='js/bpa.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# Flask
+instance/
+*.log
+
+# Banco de dados
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads e arquivos gerados
+static/uploads/
+static/fotos/
+static/temp/
+
+# Relatórios e exports
+*.pdf
+*.xlsx
+*.csv
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

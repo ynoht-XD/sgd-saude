@@ -1,0 +1,409 @@
+{# sgd/rh/templates/rh.html #}
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('rh.static', filename='css/rh.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="rh-container">
+
+  {# flashes #}
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="rh-flashes">
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {# header #}
+  <div class="rh-head">
+    <div class="title-area">
+      <h2>Recursos Humanos</h2>
+      <p class="muted">Visão geral do quadro, vencimentos e operações de pessoal.</p>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnNovoColab">+ Novo colaborador</button>
+      <button class="btn" id="btnEscalas">Escalas</button>
+      <button class="btn" id="btnFerias">Férias/Licenças</button>
+      <button class="btn ghost" id="btnRelatorios">Relatórios</button>
+    </div>
+  </div>
+
+  {# métricas #}
+  <section class="rh-cards">
+    <div class="kpi-card">
+      <div class="kpi-label">Colaboradores</div>
+      <div class="kpi-value">{{ metricas.colaboradores_total|default(0) }}</div>
+      <div class="kpi-sub">Ativos: {{ metricas.ativos|default(0) }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Férias pendentes</div>
+      <div class="kpi-value">{{ metricas.ferias_pendentes|default(0) }}</div>
+      <div class="kpi-sub">Próximos 60 dias</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">ASO vencendo</div>
+      <div class="kpi-value">{{ metricas.asos_vencendo_60d|default(0) }}</div>
+      <div class="kpi-sub">Próximos 60 dias</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Hoje</div>
+      <div class="kpi-value">{{ hoje|default("") }}</div>
+      <div class="kpi-sub">Data de referência</div>
+    </div>
+  </section>
+
+  {# alerts #}
+  <section class="rh-alerts">
+    <h3 class="section-title">Alertas</h3>
+    <ul class="alerts-list" id="alertsList">
+      {% for a in avisos|default([]) %}
+      <li class="alert-card">
+        <div class="alert-main">
+          <strong>{{ a.tipo }}</strong> — {{ a.colaborador }}
+        </div>
+        <div class="alert-meta">
+          {% if a.vence_em %}Vence em: <span>{{ a.vence_em }}</span>{% endif %}
+          {% if a.inicio %}Início: <span>{{ a.inicio }}</span>{% endif %}
+          {% if a.curso %}Curso: <span>{{ a.curso }}</span>{% endif %}
+          {% if a.dias %}{{ a.dias }} dias{% endif %}
+        </div>
+        <div class="alert-actions">
+          <button class="btn xs">Ver</button>
+          <button class="btn xs ghost">Lembrar depois</button>
+        </div>
+      </li>
+      {% else %}
+      <li class="alert-empty">Sem alertas por enquanto.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  {# colaboradores #}
+  <section class="rh-section">
+    <div class="section-head">
+      <h3 class="section-title">Colaboradores</h3>
+      <div class="section-actions">
+        <button class="btn" id="btnExportColab">Exportar CSV</button>
+      </div>
+    </div>
+
+    <form class="filters" id="fColab">
+      <input type="text" id="qColab" placeholder="Buscar por nome, CPF, cargo...">
+      <select id="uColab">
+        <option value="">Todas as unidades</option>
+        {% for u in unidades|default([]) %}
+          <option value="{{ u.id }}">{{ u.nome }}</option>
+        {% endfor %}
+      </select>
+      <select id="vincColab">
+        <option value="">Vínculo</option>
+        <option value="CLT">CLT</option>
+        <option value="PJ">PJ</option>
+        <option value="RESIDENTE">Residente</option>
+        <option value="ESTAGIARIO">Estagiário</option>
+        <option value="VOLUNTARIO">Voluntário</option>
+      </select>
+      <select id="statusColab">
+        <option value="">Status</option>
+        <option value="ATIVO">Ativo</option>
+        <option value="INATIVO">Inativo</option>
+      </select>
+      <button class="btn">Filtrar</button>
+      <button type="button" class="btn ghost" id="btnLimparFiltros">Limpar</button>
+    </form>
+
+    <div class="table-wrap">
+      <table class="table" id="tColab">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>CPF</th>
+            <th>Vínculo</th>
+            <th>Cargo / CBO</th>
+            <th>Unidade</th>
+            <th>Status</th>
+            <th style="width:140px">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {# conteúdo preenchido futuramente (JS ou backend) #}
+        </tbody>
+      </table>
+      <div class="empty" id="emptyColab">Nenhum colaborador encontrado.</div>
+    </div>
+  </section>
+
+  {# vencimentos #}
+  <section class="rh-section">
+    <div class="section-head">
+      <h3 class="section-title">Vencimentos & Conformidades</h3>
+      <div class="tabs" id="tabsVenc">
+        <button class="tab active" data-tab="aso">ASO</button>
+        <button class="tab" data-tab="treino">Treinamentos</button>
+        <button class="tab" data-tab="epi">EPIs</button>
+      </div>
+    </div>
+
+    <div class="tabs-panels">
+      <div class="tab-panel active" data-panel="aso">
+        <table class="table" id="tASO">
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Tipo</th>
+              <th>Data</th>
+              <th>Validade</th>
+              <th>Status</th>
+              <th style="width:100px">Ações</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="emptyASO">Sem itens.</div>
+      </div>
+
+      <div class="tab-panel" data-panel="treino">
+        <table class="table" id="tTreino">
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Treinamento</th>
+              <th>Concluído em</th>
+              <th>Válido até</th>
+              <th>Status</th>
+              <th style="width:100px">Ações</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="emptyTreino">Sem itens.</div>
+      </div>
+
+      <div class="tab-panel" data-panel="epi">
+        <table class="table" id="tEPI">
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>EPI</th>
+              <th>CA</th>
+              <th>Entregue em</th>
+              <th>Validade</th>
+              <th style="width:100px">Ações</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="emptyEPI">Sem itens.</div>
+      </div>
+    </div>
+  </section>
+
+  {# visões rápidas #}
+  <section class="rh-grid-two">
+    <div class="rh-card">
+      <div class="section-head">
+        <h3 class="section-title">Escalas (próxima semana)</h3>
+        <button class="btn xs" id="btnVerEscalas">Ver todas</button>
+      </div>
+      <table class="table" id="tEscalas">
+        <thead>
+          <tr>
+            <th>Colaborador</th>
+            <th>Unidade</th>
+            <th>Data</th>
+            <th>Início</th>
+            <th>Fim</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="emptyEscalas">Nenhuma escala registrada.</div>
+    </div>
+
+    <div class="rh-card">
+      <div class="section-head">
+        <h3 class="section-title">Férias & Licenças (próximos 60 dias)</h3>
+        <button class="btn xs" id="btnVerFerias">Ver todas</button>
+      </div>
+      <table class="table" id="tFerias">
+        <thead>
+          <tr>
+            <th>Colaborador</th>
+            <th>Tipo</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th>Dias</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="emptyFerias">Sem registros no período.</div>
+    </div>
+  </section>
+
+  {# modal novo/editar colaborador #}
+  <dialog id="modalColab" class="modal">
+    <form id="formColab" method="post" class="modal-card" action="#">
+      <header class="modal-header">
+        <h3 id="tituloModalColab">Novo colaborador</h3>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
+      </header>
+
+      <section class="modal-body">
+        <div class="grid two">
+          <div class="field">
+            <label>Nome *</label>
+            <input type="text" name="nome" required>
+          </div>
+          <div class="field">
+            <label>E-mail</label>
+            <input type="email" name="email">
+          </div>
+        </div>
+
+        <div class="grid four">
+          <div class="field">
+            <label>CPF *</label>
+            <input type="text" name="cpf" maxlength="14" placeholder="000.000.000-00" required>
+          </div>
+          <div class="field">
+            <label>Telefone</label>
+            <input type="text" name="telefone" placeholder="(00) 00000-0000">
+          </div>
+          <div class="field">
+            <label>Vínculo *</label>
+            <select name="vinculo" required>
+              <option value="">—</option>
+              <option>CLT</option>
+              <option>PJ</option>
+              <option>RESIDENTE</option>
+              <option>ESTAGIARIO</option>
+              <option>VOLUNTARIO</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Unidade</label>
+            <select name="unidade">
+              <option value="">—</option>
+              {% for u in unidades|default([]) %}
+                <option value="{{ u.id }}">{{ u.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="grid four">
+          <div class="field">
+            <label>Cargo</label>
+            <input type="text" name="cargo">
+          </div>
+          <div class="field">
+            <label>CBO</label>
+            <input type="text" name="cbo" placeholder="Ex.: 223605">
+          </div>
+          <div class="field">
+            <label>Admissão</label>
+            <input type="date" name="dt_admissao">
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select name="status">
+              <option value="ATIVO" selected>Ativo</option>
+              <option value="INATIVO">Inativo</option>
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="fieldset">
+          <legend>Conselho de Classe</legend>
+          <div class="grid four">
+            <div class="field">
+              <label>Conselho</label>
+              <select name="conselho">
+                <option value="">—</option>
+                <option>CRM</option><option>COREN</option><option>CREFITO</option>
+                <option>CRO</option><option>CRP</option><option>CREFONO</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Número</label>
+              <input type="text" name="conselho_numero">
+            </div>
+            <div class="field">
+              <label>UF</label>
+              <select name="conselho_uf">
+                <option value="">—</option>
+                {% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}
+                <option value="{{ uf }}">{{ uf }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label>Validade</label>
+              <input type="date" name="conselho_validade">
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Endereço</legend>
+          <div class="grid four">
+            <div class="field">
+              <label>CEP</label>
+              <input type="text" name="cep" placeholder="00000-000">
+            </div>
+            <div class="field">
+              <label>Logradouro</label>
+              <input type="text" name="logradouro">
+            </div>
+            <div class="field">
+              <label>Número</label>
+              <input type="text" name="numero">
+            </div>
+            <div class="field">
+              <label>Complemento</label>
+              <input type="text" name="complemento">
+            </div>
+          </div>
+          <div class="grid three">
+            <div class="field">
+              <label>Bairro</label>
+              <input type="text" name="bairro">
+            </div>
+            <div class="field">
+              <label>Município</label>
+              <input type="text" name="municipio">
+            </div>
+            <div class="field">
+              <label>UF</label>
+              <select name="uf">
+                <option value="">—</option>
+                {% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}
+                <option value="{{ uf }}">{{ uf }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </fieldset>
+      </section>
+
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('rh.static', filename='js/rh.js') }}" defer></script>
+{% endblock %}

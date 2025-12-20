@@ -1,0 +1,630 @@
+{# sgd/avaliacoes/templates/terapia_ocupacional.html #}
+{% extends "layout.html" %}
+
+{% block title %}Terapia Ocupacional · Avaliações{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-av{
+    max-width:min(1200px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+
+  .head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .head h2{margin:0;font-size:22px;font-weight:950;letter-spacing:.2px}
+  .head p{margin:4px 0 0;color:#64748b;font-size:.95rem}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{
+    appearance:none;border:0;cursor:pointer;
+    padding:10px 14px;border-radius:12px;
+    font-weight:900;font-size:.95rem;
+    text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+    transition:transform .08s ease, filter .15s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+    overflow:hidden;
+  }
+  form{padding:14px}
+
+  .grid{display:grid;gap:12px}
+  @media(min-width:980px){
+    .grid.cols-2{grid-template-columns:1fr 1fr}
+    .grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+    .grid.cols-4{grid-template-columns:1fr 1fr 1fr 1fr}
+  }
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-weight:900;font-size:.9rem;color:#0f172a}
+  .hint{font-size:.82rem;color:#64748b;margin-top:-4px}
+
+  input[type="text"], input[type="date"], textarea, select{
+    width:100%;
+    border:1px solid #e5e7eb;border-radius:12px;
+    padding:10px 12px;font-size:.95rem;outline:none;background:#fff;
+  }
+  input[readonly]{background:#f8fafc}
+  textarea{min-height:96px;resize:vertical}
+  input:focus, textarea:focus, select:focus{
+    border-color:#93c5fd;
+    box-shadow:0 0 0 4px rgba(59,130,246,.12);
+  }
+
+  details.sec{
+    border:1px solid #e5e7eb;border-radius:14px;background:#fff;overflow:hidden;
+  }
+  details.sec + details.sec{margin-top:10px}
+  summary.st{
+    list-style:none;cursor:pointer;user-select:none;
+    padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    font-weight:950;background:linear-gradient(180deg,#fff,#f8fafc);
+  }
+  summary.st::-webkit-details-marker{display:none}
+  .chev{
+    width:34px;height:34px;border-radius:10px;background:#eef2ff;
+    display:grid;place-items:center;font-weight:950;color:#1e3a8a;
+    transform:rotate(0deg);
+  }
+  details[open] summary .chev{transform:rotate(180deg)}
+  .sec-body{padding:12px;border-top:1px solid #eef2f7}
+
+  .opt-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:8px 10px;border:1px solid #e5e7eb;border-radius:999px;
+    background:#fff;font-weight:900;font-size:.88rem;color:#0f172a;
+    white-space:nowrap;
+  }
+  .pill input{transform:translateY(1px)}
+  .pill.muted{background:#f8fafc}
+
+  .group-title{
+    margin:0 0 8px;
+    font-weight:950;
+    color:#0f172a;
+    font-size:.95rem;
+  }
+
+  .footer{
+    display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;
+    padding-top:12px;margin-top:14px;border-top:1px dashed #e5e7eb;
+  }
+
+  @media (prefers-color-scheme: dark){
+    .page-av{color:#e5e7eb}
+    .card, details.sec{background:#0b1220;border-color:#1f2937;box-shadow:none}
+    summary.st{background:linear-gradient(180deg,#0b1220,#0f172a)}
+    .label,.group-title{color:#e5e7eb}
+    .hint{color:#94a3b8}
+    input[type="text"], input[type="date"], textarea, select{
+      background:#0b1220;border-color:#243145;color:#e5e7eb;
+    }
+    input[readonly]{background:#0f172a}
+    .btn-ghost{background:#111827;color:#e5e7eb}
+    .pill{background:#0b1220;border-color:#1f2937;color:#e5e7eb}
+    .pill.muted{background:#0f172a}
+    .chev{background:#111b33;color:#93c5fd}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-av">
+
+  <div class="head">
+    <div>
+      <h2>🧩 Terapia Ocupacional</h2>
+      <p>Formulário completo: desempenho, motor, mobilidade, funcional, escola e plano terapêutico.</p>
+    </div>
+    <div class="actions">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <button class="btn btn-primary" type="submit" form="formTO">Salvar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="formTO" method="POST" action="{{ url_for('avaliacoes.nova') }}">
+      <input type="hidden" name="tipo" value="terapia_ocupacional">
+
+      <!-- IDs / fixos do backend -->
+      <input type="hidden" name="paciente_id" id="paciente_id">
+      <input type="hidden" name="paciente_prontuario" id="paciente_prontuario">
+
+      <!-- ============================
+           IDENTIFICAÇÃO (só nome + auto)
+           ============================ -->
+      <details class="sec" open>
+        <summary class="st">Identificação do Paciente <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-3">
+
+            <div class="field" style="grid-column:1/-1;">
+              <label class="label" for="paciente_nome">Nome do paciente</label>
+              <input id="paciente_nome" name="paciente_nome" type="text"
+                     placeholder="Digite ao menos 3 letras…"
+                     list="dlPacientes" autocomplete="off" required>
+              <datalist id="dlPacientes"></datalist>
+              <div class="hint">Selecione o paciente na lista para preencher prontuário, nascimento e idade.</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Prontuário</label>
+              <input id="prontuario_show" type="text" readonly>
+            </div>
+
+            <div class="field">
+              <label class="label">Data de nascimento</label>
+              <input id="data_nascimento_show" type="date" readonly>
+            </div>
+
+            <div class="field">
+              <label class="label">Idade</label>
+              <input id="idade_show" type="text" readonly>
+            </div>
+
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           BASE
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Informações Iniciais <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="queixa_principal">Queixa principal</label>
+              <textarea id="queixa_principal" name="queixa_principal" placeholder="Descreva a queixa principal..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="aspectos_clinicos">Aspectos clínicos</label>
+              <textarea id="aspectos_clinicos" name="aspectos_clinicos" placeholder="Condições clínicas relevantes..."></textarea>
+            </div>
+
+            <div class="field">
+              <label class="label">Uso de medicamentos?</label>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="usa_medicamentos" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="usa_medicamentos" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label" for="quais_medicamentos">Quais?</label>
+              <input id="quais_medicamentos" name="quais_medicamentos" type="text" placeholder="Nome/posologia (se souber)">
+            </div>
+
+            <div class="field">
+              <label class="label" for="desenvolvimento_gestacional">Desenvolvimento gestacional</label>
+              <input id="desenvolvimento_gestacional" name="desenvolvimento_gestacional" type="text" placeholder="Intercorrências? prematuridade?">
+            </div>
+
+            <div class="field">
+              <label class="label" for="rotina">Rotina</label>
+              <input id="rotina" name="rotina" type="text" placeholder="Rotina diária / cuidadores / horários">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           COMPONENTES · DESEMPENHO
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Componentes de Desempenho <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <p class="group-title">Cognitivos</p>
+              <textarea name="cognitivos" placeholder="Atenção, concentração, memória, linguagem, consciência, compreensão/limites, orientação temporal/espacial, regras..."></textarea>
+              <div class="hint">Pode descrever ponto a ponto ou em forma de síntese.</div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Senso-perceptivo</p>
+              <textarea name="senso_perceptivo" placeholder="Percepção visual/auditiva, sensibilidade tátil e estereognosia, percepção corporal..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <p class="group-title">Comportamento e humor</p>
+              <div class="opt-row" style="margin-bottom:8px;">
+                <label class="pill"><input type="checkbox" name="humor_introvertido" value="1"> Introvertido</label>
+                <label class="pill"><input type="checkbox" name="humor_extrovertido" value="1"> Extrovertido</label>
+                <label class="pill"><input type="checkbox" name="humor_indiferente" value="1"> Indiferente</label>
+                <label class="pill"><input type="checkbox" name="humor_calmo" value="1"> Calmo</label>
+                <label class="pill"><input type="checkbox" name="humor_retraido" value="1"> Retraído</label>
+                <label class="pill"><input type="checkbox" name="humor_agitado" value="1"> Agitado</label>
+                <label class="pill"><input type="checkbox" name="humor_nervoso" value="1"> Nervoso</label>
+                <label class="pill"><input type="checkbox" name="humor_agressivo" value="1"> Agressivo</label>
+              </div>
+              <textarea name="humor_obs" placeholder="OBS (comportamento/humor)..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           DESENVOLVIMENTO MOTOR
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Desenvolvimento Motor <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <p class="group-title">Tônus</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="tonus" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="tonus" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Instabilidade postural</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="instabilidade_postural" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="instabilidade_postural" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Reação de proteção</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="reacao_protecao" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="reacao_protecao" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Encurtamento / Contraturas / Deformidades</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="contraturas" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="contraturas" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Força muscular</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="forca_muscular" value="preservada"> Preservada</label>
+                <label class="pill"><input type="radio" name="forca_muscular" value="comprometida"> Comprometida</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Funções motoras</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="funcoes_motoras" value="preservadas"> Preservadas</label>
+                <label class="pill"><input type="radio" name="funcoes_motoras" value="comprometidas"> Comprometidas</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Coordenação motora fina</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="coord_fina" value="preservada"> Preservada</label>
+                <label class="pill"><input type="radio" name="coord_fina" value="comprometida"> Comprometida</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Coordenação motora grossa</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="coord_grossa" value="preservada"> Preservada</label>
+                <label class="pill"><input type="radio" name="coord_grossa" value="comprometida"> Comprometida</label>
+              </div>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="motor_obs">OBS (motor)</label>
+              <textarea id="motor_obs" name="motor_obs" placeholder="Observações do desenvolvimento motor..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           MOBILIDADE
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Mobilidade <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <p class="group-title">Trocas posturais</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="trocas_posturais" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="trocas_posturais" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Transferência</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="transferencia" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="transferencia" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Locomoção</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="locomocao" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="locomocao" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Função dos MMSS</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="funcao_mmss" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="funcao_mmss" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Uso de dispositivos de marcha</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="disp_marcha" value="preservado"> Preservado</label>
+                <label class="pill"><input type="radio" name="disp_marcha" value="comprometido"> Comprometido</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Mobiliário e adaptação</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="mobiliario_adaptacao" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="mobiliario_adaptacao" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="mobilidade_obs">OBS (mobilidade)</label>
+              <textarea id="mobilidade_obs" name="mobilidade_obs" placeholder="Observações sobre mobilidade..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           AVALIAÇÃO FUNCIONAL / AVDs
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Avaliação Funcional / AVDs <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <p class="group-title">Alimentação</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="avd_alimentacao" value="independente"> Independente</label>
+                <label class="pill"><input type="radio" name="avd_alimentacao" value="supervisao"> Sob supervisão</label>
+                <label class="pill"><input type="radio" name="avd_alimentacao" value="dependente"> Dependente</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Higiene</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="avd_higiene" value="independente"> Independente</label>
+                <label class="pill"><input type="radio" name="avd_higiene" value="supervisao"> Sob supervisão</label>
+                <label class="pill"><input type="radio" name="avd_higiene" value="dependente"> Dependente</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Vestuário</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="avd_vestuario" value="independente"> Independente</label>
+                <label class="pill"><input type="radio" name="avd_vestuario" value="supervisao"> Sob supervisão</label>
+                <label class="pill"><input type="radio" name="avd_vestuario" value="dependente"> Dependente</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Sono</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="avd_sono" value="independente"> Independente</label>
+                <label class="pill"><input type="radio" name="avd_sono" value="supervisao"> Sob supervisão</label>
+                <label class="pill"><input type="radio" name="avd_sono" value="dependente"> Dependente</label>
+              </div>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="comunicacao">Comunicação</label>
+              <textarea id="comunicacao" name="comunicacao" placeholder="Como se comunica? verbal/não verbal/CAA..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           ESCOLA
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Escola <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <p class="group-title">Estuda?</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="estuda" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="estuda" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Agrupado conforme idade cronológica?</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="agrupado_idade" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="agrupado_idade" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Acompanha o conteúdo escolar?</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="acompanha_conteudo" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="acompanha_conteudo" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Realiza as tarefas escolares?</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="tarefas_escolares" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="tarefas_escolares" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <p class="group-title">Brinca com outras crianças?</p>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="brinca_outras" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="brinca_outras" value="nao"> Não</label>
+              </div>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="escola_obs">OBS (escola)</label>
+              <textarea id="escola_obs" name="escola_obs" placeholder="Observações escolares..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           DIAGNÓSTICO / PLANO
+           ============================ -->
+      <details class="sec">
+        <summary class="st">Diagnóstico e Plano de Tratamento <span class="chev">⌄</span></summary>
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="diagnostico_to">Diagnóstico terapêutico ocupacional</label>
+              <textarea id="diagnostico_to" name="diagnostico_to" placeholder="Síntese do diagnóstico ocupacional..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="proposta_tratamento">Proposta de tratamento terapêutico</label>
+              <textarea id="proposta_tratamento" name="proposta_tratamento" placeholder="Proposta geral do tratamento..."></textarea>
+            </div>
+
+            <div class="field">
+              <label class="label">Modalidade</label>
+              <div class="opt-row">
+                <label class="pill"><input type="radio" name="modalidade" value="individual"> Atendimento individual</label>
+                <label class="pill"><input type="radio" name="modalidade" value="grupo"> Atendimento em grupo</label>
+                <label class="pill"><input type="radio" name="modalidade" value="orientacao"> Orientação</label>
+              </div>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="plano_tratamento">Plano de tratamento / Conduta / Objetivos</label>
+              <textarea id="plano_tratamento" name="plano_tratamento" placeholder="Conduta e objetivos..."></textarea>
+            </div>
+
+            <div class="field">
+              <label class="label" for="objetivo_longo">Objetivo (longo prazo)</label>
+              <textarea id="objetivo_longo" name="objetivo_longo" placeholder="Objetivo de longo prazo..."></textarea>
+            </div>
+
+            <div class="field">
+              <label class="label" for="objetivo_medio">Objetivo (médio prazo)</label>
+              <textarea id="objetivo_medio" name="objetivo_medio" placeholder="Objetivo de médio prazo..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="objetivo_curto">Objetivo (curto prazo)</label>
+              <textarea id="objetivo_curto" name="objetivo_curto" placeholder="Objetivo de curto prazo..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="footer">
+        <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Salvar Terapia Ocupacional</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const inp = document.getElementById("paciente_nome");
+  const dl  = document.getElementById("dlPacientes");
+
+  const hidId = document.getElementById("paciente_id");
+  const hidPr = document.getElementById("paciente_prontuario");
+
+  const showPr = document.getElementById("prontuario_show");
+  const showDt = document.getElementById("data_nascimento_show");
+  const showId = document.getElementById("idade_show");
+
+  let last = [];
+  let t=null;
+
+  function idade(iso){
+    if(!iso) return "";
+    const d=new Date(iso), h=new Date();
+    let i=h.getFullYear()-d.getFullYear();
+    if(h.getMonth()<d.getMonth() || (h.getMonth()==d.getMonth() && h.getDate()<d.getDate())) i--;
+    return i;
+  }
+
+  async function fetchP(q){
+    const r=await fetch(`/avaliacoes/api/pacientes?q=${encodeURIComponent(q)}`);
+    const j=await r.json();
+    return j.items||[];
+  }
+
+  function bind(p){
+    hidId.value = p.id || "";
+    hidPr.value = p.prontuario || "";
+    showPr.value = p.prontuario || "";
+    showDt.value = p.data_nascimento || "";
+    showId.value = p.data_nascimento ? idade(p.data_nascimento) : "";
+  }
+
+  function clearBound(){
+    hidId.value=""; hidPr.value="";
+    showPr.value=""; showDt.value=""; showId.value="";
+  }
+
+  inp.addEventListener("input",()=>{
+    clearBound();
+    if(inp.value.trim().length < 3){ dl.innerHTML=""; return; }
+    clearTimeout(t);
+    t=setTimeout(async()=>{
+      last = await fetchP(inp.value.trim());
+      dl.innerHTML="";
+      last.forEach(p=>{
+        const o=document.createElement("option");
+        o.value = p.nome;
+        o.label = p.label || p.nome; // se o backend mandar (ex: "NOME • Pront • Nasc")
+        dl.appendChild(o);
+      });
+    },300);
+  });
+
+  inp.addEventListener("change",()=>{
+    const v = inp.value.trim();
+    const m = last.find(p => (p.nome||"").trim() === v);
+    if(m) bind(m);
+  });
+})();
+</script>
+{% endblock %}

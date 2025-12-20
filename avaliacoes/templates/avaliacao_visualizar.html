@@ -1,0 +1,134 @@
+{# sgd/avaliacoes/templates/avaliacao_visualizar.html #}
+{% extends "layout.html" %}
+
+{% block title %}Avaliação #{{ avaliacao.id }} · Visualizar{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-avv{
+    max-width:min(1100px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .head h2{margin:0;font-size:22px;font-weight:950;letter-spacing:.2px}
+  .head p{margin:4px 0 0;color:#64748b;font-size:.95rem}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{
+    appearance:none;border:0;cursor:pointer;
+    padding:10px 14px;border-radius:12px;
+    font-weight:900;font-size:.95rem;
+    text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+  }
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+  .btn-danger{background:#ef4444;color:#fff}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+    overflow:hidden;
+  }
+  .box{padding:14px}
+
+  .meta{
+    display:grid;gap:10px;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  @media(max-width:900px){ .meta{grid-template-columns:1fr} }
+
+  .k{
+    border:1px solid #e5e7eb;border-radius:14px;padding:10px 12px;
+    background:linear-gradient(180deg,#fff,#f8fafc);
+  }
+  .k small{display:block;color:#64748b;font-weight:900;margin-bottom:2px}
+  .k div{font-weight:950;color:#0f172a}
+
+  .hr{border:0;border-top:1px dashed #e5e7eb;margin:14px 0}
+  .grid{
+    display:grid;gap:12px;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  @media(max-width:900px){ .grid{grid-template-columns:1fr} }
+
+  .field{
+    border:1px solid #e5e7eb;border-radius:14px;padding:10px 12px;background:#fff;
+  }
+  .field .label{font-weight:950;color:#0f172a;font-size:.9rem}
+  .field .val{margin-top:6px;white-space:pre-wrap;color:#0f172a}
+
+  /* Print */
+  @media print{
+    .actions, .no-print{display:none !important}
+    .page-avv{margin:0;max-width:100%}
+    .card{box-shadow:none}
+    body{background:#fff}
+  }
+
+  @media (prefers-color-scheme: dark){
+    .page-avv{color:#e5e7eb}
+    .card{background:#0b1220;border-color:#1f2937;box-shadow:none}
+    .k{background:linear-gradient(180deg,#0b1220,#0f172a);border-color:#1f2937}
+    .k small{color:#94a3b8}
+    .k div, .field .label, .field .val{color:#e5e7eb}
+    .field{background:#0b1220;border-color:#1f2937}
+    .btn-ghost{background:#111827;color:#e5e7eb}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-avv">
+
+  <div class="head">
+    <div>
+      <h2>📄 Avaliação #{{ avaliacao.id }} · {{ avaliacao.titulo }}</h2>
+      <p>Visualização do que foi registrado — com opção de imprimir.</p>
+    </div>
+
+    <div class="actions no-print">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.imprimir_pdf', id=avaliacao.id) }}">Baixar PDF</a>
+      <button class="btn btn-primary" type="button" onclick="window.print()">Imprimir</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="box">
+
+      <div class="meta">
+        <div class="k">
+          <small>Paciente</small>
+          <div>{{ avaliacao.paciente_nome or "-" }}</div>
+        </div>
+        <div class="k">
+          <small>CPF</small>
+          <div>{{ avaliacao.paciente_cpf or "-" }}</div>
+        </div>
+        <div class="k">
+          <small>Registrado em</small>
+          <div>{{ avaliacao.criado_em or "-" }}</div>
+        </div>
+      </div>
+
+      <hr class="hr">
+
+      <div class="grid">
+        {% for item in avaliacao.itens %}
+          <div class="field">
+            <div class="label">{{ item.label }}</div>
+            <div class="val">{{ item.valor }}</div>
+          </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+/* Página de Login */
+body.login-page { background: #f5f7fb; }
+.login-wrap {
+  max-width: 420px; margin: 8vh auto; background: #fff;
+  border: 1px solid #e5e7eb; border-radius: 14px; padding: 22px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.06);
+}
+.login-title { font-size: 20px; font-weight: 600; margin: 0 0 10px; }
+.label { font-size: 13px; color: #6b7280; display: block; margin: 12px 0 6px; }
+.input {
+  width: 100%; padding: 12px; border: 1px solid #e5e7eb;
+  border-radius: 10px; font-size: 15px; outline: none;
+}
+.input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.btn {
+  width: 100%; padding: 12px; border-radius: 10px; border: none;
+  background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; margin-top: 14px;
+}
+.hint { font-size: 12px; color: #6b7280; margin-top: 8px; }
+
+.flash-area { margin: 8px 0 12px; }
+.flash { padding: 10px 12px; border-radius: 10px; }
+.flash.info { background: #e0f2fe; }
+.flash.success { background: #dcfce7; }
+.flash.error { background: #fee2e2; }
+
+/* Grupo de senha com botão olho */
+.input-group.password-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-input { padding-right: 44px; }
+.eye-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  height: 36px; width: 36px; border: none; border-radius: 8px;
+  background: transparent; cursor: pointer; display: grid; place-items: center;
+}
+.eye-btn:hover { background: #f3f4f6; }
+.icon-eye, .icon-eye-off {
+  width: 20px; height: 20px; fill: #6b7280; display: none;
+}
+.eye-btn.showing .icon-eye-off { display: block; }   /* quando mostrando senha */
+.eye-btn:not(.showing) .icon-eye { display: block; } /* quando escondida */

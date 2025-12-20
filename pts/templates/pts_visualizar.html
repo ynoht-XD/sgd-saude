@@ -1,0 +1,621 @@
+{# templates/pts_visualizar.html
+   ✅ Atualizado para trabalhar com os 2 modos vindos do backend:
+      - modo="lista"   -> lista de todos os PTS + filtros + paginação
+      - modo="detalhe" -> exibe um PTS específico (igual ao teu layout atual)
+
+   Variáveis esperadas (routes.py):
+     - modo: "lista" | "detalhe" (pode vir vazio; cai no default)
+     - itens: lista (modo lista)
+     - pager: dict (page, pages, total, has_prev/next, prev_page/next_page)
+     - filtros: dict (paciente, prof, cbo, competencia)
+     - paciente, pts, equipe, itens (modo detalhe) — compat com teu template antigo
+#}
+
+{% extends "layout.html" %}
+{% block title %}PTS · Visualizar{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('pts.static', filename='css/pts.css') }}">
+<style>
+  /* ====== Page shell ====== */
+  .page-pts{
+    max-width:min(1400px,96vw);
+    margin:18px auto 32px;
+    padding:0 12px 18px;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+
+  /* ====== Header / Toolbar ====== */
+  .pts-head{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:12px; flex-wrap:wrap;
+    margin:10px 0 14px;
+  }
+  .pts-head h2{
+    margin:0;
+    font-size:22px;
+    font-weight:900;
+    letter-spacing:.2px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pts-head p{
+    margin:4px 0 0;
+    color:var(--muted,#64748b);
+    font-size:.92rem;
+  }
+
+  .pts-actions{
+    display:flex; gap:10px; flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .btn{
+    appearance:none;
+    border:1px solid rgba(148,163,184,.35);
+    background:var(--card,#fff);
+    color:var(--text,#0f172a);
+    border-radius:12px;
+    padding:10px 12px;
+    font-weight:800;
+    font-size:.92rem;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    cursor:pointer;
+    text-decoration:none;
+    box-shadow:0 10px 25px rgba(2,6,23,.06);
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{ transform:translateY(-1px); border-color:rgba(148,163,184,.55); box-shadow:0 14px 30px rgba(2,6,23,.10); }
+  .btn:active{ transform:translateY(0); }
+
+  .btn-primary{
+    background:linear-gradient(135deg, rgba(59,130,246,.18), rgba(99,102,241,.18));
+    border-color:rgba(59,130,246,.35);
+  }
+  .btn-ok{
+    background:linear-gradient(135deg, rgba(16,185,129,.16), rgba(34,197,94,.16));
+    border-color:rgba(16,185,129,.35);
+  }
+  .btn-ghost{
+    background:transparent;
+    border-color:rgba(148,163,184,.35);
+  }
+
+  .btn-icon{
+    width:18px; height:18px;
+    display:inline-grid; place-items:center;
+    border-radius:8px;
+    background:rgba(2,6,23,.05);
+    font-size:12px;
+  }
+
+  /* ====== Card ====== */
+  .card{
+    background:var(--card,#fff);
+    border:1px solid rgba(148,163,184,.25);
+    border-radius:16px;
+    padding:14px;
+    box-shadow:0 12px 30px rgba(2,6,23,.06);
+  }
+
+  /* ====== Grid (detalhe) ====== */
+  .pts-grid{
+    display:grid;
+    grid-template-columns: 1.1fr .9fr;
+    gap:12px;
+    margin-top:12px;
+  }
+  @media (max-width: 980px){
+    .pts-grid{ grid-template-columns:1fr; }
+  }
+
+  .kvs{
+    display:grid;
+    grid-template-columns: 190px 1fr;
+    gap:10px 12px;
+    margin-top:6px;
+  }
+  @media (max-width: 520px){
+    .kvs{ grid-template-columns:1fr; }
+  }
+
+  .k{
+    color:var(--muted,#64748b);
+    font-weight:800;
+    font-size:.88rem;
+  }
+  .v{
+    color:var(--text,#0f172a);
+    font-weight:700;
+    overflow-wrap:anywhere;
+  }
+
+  /* ====== Seções ====== */
+  .sec-title{
+    margin:0 0 10px;
+    font-size:15px;
+    font-weight:900;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .badge{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    background:rgba(2,6,23,.05);
+    border:1px solid rgba(148,163,184,.25);
+    font-weight:800;
+    font-size:.78rem;
+    color:var(--muted,#475569);
+    white-space:nowrap;
+  }
+
+  /* ====== Lista / tabela simples ====== */
+  .table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    overflow:hidden;
+    border-radius:14px;
+    border:1px solid rgba(148,163,184,.22);
+  }
+  .table th, .table td{
+    padding:10px 12px;
+    border-bottom:1px solid rgba(148,163,184,.18);
+    text-align:left;
+    font-size:.92rem;
+    vertical-align:top;
+  }
+  .table th{
+    font-weight:900;
+    color:var(--muted,#475569);
+    background:rgba(2,6,23,.03);
+  }
+  .table tr:last-child td{ border-bottom:none; }
+
+  .muted{ color:var(--muted,#64748b); }
+
+  /* ====== LISTA (filtros + pager) ====== */
+  .filters{
+    display:grid;
+    grid-template-columns: 1.4fr 1.2fr .9fr .8fr auto;
+    gap:10px;
+    align-items:end;
+  }
+  @media (max-width: 1100px){
+    .filters{ grid-template-columns: 1fr 1fr; }
+  }
+  .fgrp label{
+    display:block;
+    font-weight:900;
+    font-size:.78rem;
+    color:var(--muted,#64748b);
+    margin:0 0 6px;
+    letter-spacing:.2px;
+  }
+  .fgrp input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid rgba(148,163,184,.28);
+    background:var(--card,#fff);
+    font-weight:700;
+    outline:none;
+  }
+  .fgrp input:focus{
+    border-color:rgba(59,130,246,.45);
+    box-shadow:0 0 0 4px rgba(59,130,246,.12);
+  }
+
+  .pager{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+  .pager-left{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .pager-right{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+  .pill{
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+    padding:8px 10px;
+    border-radius:999px;
+    border:1px solid rgba(148,163,184,.25);
+    background:rgba(2,6,23,.03);
+    font-weight:900;
+    font-size:.82rem;
+    color:var(--muted,#475569);
+    white-space:nowrap;
+  }
+
+  .rowlink{
+    text-decoration:none;
+    font-weight:900;
+    color:inherit;
+  }
+  .rowlink:hover{ text-decoration:underline; }
+
+  .teamline{
+    font-size:.86rem;
+    color:var(--muted,#64748b);
+    margin-top:4px;
+    line-height:1.25;
+  }
+
+  .actions-col{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-pts">
+
+  {# ------------------------------------------------------------
+     Header + Actions (sempre aparece)
+     ------------------------------------------------------------ #}
+  <header class="pts-head">
+    <div>
+      <h2>
+        <span class="btn-icon">🧾</span>
+        PTS · Visualizar
+
+        {# Badge só quando estiver no modo detalhe com um PTS selecionado #}
+        {% if pts and pts.get('id') %}
+          <span class="badge">#{{ pts.get('id') }}</span>
+        {% endif %}
+
+        {# Badge auxiliar quando estiver no modo lista #}
+        {% if modo == 'lista' and pager %}
+          <span class="badge">{{ pager.total }} registro(s)</span>
+        {% endif %}
+      </h2>
+      <p class="muted">
+        Visualização do Plano Terapêutico Singular, com equipe, metas e registros.
+      </p>
+    </div>
+
+    <div class="pts-actions">
+      <!-- ✅ Cadastrar (novo) -->
+      <a class="btn btn-primary" href="{{ url_for('pts.pts_page') }}">
+        <span class="btn-icon">＋</span>
+        Cadastrar PTS
+      </a>
+
+      {# Botão voltar quando estiver em detalhe #}
+      {% if modo != 'lista' %}
+        <a class="btn btn-ghost" href="{{ url_for('pts.pts_visualizar') }}">
+          <span class="btn-icon">↩</span>
+          Voltar à lista
+        </a>
+      {% endif %}
+
+      <!-- ✅ Exportações (só faz sentido no detalhe) -->
+      {% if pts and pts.get('id') %}
+        <a class="btn btn-ok" href="{{ url_for('pts.export_pts_excel', pts_id=pts.get('id')) }}">
+          <span class="btn-icon">X</span>
+          Exportar Excel
+        </a>
+
+        <a class="btn" href="{{ url_for('pts.export_pts_pdf', pts_id=pts.get('id')) }}">
+          <span class="btn-icon">PDF</span>
+          Exportar PDF
+        </a>
+      {% else %}
+        <span class="badge">Selecione um PTS para exportar</span>
+      {% endif %}
+    </div>
+  </header>
+
+
+  {# ------------------------------------------------------------
+     MODO LISTA: filtros + tabela + paginação
+     ------------------------------------------------------------ #}
+  {% if modo == 'lista' %}
+    <section class="card">
+      <h3 class="sec-title">🔎 Filtros</h3>
+
+      {# Form GET: mantém os filtros no querystring #}
+      <form method="get" action="{{ url_for('pts.pts_visualizar') }}">
+        <div class="filters">
+
+          <div class="fgrp">
+            <label for="f_paciente">Paciente (nome)</label>
+            <input id="f_paciente" name="paciente" type="text"
+                   value="{{ (filtros.paciente if filtros else '') }}"
+                   placeholder="Ex.: Maria, João...">
+          </div>
+
+          <div class="fgrp">
+            <label for="f_prof">Profissional (nome)</label>
+            <input id="f_prof" name="prof" type="text"
+                   value="{{ (filtros.prof if filtros else '') }}"
+                   placeholder="Ex.: Ana, Carlos...">
+          </div>
+
+          <div class="fgrp">
+            <label for="f_cbo">CBO</label>
+            <input id="f_cbo" name="cbo" type="text"
+                   value="{{ (filtros.cbo if filtros else '') }}"
+                   placeholder="Ex.: 223605">
+          </div>
+
+          <div class="fgrp">
+            <label for="f_comp">Competência (YYYY-MM)</label>
+            <input id="f_comp" name="competencia" type="text"
+                   value="{{ (filtros.competencia if filtros else '') }}"
+                   placeholder="Ex.: 2025-12">
+          </div>
+
+          <div class="actions-col">
+            <button class="btn btn-ok" type="submit">
+              <span class="btn-icon">🔍</span>
+              Filtrar
+            </button>
+
+            <a class="btn btn-ghost" href="{{ url_for('pts.pts_visualizar') }}">
+              <span class="btn-icon">🧼</span>
+              Limpar
+            </a>
+          </div>
+
+        </div>
+      </form>
+
+      <hr style="border:none;border-top:1px solid rgba(148,163,184,.22); margin:14px 0;">
+
+      <h3 class="sec-title">📚 Lista de PTS</h3>
+
+      {% if itens and itens|length %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:96px;">ID</th>
+              <th>Paciente</th>
+              <th style="width:140px;">Data</th>
+              <th style="width:120px;">Competência</th>
+              <th>Equipe (resumo)</th>
+              <th style="width:160px; text-align:right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in itens %}
+              <tr>
+                <td>
+                  <a class="rowlink" href="{{ url_for('pts.pts_visualizar_item', pts_id=it.id) }}">
+                    #{{ it.id }}
+                  </a>
+                </td>
+
+                <td>
+                  <div style="font-weight:900;">
+                    {{ it.paciente_nome or '—' }}
+                  </div>
+                  <div class="teamline">
+                    {% if it.prontuario %}Prontuário: {{ it.prontuario }}{% endif %}
+                    {% if it.cid %}
+                      {% if it.prontuario %} · {% endif %}
+                      CID: {{ it.cid }}
+                    {% endif %}
+                  </div>
+                </td>
+
+                <td>{{ it.data_pts or '—' }}</td>
+                <td>{{ it.competencia or '—' }}</td>
+
+                <td>
+                  {% if it.equipe %}
+                    <div class="teamline">{{ it.equipe }}</div>
+                  {% else %}
+                    <span class="muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td style="text-align:right;">
+                  <div class="actions-col">
+                    <a class="btn btn-ghost"
+                       href="{{ url_for('pts.pts_visualizar_item', pts_id=it.id) }}">
+                      <span class="btn-icon">👁</span>
+                    </a>
+
+                    <a class="btn"
+                       href="{{ url_for('pts.export_pts_pdf', pts_id=it.id) }}">
+                      <span class="btn-icon">PDF</span>
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {# -------- Pager -------- #}
+        {% if pager %}
+          <div class="pager">
+            <div class="pager-left">
+              <span class="pill">Página <strong>{{ pager.page }}</strong> de <strong>{{ pager.pages }}</strong></span>
+              <span class="pill"><strong>{{ pager.total }}</strong> total</span>
+              <span class="pill">20 por página</span>
+            </div>
+
+            <div class="pager-right">
+              {# Para manter filtros nos links do pager, reenviamos querystring #}
+              {% set qp_paciente = (filtros.paciente if filtros else '') %}
+              {% set qp_prof = (filtros.prof if filtros else '') %}
+              {% set qp_cbo = (filtros.cbo if filtros else '') %}
+              {% set qp_comp = (filtros.competencia if filtros else '') %}
+
+              <a class="btn btn-ghost"
+                 href="{{ url_for('pts.pts_visualizar', page=1, paciente=qp_paciente, prof=qp_prof, cbo=qp_cbo, competencia=qp_comp) }}">
+                <span class="btn-icon">⏮</span>
+                Primeira
+              </a>
+
+              {% if pager.has_prev %}
+                <a class="btn btn-ghost"
+                   href="{{ url_for('pts.pts_visualizar', page=pager.prev_page, paciente=qp_paciente, prof=qp_prof, cbo=qp_cbo, competencia=qp_comp) }}">
+                  <span class="btn-icon">◀</span>
+                  Anterior
+                </a>
+              {% else %}
+                <span class="badge">Anterior</span>
+              {% endif %}
+
+              {% if pager.has_next %}
+                <a class="btn btn-ghost"
+                   href="{{ url_for('pts.pts_visualizar', page=pager.next_page, paciente=qp_paciente, prof=qp_prof, cbo=qp_cbo, competencia=qp_comp) }}">
+                  Próxima
+                  <span class="btn-icon">▶</span>
+                </a>
+              {% else %}
+                <span class="badge">Próxima</span>
+              {% endif %}
+
+              <a class="btn btn-ghost"
+                 href="{{ url_for('pts.pts_visualizar', page=pager.pages, paciente=qp_paciente, prof=qp_prof, cbo=qp_cbo, competencia=qp_comp) }}">
+                Última
+                <span class="btn-icon">⏭</span>
+              </a>
+            </div>
+          </div>
+        {% endif %}
+
+      {% else %}
+        <p class="muted" style="margin:0;">
+          Nenhum PTS encontrado com os filtros atuais.
+        </p>
+      {% endif %}
+    </section>
+
+
+  {# ------------------------------------------------------------
+     MODO DETALHE: mantém o teu layout original (grid 2 colunas)
+     ------------------------------------------------------------ #}
+  {% else %}
+
+    <div class="pts-grid">
+
+      <!-- ===== Coluna 1: dados principais ===== -->
+      <section class="card">
+        <h3 class="sec-title">📌 Dados do paciente</h3>
+
+        <div class="kvs">
+          <div class="k">Paciente</div>
+          <div class="v">{{ (paciente.nome if paciente else '-') }}</div>
+
+          <div class="k">Prontuário</div>
+          <div class="v">{{ (paciente.prontuario if paciente else '-') }}</div>
+
+          <div class="k">CPF</div>
+          <div class="v">{{ (paciente.cpf if paciente else '-') }}</div>
+
+          <div class="k">CID(s)</div>
+          <div class="v">{{ (paciente.cid if paciente and paciente.cid else '-') }}</div>
+
+          <div class="k">Data do PTS</div>
+          <div class="v">{{ (pts.data if pts and pts.get('data') else '-') }}</div>
+
+          <div class="k">Competência</div>
+          <div class="v">
+            {% if pts and pts.get('data') %}
+              {{ (pts.get('competencia') if pts.get('competencia') else (pts.get('data')[:7])) }}
+            {% else %}
+              —
+            {% endif %}
+          </div>
+
+          <div class="k">Status</div>
+          <div class="v">{{ (pts.status if pts and pts.get('status') else '—') }}</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(148,163,184,.22); margin:14px 0;">
+
+        <h3 class="sec-title">👥 Equipe (participantes)</h3>
+
+        {% if equipe and equipe|length %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Profissional</th>
+                <th>CBO</th>
+                <th>Função</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in equipe %}
+              <tr>
+                <td><strong>{{ m.nome or '—' }}</strong></td>
+                <td>{{ m.cbo or '' }}</td>
+                <td class="muted">{{ m.funcao or '' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted" style="margin:0;">Nenhum participante na equipe ainda.</p>
+        {% endif %}
+      </section>
+
+      <!-- ===== Coluna 2: metas / observações ===== -->
+      <aside class="card">
+        <h3 class="sec-title">🎯 Metas e observações</h3>
+
+        <div class="kvs" style="grid-template-columns: 160px 1fr;">
+          <div class="k">Objetivo geral</div>
+          <div class="v">{{ (pts.objetivo_geral if pts and pts.get('objetivo_geral') else '-') }}</div>
+
+          <div class="k">Resumo</div>
+          <div class="v">{{ (pts.resumo if pts and pts.get('resumo') else '-') }}</div>
+
+          <div class="k">Observações</div>
+          <div class="v">{{ (pts.observacoes if pts and pts.get('observacoes') else '-') }}</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(148,163,184,.22); margin:14px 0;">
+
+        <h3 class="sec-title">📚 Itens do PTS</h3>
+
+        {% if itens and itens|length %}
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Área</th>
+                <th>Meta</th>
+                <th>Prazo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for it in itens %}
+              <tr>
+                <td><strong>{{ it.area or '—' }}</strong></td>
+                <td>{{ it.meta or '' }}</td>
+                <td class="muted">{{ it.prazo or '' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="muted" style="margin:0;">Sem itens cadastrados.</p>
+        {% endif %}
+      </aside>
+
+    </div>
+
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('pts.static', filename='js/pts.js') }}"></script>
+{% endblock %}

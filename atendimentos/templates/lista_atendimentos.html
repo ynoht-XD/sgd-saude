@@ -1,0 +1,248 @@
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('atendimentos.static', filename='css/lista_atendimentos.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="att-container">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="att-flashes">
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <header class="att-page-head">
+    <div class="title-area">
+      <h2>Lista de Atendimentos</h2>
+      <p class="muted">Monte a fila: selecione paciente, profissional e adicione. A fila aparece abaixo.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="btnImprimir">Imprimir</button>
+      <button type="button" class="btn danger ghost" id="btnLimparFila">Limpar fila</button>
+    </div>
+  </header>
+
+  <!-- Bloco 1: Adicionar manualmente à fila -->
+  <section class="card att-card" aria-labelledby="titulo-add">
+    <div class="card-head">
+      <h3 id="titulo-add">Adicionar à fila</h3>
+      <span class="muted atalho">Atalhos: Enter adiciona • Ctrl+P imprime</span>
+    </div>
+
+    <form id="formAdd" autocomplete="off">
+      <div class="att-grid">
+        <!-- Paciente -->
+        <div class="field">
+          <label for="pacienteInput">Paciente</label>
+          <input list="listaPacientes" id="pacienteInput" placeholder="Buscar por nome ou CPF" class="input-rounded">
+          <datalist id="listaPacientes">
+            {% for p in pacientes|default([]) %}
+              <option value="{{ p.nome }} ({{ p.cpf }})" data-id="{{ p.id }}"></option>
+            {% endfor %}
+          </datalist>
+          <input type="hidden" id="pacienteId">
+        </div>
+
+        <!-- Profissional -->
+        <div class="field">
+          <label for="profInput">Profissional</label>
+          <input list="listaProfissionais" id="profInput" placeholder="Buscar por nome do profissional" class="input-rounded">
+          <datalist id="listaProfissionais">
+            {% for prof in profissionais|default([]) %}
+              <option value="{{ prof.nome }}" data-id="{{ prof.id }}"></option>
+            {% endfor %}
+          </datalist>
+          <input type="hidden" id="profissionalId">
+        </div>
+
+        <!-- Tipo -->
+        <div class="field">
+          <label for="tipoAtendimento">Tipo</label>
+          <select id="tipoAtendimento">
+            <option value="Individual">Individual</option>
+            <option value="Grupo">Grupo</option>
+            <option value="Retorno">Retorno</option>
+          </select>
+        </div>
+
+        <!-- Prioridade -->
+        <div class="field">
+          <label>Prioridade</label>
+          <div class="prio-group" id="prioGroup" role="group" aria-label="Prioridade">
+            <input type="radio" name="prioridade" id="prio-verde" value="verde" checked>
+            <label for="prio-verde" class="prio-pill verde">Leve</label>
+
+            <input type="radio" name="prioridade" id="prio-amarelo" value="amarelo">
+            <label for="prio-amarelo" class="prio-pill amarelo">Moderado</label>
+
+            <input type="radio" name="prioridade" id="prio-vermelho" value="vermelho">
+            <label for="prio-vermelho" class="prio-pill vermelho">Urgente</label>
+          </div>
+        </div>
+
+        <!-- Observações -->
+        <div class="field span-2">
+          <label for="obs">Observações</label>
+          <textarea id="obs" placeholder="Opcional: breve observação"></textarea>
+        </div>
+      </div>
+
+      <div class="row-actions">
+        <button type="submit" class="btn primary">Adicionar à fila</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Bloco 2: Fila atual -->
+  <section class="card att-card" aria-labelledby="titulo-fila">
+    <div class="card-head between">
+      <h3 id="titulo-fila">Fila atual</h3>
+
+      <div class="queue-head">
+        <div class="queue-filters">
+          <input type="text" id="fBusca" placeholder="Buscar na fila (nome/CPF/observação)">
+
+          <select id="fProf">
+            <option value="">Todos os profissionais</option>
+            {% for prof in profissionais|default([]) %}
+              <option value="{{ prof.id }}">{{ prof.nome }}</option>
+            {% endfor %}
+          </select>
+
+          <div class="prio-filter" id="prioFilter" role="group" aria-label="Filtrar prioridade">
+            <button type="button" class="pf-pill active" data-prio="">Todos</button>
+            <button type="button" class="pf-pill verde" data-prio="verde">Leve</button>
+            <button type="button" class="pf-pill amarelo" data-prio="amarelo">Moderado</button>
+            <button type="button" class="pf-pill vermelho" data-prio="vermelho">Urgente</button>
+          </div>
+        </div>
+
+        <div class="counter"><span id="qtdFila">0</span> na fila</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="queue-table" id="tFila">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Paciente</th>
+            <th>Profissional</th>
+            <th>Tipo</th>
+            <th>Prioridade</th>
+            <th>Observações</th>
+            <th style="width:160px;">Ações</th>
+          </tr>
+        </thead>
+
+        <tbody id="tbodyFila">
+          {% for item in fila|default([]) %}
+          {% set _origem = (item.origem or 'manual') %}
+          {% set _from_agenda = (_origem == 'agenda') %}
+          {% set _agenda_id = (item.agenda_id or '') %}
+          {% set _status = (item.status or '') %}
+          <tr
+            data-id="{{ item.id }}"
+            data-prof="{{ item.profissional_id }}"
+            data-prio="{{ item.prioridade }}"
+            data-origem="{{ _origem }}"
+            data-agenda-id="{{ _agenda_id }}"
+            data-status="{{ _status }}"
+          >
+            <td>{{ item.hora }}</td>
+
+            <td data-pid="{{ item.paciente_id }}">
+              <span class="from-agenda" {% if not _from_agenda %}hidden{% endif %} title="Vindo da agenda">📅</span>
+              {{ item.paciente_nome }}
+            </td>
+
+            <td>{{ item.profissional_nome }}</td>
+            <td>{{ item.tipo }}</td>
+
+            <td>
+              <span class="badge prio {{ item.prioridade }}">
+                {{ item.prioridade|capitalize }}
+              </span>
+            </td>
+
+            <td>{{ item.obs or '—' }}</td>
+
+            <td class="row-actions">
+              <div class="menu">
+                <button class="btn icon only" type="button"
+                        data-menu-toggle aria-expanded="false" aria-haspopup="true"
+                        title="Opções">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+                  </svg>
+                </button>
+
+                <div class="menu-pop" hidden>
+                  <button class="menu-item" data-acao="atender">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
+                    </svg>
+                    Atender
+                  </button>
+
+                  <button class="menu-item" data-acao="editar">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path d="M3 17.25V21h3.75l11-11.04-3.75-3.75L3 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82Z" fill="currentColor"/>
+                    </svg>
+                    Editar…
+                  </button>
+
+                  <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-7-6Z"
+                            stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                      <polyline points="13 3 13 9 19 9"
+                                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Gerar declaração
+                  </a>
+
+                  <button class="menu-item" data-acao="falta">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+                      <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Marcar falta
+                  </button>
+
+                  <button class="menu-item danger" data-acao="remover">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
+                            stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Remover
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div id="emptyFila" class="empty" {% if fila and fila|length %}hidden{% endif %}>
+      Nenhum paciente na fila. Adicione no bloco acima para começar.
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script id="prof-data" type="application/json">
+    {{ profissionais|default([])|tojson }}
+  </script>
+  <script src="{{ url_for('atendimentos.static', filename='js/lista_atendimentos.js') }}" defer></script>
+{% endblock %}

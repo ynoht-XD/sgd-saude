@@ -1,0 +1,488 @@
+/* ===========================================================
+   AGENDA — CSS moderno (versão cards)
+   =========================================================== */
+
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #e5e7eb;
+  --line-soft: #f1f5f9;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --radius: 12px;
+  --shadow: 0 6px 24px rgba(2,6,23,.06);
+}
+
+/* ======== Estrutura geral ======== */
+body {
+  background: var(--bg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+}
+
+h2 {
+  margin-top: 10px;
+  margin-bottom: 14px;
+  font-size: 22px;
+  color: var(--text);
+}
+
+/* ======== Cards base ======== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+
+.card h3 {
+  font-size: 18px;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+
+
+/* ======== Grid do formulário / filtros ======== */
+.grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(6, 1fr);
+}
+.grid .col-6 { grid-column: span 6; }
+.grid .col-3 { grid-column: span 3; }
+.grid .col-2 { grid-column: span 2; }
+.grid .col-1 { grid-column: span 1; }
+
+label {
+  display: block;
+  font-size: 14px;
+  color: #334155;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 14px;
+  background: #fff;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.1);
+}
+
+.card .grid input,
+.card .grid select {
+  background: #fff;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ======== Botões ======== */
+.btn {
+  appearance: none;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: #fff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s ease;
+  font-size: 14px;
+}
+.btn:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.btn.ghost {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.btn.ghost:hover {
+  background: #f9fafb;
+}
+
+/* ======== Sugestões (autocomplete pacientes) ======== */
+.suggest {
+  position: relative;
+  margin-top: 6px;
+}
+.suggest.hidden {
+  display: none;
+}
+.suggest-list {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.12);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.suggest-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.suggest-item:last-child {
+  border-bottom: none;
+}
+.suggest-item:hover {
+  background: #f8fafc;
+}
+.suggest-item .title {
+  font-weight: 700;
+  color: var(--text);
+  display: block;
+}
+.suggest-item .sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ======== Lista de agendamentos em CARDS ======== */
+
+.ag-cards-list {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+/* Card individual de agendamento */
+.ag-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px 12px 10px;
+  box-shadow: 0 4px 16px rgba(15,23,42,.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* cabeçalho: nome do paciente e dia/horário */
+.ag-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.ag-card-paciente {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.ag-card-dia {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* corpo: linhas de info (prontuário, qtd, profissional, etc.) */
+.ag-card-body {
+  border-top: 1px dashed var(--line-soft);
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ag-card-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ag-card-line .label {
+  color: var(--muted);
+}
+
+.ag-card-line .value {
+  font-weight: 500;
+  color: var(--text);
+  text-align: right;
+}
+
+/* Rodapé: ações (prontuário, editar, excluir) */
+.ag-card-actions {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ======== Ícones de ação ======== */
+.icon-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin: 0;
+  transition: all .2s ease;
+}
+.icon-btn:hover {
+  background: #f8fafc;
+  filter: brightness(0.96);
+}
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--text);
+  fill: none;
+  stroke-width: 1.8;
+}
+.icon-btn.danger {
+  border-color: #fecaca;
+  background: #fff0f0;
+}
+.icon-btn.danger svg {
+  stroke: #dc2626;
+}
+
+/* ======== Paginação ======== */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-input {
+  width: 60px;
+  text-align: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.page-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.12);
+}
+
+/* ======== Filtros ======== */
+#filtros_msg {
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+/* ======== Botão de recarregar (extra) ======== */
+.icon-refresh::before {
+  content: "⟳";
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: bold;
+  color: var(--text);
+}
+
+/* ======== Responsividade ======== */
+@media (max-width: 880px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .btn {
+    width: 100%;
+    text-align: center;
+  }
+  .page-input {
+    width: 50px;
+  }
+  .ag-cards-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ===========================================================
+   MODAL · Edição de agendamento
+   =========================================================== */
+
+.agenda-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.agenda-modal.is-open {
+  display: flex;
+  pointer-events: auto;
+}
+
+.agenda-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.agenda-modal-panel {
+  position: relative;
+  z-index: 1001;
+  max-width: 640px;
+  width: 92vw;
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.22);
+  padding: 18px 18px 16px;
+  border: 1px solid var(--line);
+  animation: mae-pop-in 0.16s ease-out;
+}
+
+.agenda-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.agenda-modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.agenda-modal-close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agenda-modal-close:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.agenda-modal-body {
+  margin-top: 4px;
+}
+
+.agenda-modal-foot {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Grid interno do modal */
+.mae-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, 1fr);
+}
+.mae-col-6 { grid-column: span 6; }
+.mae-col-3 { grid-column: span 3; }
+
+.mae-helper {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mae-msg {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #dc2626;
+}
+
+/* Animação leve de entrada */
+@keyframes mae-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Responsivo */
+@media (max-width: 540px) {
+  .agenda-modal-panel {
+    padding: 16px 12px 14px;
+    border-radius: 16px;
+  }
+  .mae-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .mae-col-6 { grid-column: span 2; }
+  .mae-col-3 { grid-column: span 2; }
+}

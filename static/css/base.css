@@ -1,0 +1,441 @@
+/* =========================
+   Design Tokens
+   ========================= */
+:root {
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #6b7280;
+
+  --sidebar-bg-top: #1f2a37;
+  --sidebar-bg-bottom: #0f172a;
+  --sidebar-header: #0b1220;
+  --sidebar-border: #2b3a4a;
+  --sidebar-hover: #2a3a4d;
+  --submenu-bg: #1b2531;
+  --submenu-border: #243445;
+
+  --primary: #2563eb;
+  --primary-600: #1d4ed8;
+
+  --ring: rgba(37, 99, 235, .35);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, .10);
+
+  --topbar-h: 44px;
+
+  --sidebar-w: 260px;
+  --sidebar-w-collapsed: 72px;
+
+  --scroll-track: rgba(255,255,255,.06);
+  --scroll-thumb: rgba(255,255,255,.22);
+  --scroll-thumb-hover: rgba(255,255,255,.32);
+}
+
+/* =========================
+   Reset / Base
+   ========================= */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(37,99,235,.06), transparent 50%),
+    radial-gradient(1000px 500px at 110% 20%, rgba(16,185,129,.05), transparent 50%),
+    var(--bg);
+  padding-top: var(--topbar-h);
+}
+
+/* Scrollbar global */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--scroll-track); border-radius: 8px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+
+/* =========================
+   Topbar (bonita + user)
+   ========================= */
+.topbar-slim{
+  position:fixed; top:0; left:0; right:0;
+  height: var(--topbar-h);
+  z-index: 2000;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 0 14px;
+  background: linear-gradient(90deg, var(--sidebar-bg-top), var(--sidebar-bg-bottom));
+  color:#fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar-slim__left{ display:flex; align-items:center; gap:10px; min-width:0; }
+.topbar-slim__brand{
+  font-weight:800;
+  letter-spacing:.25px;
+  font-size:14px;
+  opacity:.95;
+  color:#fff;
+  text-decoration:none;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.topbar-slim__right{ display:flex; align-items:center; gap:12px; }
+
+/* bloco do usuário */
+.topbar-slim .user-info{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.16);
+}
+
+.topbar-slim .avatar{
+  width:28px; height:28px; border-radius:999px;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:13px;
+  color:#fff;
+  background: linear-gradient(180deg, var(--primary), var(--primary-600));
+  box-shadow: 0 6px 16px rgba(37,99,235,.28);
+  flex: 0 0 auto;
+}
+
+.topbar-slim .user-block{
+  display:flex;
+  flex-direction:column;
+  line-height:1.05;
+  min-width: 0;
+}
+.topbar-slim .user-name{
+  font-size:13px;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width: 220px;
+}
+.topbar-slim .user-role{
+  font-size:11px;
+  color:#cbd5e1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width: 220px;
+}
+
+/* botões */
+.topbar-slim .btn-login,
+.topbar-slim .btn-logout{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  text-decoration:none;
+  font-weight:800;
+  font-size:12px;
+  border:1px solid rgba(255,255,255,.18);
+  transition: transform .08s ease, filter .15s ease, background .15s ease;
+  user-select:none;
+}
+
+.topbar-slim .btn-login{
+  background: rgba(255,255,255,.12);
+  color:#e5e7eb;
+}
+.topbar-slim .btn-login:hover{ filter: brightness(1.06); }
+.topbar-slim .btn-login:active{ transform: translateY(1px); }
+
+/* Sair em vermelho (chama atenção) */
+.topbar-slim .btn-logout{
+  background: rgba(239,68,68,.18);
+  border-color: rgba(239,68,68,.35);
+  color: #ffecec;
+}
+.topbar-slim .btn-logout:hover{
+  background: rgba(239,68,68,.26);
+}
+.topbar-slim .btn-logout:active{
+  transform: translateY(1px);
+}
+
+/* mobile: compacta o nome do usuário */
+@media (max-width: 520px){
+  .topbar-slim .user-name,
+  .topbar-slim .user-role{ max-width: 140px; }
+  .topbar-slim .user-info{ padding: 6px 8px; }
+}
+
+/* =========================
+   Layout
+   ========================= */
+.app { display: block; }
+
+.sidebar {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  height: calc(100vh - var(--topbar-h));
+  width: var(--sidebar-w);
+  background: linear-gradient(180deg, var(--sidebar-bg-top), var(--sidebar-bg-bottom));
+  color: #e5e7eb;
+  border-right: 1px solid var(--sidebar-border);
+  transition: width .25s ease, left .25s ease;
+  z-index: 1500;
+  overflow-y: auto;
+}
+
+.main-content {
+  margin-left: var(--sidebar-w);
+  padding: 24px;
+  transition: margin-left .25s ease;
+  min-width: 0;
+}
+
+/* =========================
+   Sidebar Header
+   ========================= */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--sidebar-header);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.sidebar-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 6px 8px;
+  transition: background .15s ease, transform .05s ease;
+}
+.toggle-btn:hover { background: rgba(255,255,255,.06); }
+.toggle-btn:active { transform: translateY(1px); }
+
+/* =========================
+   Menu (links e toggles padronizados)
+   ========================= */
+.menu {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 18px;
+}
+
+/* PADRÃO: tanto <a> quanto <button.submenu-toggle> */
+.menu li a,
+.menu li.has-sub > .submenu-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;               /* <-- mantém o espaçamento do aberto */
+  color: #e5e7eb;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  cursor: pointer;
+  position: relative;
+  text-align: left;
+  font: inherit;
+  transition: background .15s ease;
+}
+
+.menu li a:hover,
+.menu li.has-sub > .submenu-toggle:hover { background: var(--sidebar-hover); }
+
+/* Ícone */
+.menu .ico {
+  width: 22px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  opacity: .95;
+}
+
+/* Texto */
+.menu .txt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =========================
+   Submenu (caret UNIFICADA: Digitador = Admin = Export)
+   ========================= */
+/* Dá espaço pra seta no fim em qualquer toggle de submenu */
+.menu li.has-sub > a,
+.menu li.has-sub > .submenu-toggle {
+  padding-right: 40px;
+}
+
+/* Seta padrão via ::after (vale pra a e button igualmente) */
+.menu li.has-sub > a::after,
+.menu li.has-sub > .submenu-toggle::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid #cfd8e3;
+  opacity: .85;
+  transition: transform .2s ease;
+  pointer-events: none;
+}
+
+/* Rotação quando abre */
+.menu li.has-sub.open > a::after,
+.menu li.has-sub[aria-expanded="true"] > a::after,
+.menu li.has-sub.open > .submenu-toggle::after,
+.menu li.has-sub[aria-expanded="true"] > .submenu-toggle::after {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+/* Painel submenu (.sub e .submenu tratadas iguais) */
+.menu li.has-sub > .sub,
+.menu li.has-sub > .submenu {
+  display: none;
+  background: var(--submenu-bg);
+  border-top: 1px solid rgba(255,255,255,.04);
+}
+
+.menu li.has-sub.open > .sub,
+.menu li.has-sub.open > .submenu,
+.menu li.has-sub[aria-expanded="true"] > .sub,
+.menu li.has-sub[aria-expanded="true"] > .submenu {
+  display: block;
+}
+
+.menu li.has-sub > .sub li a,
+.menu li.has-sub > .submenu li a {
+  padding-left: 40px;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  color: #cbd5e1;
+}
+
+.menu li.has-sub > .sub li a:hover,
+.menu li.has-sub > .submenu li a:hover {
+  background: #203145;
+  color: #e5e7eb;
+}
+
+/* =========================
+   DESKTOP – COLAPSADO (só ícone, SEM quadrado, MESMO padding)
+   ========================= */
+@media (min-width: 769px) {
+  .sidebar.is-collapsed { width: var(--sidebar-w-collapsed); }
+
+  /* conteúdo acompanha */
+  .sidebar.is-collapsed + .main-content,
+  .sidebar.is-collapsed ~ .main-content {
+    margin-left: var(--sidebar-w-collapsed);
+  }
+
+  /* some texto */
+  .sidebar.is-collapsed .txt { display: none !important; }
+
+  /* mantém padding normal, só centraliza o conteúdo */
+  .sidebar.is-collapsed .menu li a,
+  .sidebar.is-collapsed .menu li.has-sub > .submenu-toggle {
+    justify-content: center;
+    gap: 0;
+    padding: 12px 16px; /* <-- igual aberto */
+  }
+
+  /* ícone “puro” (sem caixa) */
+  .sidebar.is-collapsed .menu .ico {
+    width: 22px;
+    height: auto;
+    background: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* esconde setas no colapsado */
+  .sidebar.is-collapsed .has-sub > a::after,
+  .sidebar.is-collapsed .has-sub > .submenu-toggle::after {
+    display: none !important;
+  }
+
+  /* fecha submenus no colapsado */
+  .sidebar.is-collapsed .sub,
+  .sidebar.is-collapsed .submenu {
+    display: none !important;
+  }
+
+  /* some o "SGD" no header quando colapsado */
+  .sidebar.is-collapsed .sidebar-header h2 {
+    display: none;
+  }
+
+  /* botão hambúrguer fica centralizado */
+  .sidebar.is-collapsed .sidebar-header {
+    justify-content: center;
+    padding: 14px 10px;
+  }
+}
+
+/* =========================
+   MOBILE – OFF CANVAS (SEM COLAPSO)
+   ========================= */
+@media (max-width: 768px) {
+  .sidebar {
+    left: -100%;
+    width: var(--sidebar-w);
+  }
+
+  .sidebar.active { left: 0; }
+
+  .main-content {
+    margin-left: 0;
+    padding: 16px;
+  }
+
+  /* GARANTE: no mobile sempre mostra texto+ícone */
+  .sidebar .txt { display: inline !important; }
+  .sidebar .ico { width: 22px; }
+  .sidebar .sidebar-header h2 { display: block; }
+
+  /* submenus podem funcionar normalmente no mobile */
+  .sidebar .has-sub > a::after,
+  .sidebar .has-sub > .submenu-toggle::after {
+    display: block;
+  }
+}
+
+/* trava scroll */
+.no-scroll { overflow: hidden; }

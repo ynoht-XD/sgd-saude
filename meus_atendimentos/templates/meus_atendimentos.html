@@ -1,0 +1,243 @@
+{# sgd/meus_atendimentos/templates/meus_atendimentos/meus-atendimentos.html #}
+{% extends "layout.html" %}
+
+{% block title %}Meus Atendimentos · SGD{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('meus_atendimentos.static', filename='css/meus_atendimentos.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-meus-atendimentos">
+
+  <!-- =========================
+       HEADER
+       ========================= -->
+  <header class="ma-head">
+    <div class="ma-head-left">
+      <h2>Meus Atendimentos</h2>
+      <p>Atendimentos registrados por você. Use os filtros para refinar a lista.</p>
+    </div>
+
+    <div class="ma-head-right">
+      <span class="ma-today">
+        Hoje: <strong>{{ hoje }}</strong>
+      </span>
+    </div>
+  </header>
+
+  <!-- =========================
+       FILTROS
+       ========================= -->
+  <section class="ma-filters" aria-label="Filtros de busca">
+    <form method="GET" class="ma-filters-form">
+
+      <div class="ma-field">
+        <label for="f-q">Paciente</label>
+        <input
+          id="f-q"
+          name="q"
+          type="search"
+          placeholder="Buscar por nome do paciente…"
+          value="{{ filtros.q }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="ma-field">
+        <label for="f-cidade">Cidade</label>
+        <input
+          id="f-cidade"
+          name="cidade"
+          type="search"
+          placeholder="Ex: Maceió…"
+          value="{{ filtros.cidade }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="ma-field ma-field-sm">
+        <label for="f-cid">CID</label>
+        <input
+          id="f-cid"
+          name="cid"
+          type="search"
+          placeholder="Ex: F84…"
+          value="{{ filtros.cid }}"
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="ma-field">
+        <label for="f-data-ini">Data (de)</label>
+        <input
+          id="f-data-ini"
+          name="data_ini"
+          type="date"
+          value="{{ filtros.data_ini }}"
+        >
+      </div>
+
+      <div class="ma-field">
+        <label for="f-data-fim">Data (até)</label>
+        <input
+          id="f-data-fim"
+          name="data_fim"
+          type="date"
+          value="{{ filtros.data_fim }}"
+        >
+      </div>
+
+      <div class="ma-field ma-field-sm">
+        <label for="f-idade-min">Idade (mín)</label>
+        <input
+          id="f-idade-min"
+          name="idade_min"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          placeholder="0"
+          value="{{ filtros.idade_min }}"
+        >
+      </div>
+
+      <div class="ma-field ma-field-sm">
+        <label for="f-idade-max">Idade (máx)</label>
+        <input
+          id="f-idade-max"
+          name="idade_max"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          placeholder="99"
+          value="{{ filtros.idade_max }}"
+        >
+      </div>
+
+      {# Se você quiser deixar configurável no futuro, pode manter per_page no form #}
+      <input type="hidden" name="per_page" value="{{ per_page or 20 }}">
+
+      <div class="ma-actions">
+        <button type="submit" class="btn btn-primary">
+          Filtrar
+        </button>
+
+        <a class="btn btn-ghost" href="{{ url_for('meus_atendimentos.index') }}">
+          Limpar
+        </a>
+      </div>
+
+    </form>
+  </section>
+
+  <!-- =========================
+       LISTA
+       ========================= -->
+  <section class="ma-list" aria-label="Lista de atendimentos">
+
+    {% if atendimentos and atendimentos|length %}
+      <div class="ma-table-wrap">
+        <table class="ma-table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Procedimento</th>
+              <th class="ma-col-date">Data</th>
+              <th class="ma-col-age">Idade</th>
+              <th>Evolução</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for a in atendimentos %}
+              <tr data-id="{{ a.id }}">
+                <td class="ma-paciente">
+                  <strong>{{ a.paciente or "-" }}</strong>
+                </td>
+
+                <td class="ma-proced">
+                  {{ a.procedimento or "-" }}
+                </td>
+
+                <td class="ma-date">
+                  {{ a.data or "-" }}
+                </td>
+
+                <td class="ma-age">
+                  {% if a.idade is not none %}
+                    {{ a.idade }}
+                  {% else %}
+                    <span class="ma-muted">—</span>
+                  {% endif %}
+                </td>
+
+                <td class="ma-evol">
+                  {% set evo = a.evolucao_preview if a.evolucao_preview is defined else a.evolucao %}
+                  {% if evo and evo|string|trim %}
+                    <div class="ma-evol-preview">
+                      {{ evo }}
+                      {% if a.evolucao and (a.evolucao|string|length) > (evo|string|length) %}
+                        <span class="ma-more">…</span>
+                      {% endif %}
+                    </div>
+
+                    <details class="ma-evol-details">
+                      <summary>Ver evolução completa</summary>
+                      <div class="ma-evol-full">
+                        {{ a.evolucao }}
+                      </div>
+                    </details>
+                  {% else %}
+                    <span class="ma-muted">Sem evolução</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- =========================
+           FOOTER + PAGINAÇÃO
+           ========================= -->
+      <footer class="ma-footer">
+        <span class="ma-count">
+          Total no filtro: <strong>{{ total }}</strong>
+          <span class="ma-muted">• Página {{ page }} de {{ pages }}</span>
+        </span>
+
+        <nav class="ma-pager" aria-label="Paginação">
+          {% if has_prev %}
+            <a class="btn btn-ghost" href="{{ prev_url }}">← Anterior</a>
+          {% else %}
+            <span class="btn btn-ghost is-disabled">← Anterior</span>
+          {% endif %}
+
+          <span class="ma-pagechip">{{ page }}</span>
+
+          {% if has_next %}
+            <a class="btn btn-ghost" href="{{ next_url }}">Próxima →</a>
+          {% else %}
+            <span class="btn btn-ghost is-disabled">Próxima →</span>
+          {% endif %}
+        </nav>
+      </footer>
+
+    {% else %}
+      <div class="ma-empty">
+        <h3>Nenhum atendimento encontrado</h3>
+        <p>Tente ajustar os filtros ou limpe a busca para ver tudo.</p>
+        <a class="btn btn-primary" href="{{ url_for('meus_atendimentos.index') }}">
+          Ver todos
+        </a>
+      </div>
+    {% endif %}
+
+  </section>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  <script defer src="{{ url_for('meus_atendimentos.static', filename='js/meus_atendimentos.js') }}"></script>
+{% endblock %}

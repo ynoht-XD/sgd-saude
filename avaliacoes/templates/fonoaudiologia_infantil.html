@@ -1,0 +1,787 @@
+{# sgd/avaliacoes/templates/fonoaudiologia_infantil.html #}
+{% extends "layout.html" %}
+
+{% block title %}Fonoaudiologia Infantil · Avaliações{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-av{
+    max-width:min(1150px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .head h2{margin:0;font-size:22px;font-weight:950}
+  .head p{margin:4px 0 0;color:#64748b}
+
+  .btn{
+    border:0;cursor:pointer;padding:10px 14px;border-radius:12px;
+    font-weight:900;font-size:.95rem;text-decoration:none;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:transform .08s ease, filter .2s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+  }
+  form{padding:14px}
+
+  details{
+    border:1px solid #e5e7eb;border-radius:14px;margin-top:10px;
+    overflow:hidden;
+    background:#fff;
+  }
+  summary{
+    cursor:pointer;font-weight:950;padding:12px;background:#f8fafc;
+    list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  summary::-webkit-details-marker{display:none}
+  .sec{padding:12px;border-top:1px solid #eef2f7}
+
+  .grid{display:grid;gap:12px}
+  @media(min-width:900px){
+    .cols-2{grid-template-columns:1fr 1fr}
+    .cols-3{grid-template-columns:1fr 1fr 1fr}
+  }
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-weight:900;font-size:.9rem}
+  input[type="text"], input[type="date"], input[type="number"], textarea, select{
+    border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font-size:.95rem;
+    outline:none;background:#fff;
+  }
+  input:focus, textarea:focus, select:focus{
+    border-color:#93c5fd;
+    box-shadow:0 0 0 4px rgba(59,130,246,.12);
+  }
+  textarea{min-height:90px;resize:vertical}
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:999px;border:1px solid #e5e7eb;
+    background:#fff;font-weight:900;font-size:.88rem;
+  }
+  .pill input{transform:translateY(1px)}
+  .hint{color:#64748b;font-size:.88rem;font-weight:700}
+
+  .footer{
+    display:flex;justify-content:flex-end;gap:10px;margin-top:14px;
+    border-top:1px dashed #e5e7eb;padding-top:12px;
+  }
+
+  @media (prefers-color-scheme: dark){
+    .page-av{color:#e5e7eb}
+    .card, details{background:#0b1220;border-color:#1f2937;box-shadow:none}
+    summary{background:#0f172a}
+    .sec{border-color:#111827}
+    input, textarea, select{background:#0b1220;color:#e5e7eb;border-color:#1f2937}
+    .btn-ghost{background:#111827;color:#e5e7eb}
+    .pill{background:#0b1220;border-color:#1f2937}
+    .hint{color:#94a3b8}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-av">
+
+  <div class="head">
+    <div>
+      <h2>🗣️ Anamnese Fonoaudiológica Infantil</h2>
+      <p>Registro completo para avaliação e acompanhamento.</p>
+    </div>
+    <div class="row">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <button class="btn btn-primary" type="submit" form="formFono">Salvar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="formFono" method="POST" action="{{ url_for('avaliacoes.nova') }}">
+      <input type="hidden" name="tipo" value="fonoaudiologia_infantil">
+
+      <!-- ✅ Obrigatórios pro backend -->
+      <input type="hidden" name="paciente_id" id="paciente_id">
+      <input type="hidden" name="paciente_prontuario" id="paciente_prontuario">
+
+      <!-- 1) IDENTIFICAÇÃO (agora só nome; o resto vem da sugestão) -->
+      <details open>
+        <summary>1️⃣ Dados de Identificação</summary>
+        <div class="sec grid cols-3">
+
+          <div class="field" style="grid-column: span 3;">
+            <label class="label" for="paciente_nome">Nome do paciente</label>
+            <input
+              id="paciente_nome"
+              name="paciente_nome"
+              type="text"
+              required
+              placeholder="Digite ao menos 3 letras…"
+              list="dlPacientes"
+              autocomplete="off"
+            >
+            <datalist id="dlPacientes"></datalist>
+            <div class="hint">Selecione na lista para preencher prontuário e idade automaticamente.</div>
+          </div>
+
+          <div class="field">
+            <label class="label" for="prontuario_show">Prontuário</label>
+            <input id="prontuario_show" type="text" readonly placeholder="—">
+          </div>
+
+          <div class="field">
+            <label class="label" for="idade_show">Idade</label>
+            <input id="idade_show" type="text" readonly placeholder="—">
+          </div>
+
+          <div class="field">
+            <label class="label" for="data_nascimento_show">Nascimento</label>
+            <input id="data_nascimento_show" type="date" readonly>
+          </div>
+
+        </div>
+      </details>
+
+      <!-- 2) MOTIVO / HISTÓRIA -->
+      <details>
+        <summary>2️⃣ Motivo da consulta / História clínica</summary>
+        <div class="sec grid cols-2">
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Queixa</label>
+            <textarea name="queixa"></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Encaminhado por</label>
+            <input name="encaminhado_por" type="text">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">História da Doença Atual (H.D.A.)</label>
+            <textarea name="hda"></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">História da Doença Pregressa (H.P.P.)</label>
+            <textarea name="hpp"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 3) GESTAÇÃO -->
+      <details>
+        <summary>3️⃣ Gestação</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Fez tratamento pré-natal?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="pre_natal" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="pre_natal" value="nao"> Não</label>
+            </div>
+            <div class="hint">Se quiser: onde/observações abaixo</div>
+            <input name="pre_natal_onde" type="text" placeholder="Onde? (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Sofreu acidentes / quedas / cirurgia?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="acidentes_gestacao" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="acidentes_gestacao" value="nao"> Não</label>
+            </div>
+            <input name="acidentes_gestacao_obs" type="text" placeholder="Detalhes (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Teve doença na gestação?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="doenca_gestacao" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="doenca_gestacao" value="nao"> Não</label>
+            </div>
+            <input name="doenca_gestacao_qual" type="text" placeholder="Qual? (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Tomou alguma medicação?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="medicacao_gestacao" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="medicacao_gestacao" value="nao"> Não</label>
+            </div>
+            <input name="medicacao_gestacao_qual" type="text" placeholder="Qual? (opcional)">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Condições psicológicas durante a gravidez</label>
+            <textarea name="condicoes_psicologicas_gestacao"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 4) LINGUAGEM / COMUNICAÇÃO -->
+      <details>
+        <summary>4️⃣ Linguagem e Comunicação</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Balbucios</label>
+            <input name="balbucios" type="text" placeholder="Sim/Não/observações">
+          </div>
+
+          <div class="field">
+            <label class="label">Primeiras palavras</label>
+            <input name="primeiras_palavras" type="text">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Compreende ordens?</label>
+            <textarea name="compreende_ordens" placeholder="Ex: compreende ordens simples; dificuldade em ordens complexas..."></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Como a criança se comunica?</label>
+            <textarea name="como_se_comunica" placeholder="Ex: gestos, aponta, fala palavras soltas, usa frases, etc."></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Expressa alguma palavra de forma repetitiva? Qual?</label>
+            <textarea name="palavra_repetitiva"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 5) COMPORTAMENTO -->
+      <details>
+        <summary>5️⃣ Comportamento</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Humor habitual</label>
+            <input name="humor_habitual" type="text" placeholder="tranquilo, irritado, etc.">
+          </div>
+
+          <div class="field">
+            <label class="label">Prefere brincar</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="prefere_brincar" value="sozinho"> Sozinho</label>
+              <label class="pill"><input type="radio" name="prefere_brincar" value="grupo"> Em grupo</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Estranha mudanças de ambiente?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="estranha_mudanca" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="estranha_mudanca" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Adapta-se facilmente ao meio?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="adapta_meio" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="adapta_meio" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Tem horários?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="tem_horarios" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="tem_horarios" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">É líder?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="lider" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="lider" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Aceita bem as ordens?</label>
+            <input name="aceita_ordens" type="text" placeholder="Sim/Não/às vezes...">
+          </div>
+
+          <div class="field">
+            <label class="label">Pratica esportes?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="pratica_esportes" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="pratica_esportes" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Apresenta agressividade / teimosia?</label>
+            <input name="agressividade_teimosia" type="text" placeholder="Sim/Não/observações">
+          </div>
+
+          <div class="field">
+            <label class="label">Gosta de música?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="gosta_musica" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="gosta_musica" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Pratica alguma atividade</label>
+            <div class="row">
+              <label class="pill"><input type="checkbox" name="atividade_fisica" value="1"> Física</label>
+              <label class="pill"><input type="checkbox" name="atividade_artistica" value="1"> Artística</label>
+            </div>
+            <input name="atividade_obs" type="text" placeholder="Qual? (opcional)">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Apresenta algum movimento repetitivo?</label>
+            <textarea name="movimento_repetitivo"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 6) INDEPENDÊNCIA / RELACIONAMENTO -->
+      <details>
+        <summary>6️⃣ Independência e Relacionamento</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Come, veste-se, toma banho sozinho?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="independencia" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="independencia" value="nao"> Não</label>
+            </div>
+            <input name="independencia_obs" type="text" placeholder="Observações (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Como é a relação com os pais?</label>
+            <textarea name="relacao_pais"></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Como é a relação com os irmãos?</label>
+            <textarea name="relacao_irmaos"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 7) ESCOLARIDADE -->
+      <details>
+        <summary>7️⃣ Escolaridade</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Com que idade entrou na escola?</label>
+            <input name="idade_entrou_escola" type="text">
+          </div>
+
+          <div class="field">
+            <label class="label">Adaptou-se bem?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="adaptou_escola" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="adaptou_escola" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Escola atual, série e turno</label>
+            <input name="escola_atual_serie_turno" type="text">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Observações</label>
+            <textarea name="escolaridade_obs"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 8) DIFICULDADES -->
+      <details>
+        <summary>8️⃣ Dificuldade para</summary>
+        <div class="sec">
+          <div class="row" style="margin-bottom:10px;">
+            <label class="pill"><input type="checkbox" name="dif_ler" value="1"> Ler</label>
+            <label class="pill"><input type="checkbox" name="dif_escrever" value="1"> Escrever</label>
+            <label class="pill"><input type="checkbox" name="dif_coordenacao_motora" value="1"> Coordenação motora</label>
+            <label class="pill"><input type="checkbox" name="dif_contar" value="1"> Contar</label>
+            <label class="pill"><input type="checkbox" name="dif_calcular" value="1"> Calcular</label>
+            <label class="pill"><input type="checkbox" name="dif_esquece" value="1"> Esquece o que aprende</label>
+            <label class="pill"><input type="checkbox" name="dif_troca_letras" value="1"> Troca letras</label>
+            <label class="pill"><input type="checkbox" name="dif_letra_ilegivel" value="1"> Letra ilegível</label>
+            <label class="pill"><input type="checkbox" name="dif_reprovacao" value="1"> Reprovação</label>
+            <label class="pill"><input type="checkbox" name="dif_atencao" value="1"> Atenção</label>
+            <label class="pill"><input type="checkbox" name="dif_concentracao" value="1"> Concentração</label>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="field">
+              <label class="label">Quantas (reprovações)?</label>
+              <input name="reprovacoes_quantas" type="text">
+            </div>
+            <div class="field">
+              <label class="label">Mudou de escola?</label>
+              <div class="row">
+                <label class="pill"><input type="radio" name="mudou_escola" value="sim"> Sim</label>
+                <label class="pill"><input type="radio" name="mudou_escola" value="nao"> Não</label>
+              </div>
+              <input name="mudou_escola_obs" type="text" placeholder="Motivo/qual? (opcional)">
+            </div>
+
+            <div class="field" style="grid-column:1/-1;">
+              <label class="label">Observações gerais</label>
+              <textarea name="dificuldades_obs"></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 9) AUDIÇÃO -->
+      <details>
+        <summary>9️⃣ Audição</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Audição normal?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="audicao_normal" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="audicao_normal" value="nao"> Não</label>
+            </div>
+            <input name="audicao_obs" type="text" placeholder="Se não, descreva (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Alguém na família apresenta a mesma dificuldade? Quem?</label>
+            <input name="familia_mesma_dificuldade_quem" type="text">
+          </div>
+        </div>
+      </details>
+
+      <!-- 10) PARTO -->
+      <details>
+        <summary>🔟 Parto</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Local</label>
+            <input name="parto_local" type="text" placeholder="Casa, maternidade, etc.">
+          </div>
+
+          <div class="field">
+            <label class="label">Gestação</label>
+            <div class="row">
+              <label class="pill"><input type="checkbox" name="gestacao_termo" value="1"> A termo</label>
+              <label class="pill"><input type="checkbox" name="gestacao_prematuro" value="1"> Prematuro</label>
+              <label class="pill"><input type="checkbox" name="gestacao_pos_termo" value="1"> Pós-termo</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Tipo de parto</label>
+            <div class="row">
+              <label class="pill"><input type="checkbox" name="parto_normal" value="1"> Normal</label>
+              <label class="pill"><input type="checkbox" name="parto_cesariana" value="1"> Cesariana</label>
+              <label class="pill"><input type="checkbox" name="parto_forceps" value="1"> Fórceps</label>
+              <label class="pill"><input type="checkbox" name="parto_cianotico" value="1"> Cianótico</label>
+              <label class="pill"><input type="checkbox" name="parto_nasceu_azul" value="1"> Nasceu “azuladinho”</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Incubadora</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="incubadora" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="incubadora" value="nao"> Não</label>
+            </div>
+            <input name="incubadora_obs" type="text" placeholder="Tempo/observações (opcional)">
+          </div>
+
+          <div class="field">
+            <label class="label">Teve contato com a criança no nascer?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="contato_no_nascer" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="contato_no_nascer" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Estado da criança pós-parto</label>
+            <input name="estado_pos_parto" type="text">
+          </div>
+
+          <div class="field">
+            <label class="label">Chorou logo ao nascer?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="chorou_ao_nascer" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="chorou_ao_nascer" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Peso</label>
+            <input name="peso_nascer" type="text">
+          </div>
+
+          <div class="field">
+            <label class="label">Comprimento</label>
+            <input name="comprimento_nascer" type="text">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Tomou algum medicamento ao nascer?</label>
+            <input name="medicamento_ao_nascer" type="text" placeholder="Sim/Não/Não sabe + detalhes">
+          </div>
+        </div>
+      </details>
+
+      <!-- 11) ALIMENTAÇÃO -->
+      <details>
+        <summary>1️⃣1️⃣ Alimentação</summary>
+        <div class="sec grid cols-2">
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Mamou no seio?</label>
+            <input name="mamou_no_seio" type="text" placeholder="Sim/Não + por quê + até quando">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Mamadeira? Até quando?</label>
+            <input name="mamadeira_ate" type="text">
+          </div>
+
+          <div class="field">
+            <label class="label">Aceitou bem alimentação pastosa?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="alimentacao_pastosa" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="alimentacao_pastosa" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Aceitou bem alimentação sólida?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="alimentacao_solida" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="alimentacao_solida" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">Usa copo?</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="usa_copo" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="usa_copo" value="nao"> Não</label>
+            </div>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Alimentação atual (tipo, apetite, posição, mastigação)</label>
+            <textarea name="alimentacao_atual"></textarea>
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Apresenta alguma restrição alimentar?</label>
+            <input name="restricao_alimentar" type="text">
+          </div>
+        </div>
+      </details>
+
+      <!-- 12) DOENÇAS / SONO / HÁBITOS -->
+      <details>
+        <summary>1️⃣2️⃣ Doenças da infância / Sono / Hábitos</summary>
+        <div class="sec grid cols-2">
+          <div class="field">
+            <label class="label">Doenças da infância</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="doencas_infancia" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="doencas_infancia" value="nao"> Não</label>
+            </div>
+            <input name="doencas_infancia_quais" type="text" placeholder="Quais?">
+          </div>
+
+          <div class="field">
+            <label class="label">Quedas/traumatismos (como, tipo, quando)</label>
+            <textarea name="quedas_traumas"></textarea>
+          </div>
+
+          <div class="field">
+            <label class="label">Sono</label>
+            <div class="row">
+              <label class="pill"><input type="checkbox" name="sono_tranquilo" value="1"> Tranquilo</label>
+              <label class="pill"><input type="checkbox" name="sono_agitado" value="1"> Agitado</label>
+              <label class="pill"><input type="checkbox" name="dorme_sozinho" value="1"> Dorme sozinho</label>
+              <label class="pill"><input type="checkbox" name="dorme_com_alguem" value="1"> Dorme com alguém</label>
+            </div>
+            <input name="dorme_com_quem" type="text" placeholder="Com quem?">
+            <input name="ate_quando_quarto_pais" type="text" placeholder="Até quando dormiu no quarto com os pais?">
+          </div>
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Hábitos especiais (presença de alguém, chupeta, brinquedos, embalo, etc.)</label>
+            <textarea name="habitos_especiais"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- 13) DESENVOLVIMENTO PSICOMOTOR -->
+      <details>
+        <summary>1️⃣3️⃣ Desenvolvimento psicomotor</summary>
+        <div class="sec grid cols-2">
+          <div class="field"><label class="label">Sustentou a cabeça com que idade?</label><input name="idade_sustentou_cabeca" type="text"></div>
+          <div class="field"><label class="label">Sentou com que idade?</label><input name="idade_sentou" type="text"></div>
+          <div class="field"><label class="label">Engatinhou com que idade?</label><input name="idade_engatinhou" type="text"></div>
+          <div class="field"><label class="label">Começou a andar com que idade?</label><input name="idade_andou" type="text"></div>
+
+          <div class="field">
+            <label class="label">Dominância manual</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="dominancia_manual" value="direita"> Direita</label>
+              <label class="pill"><input type="radio" name="dominancia_manual" value="esquerda"> Esquerda</label>
+            </div>
+            <input name="forcado_usar_mao" type="text" placeholder="Foi forçado a usar uma mão específica?">
+          </div>
+
+          <div class="field">
+            <label class="label">Sensibilidade ao toque</label>
+            <div class="row">
+              <label class="pill"><input type="radio" name="sensibilidade_toque" value="sim"> Sim</label>
+              <label class="pill"><input type="radio" name="sensibilidade_toque" value="nao"> Não</label>
+            </div>
+            <input name="sensibilidade_toque_obs" type="text" placeholder="Se sim, descreva (opcional)">
+          </div>
+        </div>
+      </details>
+
+      <!-- 14) OBSERVAÇÕES FINAIS -->
+      <details>
+        <summary>1️⃣4️⃣ Observações finais</summary>
+        <div class="sec">
+          <textarea name="observacoes"></textarea>
+        </div>
+      </details>
+
+      <div class="footer">
+        <button class="btn btn-primary" type="submit">Salvar Anamnese Fono</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+/**
+ * Autocomplete pacientes:
+ * - /avaliacoes/api/pacientes?q=
+ * Espera items: {id, nome, prontuario, data_nascimento?}
+ */
+(function(){
+  const inpNome = document.getElementById("paciente_nome");
+  const dl      = document.getElementById("dlPacientes");
+  const hidId   = document.getElementById("paciente_id");
+  const hidPr   = document.getElementById("paciente_prontuario");
+
+  const showPr  = document.getElementById("prontuario_show");
+  const showId  = document.getElementById("idade_show");
+  const showNasc= document.getElementById("data_nascimento_show");
+
+  const form    = document.getElementById("formFono");
+
+  if (!inpNome || !dl || !hidId || !hidPr || !form) return;
+
+  let lastItems = [];
+  let t = null;
+
+  function norm(s){ return (s||"").toString().trim().toLowerCase(); }
+
+  function calcIdade(iso){
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+    const [y,m,d] = iso.split("-").map(Number);
+    const nasc = new Date(y, m-1, d);
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - nasc.getFullYear();
+    const mm = hoje.getMonth() - nasc.getMonth();
+    if (mm < 0 || (mm === 0 && hoje.getDate() < nasc.getDate())) idade--;
+    return String(Math.max(0, idade));
+  }
+
+  function clearBind(){
+    hidId.value = "";
+    hidPr.value = "";
+    if (showPr) showPr.value = "";
+    if (showId) showId.value = "";
+    if (showNasc) showNasc.value = "";
+  }
+
+  function renderDatalist(items){
+    dl.innerHTML = "";
+    items.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.nome;
+      opt.label = p.label || p.nome;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function fetchPacientes(q){
+    const r = await fetch(`/avaliacoes/api/pacientes?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    return j.items || [];
+  }
+
+  function bindItem(p){
+    hidId.value = p.id || "";
+    hidPr.value = p.prontuario || "";
+
+    if (showPr) showPr.value = p.prontuario || "";
+    if (showNasc) showNasc.value = p.data_nascimento || "";
+    if (showId) showId.value = p.data_nascimento ? calcIdade(p.data_nascimento) : "";
+  }
+
+  function tryBindByName(){
+    const val = norm(inpNome.value);
+    if (!val) return;
+    const hit = lastItems.find(p => norm(p.nome) === val);
+    if (hit) bindItem(hit);
+  }
+
+  inpNome.addEventListener("input", () => {
+    const q = (inpNome.value || "").trim();
+    clearBind();
+
+    if (q.length < 3){
+      dl.innerHTML = "";
+      lastItems = [];
+      return;
+    }
+
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try{
+        const items = await fetchPacientes(q);
+        lastItems = items;
+        renderDatalist(items);
+      }catch(e){
+        console.warn("autocomplete pacientes falhou:", e);
+      }
+    }, 250);
+  });
+
+  inpNome.addEventListener("change", tryBindByName);
+  inpNome.addEventListener("blur", tryBindByName);
+
+  form.addEventListener("submit", () => {
+    if (hidId.value) return;
+
+    // tenta bind por nome exato
+    tryBindByName();
+    if (hidId.value) return;
+
+    // fallback: usa o primeiro item carregado
+    if (lastItems && lastItems.length){
+      bindItem(lastItems[0]);
+    }
+  });
+})();
+</script>
+{% endblock %}

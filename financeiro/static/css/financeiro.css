@@ -1,0 +1,280 @@
+/* ===========================================================
+   Financeiro — estilos principais
+   Path: sgd/financeiro/static/css/financeiro.css
+   =========================================================== */
+
+:root{
+  --fin-bg: #f3f4f6;
+  --fin-panel: #ffffff;
+  --fin-text: #0f172a;
+  --fin-muted: #6b7280;
+  --fin-line: #e5e7eb;
+  --fin-line-soft: #f3f4f6;
+
+  --fin-primary: #2563eb;
+  --fin-primary-600: #1d4ed8;
+
+  --fin-success: #10b981;
+  --fin-danger: #ef4444;
+  --fin-warning: #f59e0b;
+  --fin-info: #0ea5e9;
+
+  --fin-shadow: 0 2px 8px rgba(0,0,0,.06);
+  --fin-shadow-lg: 0 10px 34px rgba(0,0,0,.12);
+
+  --fin-radius: 12px;
+  --fin-radius-lg: 14px;
+}
+
+/* ===== Container e flashes ===== */
+.fin-container{
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.fin-flashes{ margin-bottom: 12px; display:grid; gap:8px; }
+.fin-flashes .flash{
+  padding:10px 12px; border-radius:10px; border:1px solid var(--fin-line);
+  background:#fff; color:var(--fin-text);
+}
+.fin-flashes .flash.success{ border-color: var(--fin-success); }
+.fin-flashes .flash.error{ border-color: var(--fin-danger); }
+.fin-flashes .flash.info{ border-color: var(--fin-info); }
+
+/* ===== Header ===== */
+.fin-head{
+  display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center; margin-bottom:16px;
+}
+.fin-head h2{ margin:0; font-size:1.7rem; color:var(--fin-text); letter-spacing:.2px; }
+.fin-head .muted{ color: var(--fin-muted); }
+.fin-head .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+/* ===== Botões (escopo leve) ===== */
+.btn{
+  border:1px solid var(--fin-line);
+  background:#fff;
+  color:var(--fin-text);
+  padding:9px 14px;
+  border-radius:12px;
+  cursor:pointer;
+  transition: transform .06s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease;
+  box-shadow: 0 0 0 rgba(0,0,0,0);
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: var(--fin-shadow); }
+.btn:active{ transform: translateY(0); }
+.btn.primary{ background: var(--fin-primary); color:#fff; border-color: var(--fin-primary); }
+.btn.primary:hover{ background: var(--fin-primary-600); border-color: var(--fin-primary-600); }
+.btn.ghost{ background:#f9fafb; }
+.btn.danger{ background: var(--fin-danger); color:#fff; border-color: var(--fin-danger); }
+.btn.xs{ padding:6px 9px; border-radius:9px; font-size:.85rem; }
+.icon-btn{
+  border:1px solid var(--fin-line); background:#fff; width:36px; height:36px; border-radius:10px;
+  display:grid; place-items:center; font-size:1.1rem; cursor:pointer;
+}
+
+/* ===== Cards de KPI ===== */
+.fin-cards{
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-bottom:16px;
+}
+.kpi-card{
+  background: var(--fin-panel);
+  border:1px solid var(--fin-line);
+  border-radius: var(--fin-radius-lg);
+  padding:14px;
+  box-shadow: var(--fin-shadow);
+}
+.kpi-label{ color:#374151; font-size:.9rem; }
+.kpi-value{ font-size:1.6rem; font-weight:700; margin-top:2px; color:var(--fin-text); }
+.kpi-sub{ color:var(--fin-muted); font-size:.85rem; }
+.acc-list{ list-style:none; padding:8px 0 0 0; margin:0; display:grid; gap:6px; }
+.acc-list .dot{
+  display:inline-block; width:8px; height:8px; border-radius:999px; background:#94a3b8; margin-right:8px;
+}
+
+/* ===== Seções, cartões e títulos ===== */
+.fin-section, .fin-card{
+  background: var(--fin-panel);
+  border:1px solid var(--fin-line);
+  border-radius: var(--fin-radius-lg);
+  padding:16px;
+  box-shadow: var(--fin-shadow);
+  margin-bottom:16px;
+}
+.section-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;
+}
+.section-title{ margin:0; font-size:1.1rem; color:var(--fin-text); }
+.section-actions{ display:flex; gap:8px; align-items:center; }
+
+/* ===== Alertas ===== */
+.fin-alerts{ margin-bottom:16px; }
+.alerts-list{ list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+.alert-card{
+  display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;
+  border:1px solid var(--fin-line); border-radius:12px; background:#fff; padding:12px; box-shadow: var(--fin-shadow);
+}
+.alert-main{ font-size:.98rem; color:var(--fin-text); }
+.alert-actions{ display:flex; gap:8px; }
+.alert-empty{ color: var(--fin-muted); }
+
+/* ===== Chart ===== */
+.chart-wrap{
+  background:#fff; border:1px solid var(--fin-line); border-radius:12px; padding:8px; box-shadow: var(--fin-shadow);
+  overflow:hidden;
+}
+canvas#chartFluxo{ display:block; width:100%; height:auto; }
+
+/* ===== Grid duas colunas (Receber x Pagar) ===== */
+.fin-grid-two{
+  display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;
+}
+
+/* ===== Filtros ===== */
+.filters{
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;
+}
+.filters input[type="text"], .filters select, .filters input[type="date"]{
+  height:40px; border:1px solid var(--fin-line); border-radius:10px; padding:0 10px;
+  background:#fff; color:var(--fin-text);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.filters input:focus, .filters select:focus{
+  outline:none; border-color: var(--fin-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+}
+
+/* ===== Tabelas ===== */
+.table-wrap{ position:relative; }
+.table{
+  width:100%; border-collapse: collapse; background:#fff; border:1px solid var(--fin-line);
+  border-radius:12px; overflow:hidden;
+}
+.table th, .table td{
+  padding:10px 12px; border-bottom:1px solid var(--fin-line-soft); text-align:left; vertical-align:middle; font-size:.95rem;
+}
+.table th{
+  background:#f9fafb; color:#374151; font-weight:600; letter-spacing:.2px;
+}
+.table tbody tr:hover{ background:#fafafa; }
+.table .num, .table td.num{ text-align:right; font-variant-numeric: tabular-nums; }
+.empty{ text-align:center; padding:26px 10px; color:var(--fin-muted); display:none; }
+
+/* ===== Modal (dialog) ===== */
+.modal{
+  border:none; padding:0; border-radius:16px; width:min(920px, 94vw); background:transparent;
+}
+.modal[open]{ animation: finZoomIn .12s ease; }
+.modal::backdrop{ background: rgba(2,6,23,.35); backdrop-filter: blur(2px); }
+@keyframes finZoomIn{ from{ transform: scale(.98); opacity:.7; } to{ transform: scale(1); opacity:1; } }
+
+.modal-card{
+  background:#0b1220; border-radius:16px; overflow:hidden; box-shadow: var(--fin-shadow-lg);
+  border:1px solid #1f2937;
+}
+.modal-header{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:14px 16px; background: linear-gradient(180deg, #0b1220 0%, #0e172a 100%);
+  color:#e5e7eb;
+}
+.modal-header h3{ margin:0; font-weight:600; letter-spacing:.3px; }
+.modal-header .icon-btn{ background:transparent; color:#e5e7eb; border-color:#253048; }
+.modal-header .icon-btn:hover{ background:#111827; }
+
+.modal-body{
+  background:#fff; color:var(--fin-text);
+  padding:16px;
+}
+.modal-footer{
+  display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; background:#fff; border-top:1px solid var(--fin-line);
+}
+
+/* ===== Form: grids e campos ===== */
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:.9rem; color:#374151; }
+.field input[type="text"],
+.field input[type="email"],
+.field input[type="date"],
+.field input[type="number"],
+.field select,
+.field input[type="file"],
+.field textarea{
+  height:40px; border:1px solid var(--fin-line); border-radius:10px; padding:0 10px; background:#fff; color:var(--fin-text);
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.field textarea{ min-height:80px; height:80px; padding:8px 10px; resize:vertical; }
+.field input:focus, .field select:focus, .field textarea:focus{
+  outline:none; border-color: var(--fin-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+}
+
+.grid{ display:grid; gap:12px; }
+.grid.two{ grid-template-columns: 1fr 1fr; }
+.grid.three{ grid-template-columns: repeat(3, 1fr); }
+.grid.four{ grid-template-columns: repeat(4, 1fr); }
+
+/* ===== Estados / badges (se precisar em status) ===== */
+.badge{
+  display:inline-block; padding:4px 8px; border-radius:999px; font-size:.75rem; line-height:1; border:1px solid var(--fin-line);
+}
+.badge.ok{ background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+.badge.warn{ background:#fffbeb; color:#92400e; border-color:#fde68a; }
+.badge.err{ background:#fef2f2; color:#7f1d1d; border-color:#fecaca; }
+.badge.info{ background:#eff6ff; color:#1e40af; border-color:#bfdbfe; }
+
+/* ===== Acessibilidade ===== */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible{
+  outline:none; box-shadow: 0 0 0 3px rgba(37,99,235,.25);
+}
+
+/* ===== Responsividade ===== */
+@media (max-width: 1200px){
+  .fin-cards{ grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 920px){
+  .fin-head{ grid-template-columns: 1fr; }
+  .fin-grid-two{ grid-template-columns: 1fr; }
+  .grid.four{ grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px){
+  .fin-cards{ grid-template-columns: 1fr; }
+  .grid.two, .grid.three, .grid.four{ grid-template-columns: 1fr; }
+  .filters{ gap:6px; }
+  .table th:nth-child(4), .table td:nth-child(4){ display:none; } /* enxuga uma coluna quando estreito */
+}
+
+/* ===== Dark mode por preferência do SO ===== */
+@media (prefers-color-scheme: dark){
+  :root{
+    --fin-bg:#0f172a;
+    --fin-panel:#101827;
+    --fin-text:#e5e7eb;
+    --fin-muted:#9ca3af;
+    --fin-line:#1f2937;
+    --fin-line-soft:#111827;
+    --fin-shadow: 0 2px 8px rgba(0,0,0,.4);
+    --fin-shadow-lg: 0 10px 34px rgba(0,0,0,.6);
+  }
+  .fin-section, .fin-card, .table, .kpi-card, .chart-wrap{ background: var(--fin-panel); }
+  .table th{ background:#0b1220; color:#d1d5db; }
+  .table td, .table th{ border-bottom-color:#1f2937; }
+  .filters input, .filters select,
+  .field input, .field select, .field textarea{
+    background:#0b1220; color:#e5e7eb; border-color:#253048;
+  }
+  .btn{ background:#0b1220; color:#e5e7eb; border-color:#253048; }
+  .btn.ghost{ background:#0b1220; }
+  .alert-card{ background:#0b1220; border-color:#253048; }
+}
+
+/* ===== Impressão (básico) ===== */
+@media print{
+  .fin-head .actions,
+  .filters,
+  .alert-actions{ display:none !important; }
+
+  .fin-container{ margin:0; max-width:100%; }
+  .fin-section, .fin-card{ box-shadow:none; border:1px solid #ccc; }
+  .table th, .table td{ font-size:12px; padding:6px 8px; }
+}

@@ -1,0 +1,255 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('atendimentos.static', filename='css/atendimentos.css') }}">
+{% endblock %}
+
+{% block content %}
+
+{# Modal reutilizável do "Último Atendimento" #}
+{% include 'ultima_consulta.html' %}
+
+<div class="layout-atendimento">
+
+  {# =====================================================
+     1. BARRA DE ABAS SUPERIOR (GERAL)
+     ===================================================== #}
+  <div class="tabs-menu">
+    <button type="button" class="tab-item active" data-tab-main="registro">Registro</button>
+    <button type="button" class="tab-item" data-tab-main="ficha">Ficha Cadastral</button>
+    <button type="button" class="tab-item" data-tab-main="historico">Histórico</button>
+    <button type="button" class="tab-item" data-tab-main="pts">PTS</button>
+  </div>
+
+  {# =====================================================
+     2. CONTEÚDO PRINCIPAL (DUAS COLUNAS)
+     ===================================================== #}
+  <div class="conteudo-flex">
+
+    <!-- ==========================
+         COLUNA ESQUERDA (PACIENTE)
+         ========================== -->
+    <aside class="coluna-info-paciente">
+
+      <div class="bloco-info box-info-azul">
+        <h3>Informações do Paciente</h3>
+        <p><strong>Nome:</strong> <span id="info-nome">{{ paciente_nome or '' }}</span></p>
+        <p><strong>Prontuário:</strong> <span id="info-prontuario"></span></p>
+        <p><strong>Status:</strong> <span id="info-status"></span></p>
+        <p><strong>Modalidade:</strong> <span id="info-mod"></span></p>
+        <p><strong>Nascimento:</strong> <span id="info-nascimento"></span></p>
+        <p><strong>CID:</strong> <span id="info-cid"></span></p>
+      </div>
+
+      <div class="bloco-info box-info-amarelo">
+        <h3>Último Atendimento</h3>
+        <p><strong>Data:</strong> <span id="ua-data">—</span></p>
+        <p><strong>Profissional:</strong> <span id="ua-profissional">—</span></p>
+        <button type="button" class="btn-outline" id="btnVerUltimo">Ver Atendimento</button>
+      </div>
+
+    </aside>
+
+    <!-- ==========================
+         COLUNA DIREITA (REGISTRO)
+         ========================== -->
+    <div class="coluna-main">
+
+      <section class="formulario-principal" data-tab-main-panel="registro">
+        <h2>Registro de Atendimento</h2>
+
+        <form method="post"
+              action="{{ url_for('atendimentos.salvar_atendimento') }}"
+              enctype="multipart/form-data"
+              id="form-atendimento">
+
+          {# ✅ FILA_ID (ESSENCIAL!) #}
+          <input type="hidden" name="fila_id" id="fila_id" value="{{ fila_id or request.args.get('fila_id','') }}">
+
+          <div class="form-grid">
+
+            <div class="campo campo-unico">
+              <label for="nomePaciente">Paciente</label>
+              <div style="position:relative">
+                <input type="text"
+                       id="nomePaciente"
+                       name="nomePaciente_texto"
+                       autocomplete="off"
+                       placeholder="Digite o nome do paciente…"
+                       value="{{ paciente_nome or '' }}">
+                <input type="hidden" id="nomePacienteId" name="nomePaciente" value="{{ paciente_id or '' }}">
+                <ul class="autocomplete-list" id="listaPacientes" hidden></ul>
+              </div>
+            </div>
+
+            {# ✅ Data + Status + Justificativa juntos #}
+            <div class="campo campo-triplo">
+              <div>
+                <label for="dataAtendimento">Data do Atendimento</label>
+                <input type="date"
+                       id="dataAtendimento"
+                       name="dataAtendimento"
+                       value="{{ data_hoje }}">
+              </div>
+
+              <div>
+                <label for="status_justificativa">Status do Atendimento</label>
+                <select id="status_justificativa" name="status_justificativa">
+                  <option value="Realizado">Realizado</option>
+                  <option value="Falta">Falta</option>
+                  <option value="Remarcado">Remarcado</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="justificativa">Justificativa (se houver)</label>
+                <input type="text"
+                       id="justificativa"
+                       name="justificativa"
+                       placeholder="Ex.: paciente ausente / remarcado">
+              </div>
+            </div>
+
+            {# =====================================================
+               PROCEDIMENTOS — REPETIDOR
+               - envia procedimento[] e codigoProcedimento[]
+               ===================================================== #}
+            <div class="campo campo-unico">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                <label style="margin:0">Procedimentos</label>
+
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button type="button" class="btn-outline" id="btnAddProcedimento" title="Adicionar procedimento">
+                    ➕ Adicionar procedimento
+                  </button>
+                </div>
+              </div>
+
+              <div id="procedimentosWrap" style="margin-top:10px;display:grid;gap:10px">
+                <div class="proc-row" style="display:grid;grid-template-columns: 1.4fr 0.9fr auto; gap:10px; align-items:end;">
+                  <div>
+                    <label>Procedimento</label>
+                    <input type="text" name="procedimento[]" placeholder="Ex.: Atendimento fisioterapêutico individual">
+                  </div>
+
+                  <div>
+                    <label>Código SIGTAP</label>
+                    <input type="text" name="codigoProcedimento[]" placeholder="Ex.: 0301010048">
+                  </div>
+
+                  <div style="display:flex;gap:8px">
+                    <button type="button" class="btn-outline btnRemoveProc" title="Remover" aria-label="Remover" disabled>✖</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="campo campo-unico">
+              <label for="evolucao">Evolução do Atendimento</label>
+              <textarea id="evolucao"
+                        name="evolucao"
+                        rows="5"
+                        placeholder="Escreva o que foi feito neste atendimento..."></textarea>
+            </div>
+
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-salvar">Salvar Atendimento</button>
+          </div>
+
+        </form>
+      </section>
+
+      <section class="formulario-principal" data-tab-main-panel="ficha" hidden>
+        <h2>Ficha Cadastral</h2>
+        <p>Aqui você poderá visualizar e editar os dados cadastrais do paciente.</p>
+      </section>
+
+      <section class="formulario-principal" data-tab-main-panel="historico" hidden>
+        <h2>Histórico de Atendimentos</h2>
+        <p>Aqui será listado o histórico completo dos atendimentos deste paciente.</p>
+      </section>
+
+      <section class="formulario-principal" data-tab-main-panel="pts" hidden>
+        <h2>PTS</h2>
+        <p>Aqui você poderá registrar o Plano Terapêutico Singular do paciente.</p>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('atendimentos.static', filename='js/atendimentos.js') }}"></script>
+
+  {# ✅ garante fila_id mesmo se o template não trouxe request.args (backup) #}
+  <script>
+    (function(){
+      const hid = document.getElementById("fila_id");
+      if (!hid) return;
+
+      if (!hid.value) {
+        const qs = new URLSearchParams(window.location.search);
+        const fid = qs.get("fila_id") || "";
+        if (fid) hid.value = fid;
+      }
+    })();
+  </script>
+
+  {# JS pequeno do repetidor #}
+  <script>
+    (function(){
+      const wrap = document.getElementById("procedimentosWrap");
+      const btnAdd = document.getElementById("btnAddProcedimento");
+
+      function mkRow(){
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        row.style.cssText = "display:grid;grid-template-columns: 1.4fr 0.9fr auto; gap:10px; align-items:end;";
+
+        row.innerHTML = `
+          <div>
+            <label>Procedimento</label>
+            <input type="text" name="procedimento[]" placeholder="Ex.: Atendimento fisioterapêutico individual">
+          </div>
+          <div>
+            <label>Código SIGTAP</label>
+            <input type="text" name="codigoProcedimento[]" placeholder="Ex.: 0301010048">
+          </div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn-outline btnRemoveProc" title="Remover" aria-label="Remover">✖</button>
+          </div>
+        `;
+        return row;
+      }
+
+      function refreshRemoveState(){
+        const btns = wrap.querySelectorAll(".btnRemoveProc");
+        const canRemove = btns.length > 1;
+        btns.forEach((b, i) => {
+          b.disabled = !canRemove && i === 0;
+        });
+      }
+
+      btnAdd?.addEventListener("click", () => {
+        wrap.appendChild(mkRow());
+        refreshRemoveState();
+      });
+
+      wrap?.addEventListener("click", (e) => {
+        const btn = e.target.closest(".btnRemoveProc");
+        if(!btn) return;
+        const row = btn.closest(".proc-row");
+        if(!row) return;
+        if (wrap.querySelectorAll(".proc-row").length <= 1) return;
+        row.remove();
+        refreshRemoveState();
+      });
+
+      refreshRemoveState();
+    })();
+  </script>
+{% endblock %}

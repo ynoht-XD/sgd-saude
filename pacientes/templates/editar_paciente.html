@@ -1,0 +1,320 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('cadastro.static', filename='css/cadastro.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="cadastro-container">
+    <h2>Editar Paciente</h2>
+
+    <form
+      method="POST"
+      action="{{ url_for('pacientes.atualizar_paciente', id=paciente.id) }}"
+      class="form-grid"
+      autocomplete="off"
+      novalidate
+    >
+
+      <!-- =========================
+           BLOCO 1 · DADOS PESSOAIS
+           ========================= -->
+      <fieldset>
+        <legend>Dados Pessoais</legend>
+
+        <div class="campo-quadruplo">
+          <div>
+            <label for="prontuario">Prontuário:</label>
+            <input type="text" id="prontuario" name="prontuario" value="{{ paciente.prontuario }}" readonly>
+          </div>
+
+          <div>
+            <label for="status">Status:</label>
+            <select id="status" name="status">
+              <option value="Ativo"     {{ 'selected' if paciente.status == 'Ativo' else '' }}>Ativo</option>
+              <option value="Alta"      {{ 'selected' if paciente.status == 'Alta' else '' }}>Alta</option>
+              <option value="Desligado" {{ 'selected' if paciente.status == 'Desligado' else '' }}>Desligado</option>
+              <option value="Espera"    {{ 'selected' if paciente.status == 'Espera' else '' }}>Espera</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="mod">Modalidade (MOD):</label>
+            <select id="mod" name="mod">
+              <option value="Intelectual" {{ 'selected' if paciente.mod == 'Intelectual' else '' }}>Intelectual</option>
+              <option value="Físico"      {{ 'selected' if paciente.mod == 'Físico' else '' }}>Físico</option>
+              <option value="Auditivo"    {{ 'selected' if paciente.mod == 'Auditivo' else '' }}>Auditivo</option>
+              <option value="Equoterapia" {{ 'selected' if paciente.mod == 'Equoterapia' else '' }}>Equoterapia</option>
+              <option value="Visual"      {{ 'selected' if paciente.mod == 'Visual' else '' }}>Visual</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="admissao">Data de admissão:</label>
+            <input type="date" id="admissao" name="admissao" value="{{ paciente.admissao }}" readonly>
+          </div>
+        </div>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="nome">Nome completo:</label>
+            <input type="text" id="nome" name="nome" value="{{ paciente.nome }}" required>
+          </div>
+
+          <div>
+            <label for="nascimento">Data de nascimento:</label>
+            <input type="date" id="nascimento" name="nascimento" value="{{ paciente.nascimento }}" required>
+          </div>
+
+          <div>
+            <label for="idade">Idade:</label>
+            <input type="text" id="idade" name="idade" value="{{ paciente.idade }}" readonly>
+          </div>
+        </div>
+
+        <div class="campo-quintuplo">
+          <div>
+            <label for="sexo">Sexo:</label>
+            <select id="sexo" name="sexo">
+              <option value="" {{ 'selected' if (paciente.sexo or '') == '' else '' }}>Selecionar...</option>
+              <option value="M" {{ 'selected' if paciente.sexo == 'M' else '' }}>Masculino</option>
+              <option value="F" {{ 'selected' if paciente.sexo == 'F' else '' }}>Feminino</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="cid">CID 1:</label>
+            <input type="text" id="cid" name="cid" value="{{ paciente.cid }}">
+          </div>
+
+          <div>
+            <label for="cid2">CID 2:</label>
+            <input type="text" id="cid2" name="cid2" value="{{ paciente.cid2 }}">
+          </div>
+
+          <div>
+            <label for="raca">Raça/Cor:</label>
+            <select id="raca" name="raca">
+              {% for r in ['Branca','Preta','Parda','Amarela','Indígena','Não informada'] %}
+                <option value="{{ r }}" {{ 'selected' if paciente.raca == r else '' }}>{{ r }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label for="telefone1">Telefone:</label>
+            <input
+              type="text"
+              id="telefone1"
+              name="telefone1"
+              value="{{ paciente.telefone1 }}"
+              inputmode="tel"
+              maxlength="20"
+            >
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- =========================
+           BLOCO 2 · ENDEREÇO
+           ========================= -->
+      <fieldset>
+        <legend>Endereço</legend>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="logradouro">Logradouro:</label>
+            <input type="text" id="logradouro" name="logradouro" value="{{ paciente.logradouro }}">
+          </div>
+
+          <div>
+            <label for="bairro">Bairro:</label>
+            <input type="text" id="bairro" name="bairro" value="{{ paciente.bairro }}">
+          </div>
+
+          <div>
+            <label for="numero_casa">Nº da Casa:</label>
+            <input type="text" id="numero_casa" name="numero_casa" value="{{ paciente.numero_casa }}" inputmode="numeric" maxlength="10">
+          </div>
+        </div>
+
+        <div class="campo-quadruplo">
+          <div>
+            <label for="complemento">Complemento:</label>
+            <input type="text" id="complemento" name="complemento" value="{{ paciente.complemento }}">
+          </div>
+
+          <div>
+            <label for="cep">CEP:</label>
+            <input type="text" id="cep" name="cep" value="{{ paciente.cep }}" inputmode="numeric" maxlength="9">
+          </div>
+
+          <div>
+            <label for="municipio">Município:</label>
+            <input type="text" id="municipio" name="municipio" value="{{ paciente.municipio }}">
+          </div>
+
+          <div>
+            <label for="codigo_logradouro">Código do Logradouro:</label>
+            <input type="text" id="codigo_logradouro" name="codigo_logradouro" value="{{ paciente.codigo_logradouro }}" inputmode="numeric" maxlength="20">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- =========================
+           BLOCO 3 · DOCUMENTOS
+           ========================= -->
+      <fieldset>
+        <legend>Documentos</legend>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="cpf">CPF:</label>
+            <input type="text" id="cpf" name="cpf" value="{{ paciente.cpf }}" inputmode="numeric" maxlength="14">
+          </div>
+
+          <div>
+            <label for="cns">CNS:</label>
+            <input type="text" id="cns" name="cns" value="{{ paciente.cns }}" inputmode="numeric" maxlength="18">
+          </div>
+
+          <div>
+            <label for="estado_civil">Estado Civil:</label>
+            <select id="estado_civil" name="estado_civil">
+              {% for ec in ['Solteiro(a)','Casado(a)','Divorciado(a)','Viúvo(a)','União Estável'] %}
+                <option value="{{ ec }}" {{ 'selected' if paciente.estado_civil == ec else '' }}>{{ ec }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="rg">RG:</label>
+            <input type="text" id="rg" name="rg" value="{{ paciente.rg }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="orgao_rg">Órgão Exp. RG:</label>
+            <input type="text" id="orgao_rg" name="orgao_rg" value="{{ paciente.orgao_rg }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="nis">NIS:</label>
+            <input type="text" id="nis" name="nis" value="{{ paciente.nis }}" inputmode="numeric" maxlength="20">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- =========================
+           BLOCO 4 · DADOS FAMILIARES
+           ========================= -->
+      <fieldset>
+        <legend>Dados Familiares</legend>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="mae">Nome da Mãe:</label>
+            <input type="text" id="mae" name="mae" value="{{ paciente.mae }}">
+          </div>
+
+          <div>
+            <label for="cpf_mae">CPF da Mãe:</label>
+            <input type="text" id="cpf_mae" name="cpf_mae" value="{{ paciente.cpf_mae }}" inputmode="numeric" maxlength="14">
+          </div>
+
+          <div>
+            <label for="rg_mae">RG da Mãe:</label>
+            <input type="text" id="rg_mae" name="rg_mae" value="{{ paciente.rg_mae }}" maxlength="20">
+          </div>
+        </div>
+
+        <div class="campo-duplo">
+          <div>
+            <label for="rg_ssp_mae">RG SSP Mãe:</label>
+            <input type="text" id="rg_ssp_mae" name="rg_ssp_mae" value="{{ paciente.rg_ssp_mae }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="nis_mae">NIS Mãe:</label>
+            <input type="text" id="nis_mae" name="nis_mae" value="{{ paciente.nis_mae }}" inputmode="numeric" maxlength="20">
+          </div>
+        </div>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="pai">Nome do Pai:</label>
+            <input type="text" id="pai" name="pai" value="{{ paciente.pai }}">
+          </div>
+
+          <div>
+            <label for="cpf_pai">CPF do Pai:</label>
+            <input type="text" id="cpf_pai" name="cpf_pai" value="{{ paciente.cpf_pai }}" inputmode="numeric" maxlength="14">
+          </div>
+
+          <div>
+            <label for="rg_pai">RG do Pai:</label>
+            <input type="text" id="rg_pai" name="rg_pai" value="{{ paciente.rg_pai }}" maxlength="20">
+          </div>
+        </div>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="rg_ssp_pai">RG SSP Pai:</label>
+            <input type="text" id="rg_ssp_pai" name="rg_ssp_pai" value="{{ paciente.rg_ssp_pai }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="telefone2">Telefone 2:</label>
+            <input type="text" id="telefone2" name="telefone2" value="{{ paciente.telefone2 }}" inputmode="tel" maxlength="20">
+          </div>
+
+          <div>
+            <label for="email">E-mail:</label>
+            <input type="email" id="email" name="email" value="{{ paciente.email }}" maxlength="120">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- =========================
+           BLOCO 5 · RESPONSÁVEL LEGAL
+           ========================= -->
+      <fieldset>
+        <legend>Responsável Legal</legend>
+
+        <div class="campo-duplo">
+          <div>
+            <label for="responsavel">Nome do Responsável:</label>
+            <input type="text" id="responsavel" name="responsavel" value="{{ paciente.responsavel }}">
+          </div>
+
+          <div>
+            <label for="cpf_responsavel">CPF do Responsável:</label>
+            <input type="text" id="cpf_responsavel" name="cpf_responsavel" value="{{ paciente.cpf_responsavel }}" inputmode="numeric" maxlength="14">
+          </div>
+        </div>
+
+        <div class="campo-triplo">
+          <div>
+            <label for="rg_responsavel">RG do Responsável:</label>
+            <input type="text" id="rg_responsavel" name="rg_responsavel" value="{{ paciente.rg_responsavel }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="orgao_rg_responsavel">Órgão Exp. RG:</label>
+            <input type="text" id="orgao_rg_responsavel" name="orgao_rg_responsavel" value="{{ paciente.orgao_rg_responsavel }}" maxlength="20">
+          </div>
+
+          <div>
+            <label for="telefone3">Telefone 3:</label>
+            <input type="text" id="telefone3" name="telefone3" value="{{ paciente.telefone3 }}" inputmode="tel" maxlength="20">
+          </div>
+        </div>
+      </fieldset>
+
+      <button type="submit" class="btn-salvar">📂 Salvar Alterações</button>
+    </form>
+
+    <a href="{{ url_for('pacientes.visualizar_paciente', id=paciente.id) }}" class="btn-voltar">🔙 Cancelar</a>
+  </div>
+{% endblock %}

@@ -1,0 +1,118 @@
+<!-- export/templates/modal_edicao_apac.html -->
+<style>
+  /* estilinho básico só pro modal (pode mover para um CSS depois) */
+  #modal-edicao-apac {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,.35); z-index: 1000;
+  }
+  #modal-edicao-apac .modal-card {
+    width: min(1100px, 96vw); max-height: 90vh; overflow: auto;
+    background: #fff; border-radius: 12px; padding: 16px 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom: 12px; }
+  .modal-head h3 { margin:0; font-size: 1.1rem; }
+  .icon-btn { border: none; background: #f3f4f6; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 18px; }
+  .grid { display:grid; gap: 12px; }
+  .two { grid-template-columns: repeat(2, 1fr); }
+  .three { grid-template-columns: repeat(3, 1fr); }
+  .four { grid-template-columns: repeat(4, 1fr); }
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field label { font-size: .85rem; color:#374151; }
+  .field input, .field select, .field textarea {
+    border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:.95rem;
+  }
+  .section-title { margin: 16px 0 6px; font-weight: 600; color:#111827; }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top: 14px; }
+  .btn { border:1px solid #d1d5db; background:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; }
+  .btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+</style>
+
+<div id="modal-edicao-apac" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-apac">
+  <form class="modal-card" method="post" action="{{ url_for('export.apac_atualizar') }}">
+    <div class="modal-head">
+      <h3 id="titulo-modal-apac">Editar APAC</h3>
+      <button class="icon-btn" type="button" onclick="fecharModal()" aria-label="Fechar">×</button>
+    </div>
+
+    <input type="hidden" id="id_apac_editar" name="id_apac">
+
+    <!-- Dados da APAC -->
+    <div class="section-title">Dados da APAC</div>
+    <div class="grid four">
+      <div class="field"><label>Nº APAC</label><input name="numero_apac" type="text"></div>
+      <div class="field"><label>Competência (MM/AAAA)</label><input name="competencia" type="text"></div>
+      <div class="field"><label>Procedimento</label><input name="procedimento" type="text"></div>
+      <div class="field"><label>Código Procedimento</label><input name="codigo_procedimento" type="text"></div>
+    </div>
+    <div class="grid four">
+      <div class="field"><label>Quantidade</label><input name="quantidade" type="number" min="1"></div>
+      <div class="field"><label>CNES</label><input name="cnes" type="text"></div>
+      <div class="field"><label>Data Inicial</label><input name="data_inicial" type="date"></div>
+      <div class="field"><label>Data Final</label><input name="data_final" type="date"></div>
+    </div>
+    <div class="grid three">
+      <div class="field"><label>Tipo APAC</label><input name="tipo_apac" type="text"></div>
+      <div class="field"><label>Nacionalidade</label><input name="nacionalidade" type="text"></div>
+      <div class="field"><label>Status (Nota)</label><input name="status" type="text" placeholder="Pago / Em aberto"></div>
+    </div>
+
+    <!-- Paciente -->
+    <div class="section-title">Paciente</div>
+    <div class="grid four">
+      <div class="field"><label>Nome</label><input name="nome_paciente" type="text"></div>
+      <div class="field"><label>CNS</label><input name="cns_paciente" type="text"></div>
+      <div class="field"><label>CPF</label><input name="cpf_paciente" type="text"></div>
+      <div class="field"><label>Nascimento</label><input name="data_nascimento" type="date"></div>
+    </div>
+    <div class="grid three">
+      <div class="field"><label>Nome da Mãe</label><input name="nome_mae" type="text"></div>
+      <div class="field"><label>Sexo</label><input name="sexo" type="text"></div>
+      <div class="field"><label>Raça</label><input name="raca" type="text"></div>
+    </div>
+    <div class="grid four">
+      <div class="field"><label>Endereço</label><input name="endereco" type="text"></div>
+      <div class="field"><label>Número</label><input name="numero" type="text"></div>
+      <div class="field"><label>Bairro</label><input name="bairro" type="text"></div>
+      <div class="field"><label>CEP</label><input name="cep" type="text"></div>
+    </div>
+
+    <!-- Nota / Faturamento -->
+    <div class="section-title">Nota / Faturamento</div>
+    <div class="grid four">
+      <div class="field"><label>Nº Nota Fiscal</label><input name="nota_fiscal" type="text"></div>
+      <div class="field"><label>Data da NF</label><input name="data_nota_fiscal" type="date"></div>
+      <div class="field"><label>Entrada da NF</label><input name="data_entrada_nf" type="date"></div>
+      <div class="field"><label>Competência da Nota</label><input name="competencia_nota" type="text" placeholder="MM/AAAA"></div>
+    </div>
+    <div class="grid three">
+      <div class="field"><label>Protocolo Nota</label><input name="protocolo_nota" type="text"></div>
+      <div class="field"><label>Fornecedor</label><input name="fornecedor" type="text"></div>
+      <div class="field"><label>Observação Nota</label><input name="obs_nota" type="text"></div>
+    </div>
+
+    <!-- Entrega -->
+    <div class="section-title">Entrega</div>
+    <div class="grid four">
+      <div class="field"><label>Data Entrega</label><input name="data_entrega" type="date"></div>
+      <div class="field"><label>Local Entrega</label><input name="local_entrega" type="text"></div>
+      <div class="field"><label>Status Entrega</label><input name="status_entrega" type="text" placeholder="Entregue / Na instituição"></div>
+      <div class="field"><label>Obs Entrega</label><input name="obs_entrega" type="text"></div>
+    </div>
+
+    <!-- Execução -->
+    <div class="section-title">Execução</div>
+    <div class="grid four">
+      <div class="field"><label>CBO Executante</label><input name="cbo_executante" type="text"></div>
+      <div class="field"><label>CNS Executante</label><input name="cns_executante" type="text"></div>
+      <div class="field"><label>Serviço</label><input name="servico" type="text"></div>
+      <div class="field"><label>Classificação</label><input name="classificacao" type="text"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="fecharModal()">Cancelar</button>
+      <button type="submit" class="btn primary">Salvar</button>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,109 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('atendimentos.static', filename='css/atendimentos.css') }}">
+  <style>
+    /* estilos simples da lista/tabela */
+    .hist-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .hist-header h2 { margin:0; }
+    .hist-actions { display:flex; gap:8px; }
+    .hist-search { padding:8px 10px; border:1px solid #ddd; border-radius:10px; width:260px; }
+    .hist-list { border:1px solid #eee; border-radius:12px; overflow:hidden; background:#fff; }
+    .hist-row { display:grid; grid-template-columns: 130px 1fr 220px 120px 90px; gap:10px; padding:10px 12px; border-bottom:1px solid #f2f2f2; align-items:center; }
+    .hist-row.header { background:#fafafa; font-weight:700; }
+    .hist-row:last-child { border-bottom:none; }
+    .hist-cell { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .hist-btn { appearance:none; border:1px solid #ddd; background:#fff; padding:8px 10px; border-radius:10px; cursor:pointer; }
+    .hist-btn:hover { filter:brightness(.97); }
+    @media (max-width: 980px) {
+      .hist-row { grid-template-columns: 110px 1fr 160px 110px 84px; }
+    }
+    @media (max-width: 720px) {
+      .hist-row { grid-template-columns: 1fr 1fr; }
+      .hist-row.header { display:none; }
+      .hist-cell[data-label]::before { content: attr(data-label) ": "; font-weight:600; color:#666; }
+      .hist-cell.action { grid-column: 1 / -1; text-align:right; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+
+{# Modal reutilizável do "Último Atendimento" #}
+{% include 'ultima_consulta.html' %}
+
+<div class="layout-atendimento">
+  <div class="conteudo-flex">
+
+
+    
+
+    <!-- 🔹 Coluna informativa -->
+    <aside class="coluna-info-paciente" id="dadosPaciente" style="display: none;">
+
+      <nav class="tabs-menu tabs-slim" aria-label="Seções do paciente">
+        <button class="tab-item" id="btnIrRegistro" type="button">Registro</button>
+        <button class="tab-item" id="btnIrFichaCadastral" type="button">Ficha Cadastral</button>
+        <button class="tab-item" id="btnIrHistorico" type="button">Histórico</button>
+
+        <button class="tab-item" type="button">PTS</button>
+      </nav>
+
+      <div class="coluna-info-paciente__blocos">
+
+
+
+
+
+
+        <!-- 🔸 Bloco: Informações do Paciente -->
+        <section class="bloco-info box-info-azul" id="blocoInfoPaciente" aria-labelledby="tituloInfoPaciente">
+          <h3 id="tituloInfoPaciente">Informações do Paciente</h3>
+          <p><strong>Nome:</strong> <span id="infoNome"></span></p>
+          <p><strong>Prontuário:</strong> <span id="infoProntuario"></span></p>
+          <p><strong>Status:</strong> <span id="infoStatus"></span></p>
+          <p><strong>Modalidade:</strong> <span id="infoMod"></span></p>
+          <p><strong>Nascimento:</strong> <span id="infoNascimento"></span></p>
+          <p><strong>CID:</strong> <span id="infoCid"></span></p>
+        </section>
+
+        <!-- 🔸 Bloco: Último Atendimento -->
+        <section class="bloco-info box-info-amarelo" id="blocoUltimoAtendimento" aria-labelledby="tituloUltimoAtendimento">
+          <h3 id="tituloUltimoAtendimento">Último Atendimento</h3>
+          <p><strong>Data:</strong> <span id="infoUltimaConsulta">-</span></p>
+          <p><strong>Profissional:</strong> <span id="infoProfissional">-</span></p>
+          <button class="btn-outline" type="button">Ver Atendimento</button>
+        </section>
+      </div>
+
+    </aside>
+
+    <!-- 🔹 Conteúdo principal: HISTÓRICO -->
+    <main class="formulario-principal">
+      <div class="hist-header">
+        <h2>🗂️ Histórico de Atendimentos</h2>
+        <div class="hist-actions">
+          <input type="search" id="histSearch" class="hist-search" placeholder="Filtrar por procedimento ou profissional...">
+        </div>
+      </div>
+
+      <div id="histContainer" class="hist-list" aria-live="polite">
+        <div class="hist-row header">
+          <div class="hist-cell">Data</div>
+          <div class="hist-cell">Procedimento</div>
+          <div class="hist-cell">Profissional</div>
+          <div class="hist-cell">Status</div>
+          <div class="hist-cell">Ação</div>
+        </div>
+        <!-- linhas via JS -->
+      </div>
+    </main>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('atendimentos.static', filename='js/atendimentos.js') }}"></script>
+  <script src="{{ url_for('atendimentos.static', filename='js/historico.js') }}"></script>
+{% endblock %}

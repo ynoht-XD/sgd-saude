@@ -1,0 +1,43 @@
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+  <section class="admin-shell">
+    <header class="admin-header">
+      <h1>Painel Administrativo</h1>
+      <nav class="admin-nav">
+        <a href="{{ url_for('admin.admin_home') }}">Dashboard</a>
+        <a href="{{ url_for('admin.usuarios_listar') }}">Usuários</a>
+        <a href="{{ url_for('admin.modulos') }}">Módulos</a>
+        <a href="{{ url_for('admin.backup') }}">Backup</a>
+        <a href="{{ url_for('auth.logout') }}">Sair</a>
+        <a href="{{ url_for('admin.cbos_listar') }}">CBO</a>
+        <a href="{{ url_for('procedimentos.pagina_base_procedimentos') }}">Procedimentos</a>
+
+      </nav>
+    </header>
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <div class="admin-flashes">
+          {% for cat, m in msgs %}
+            <div class="flash {{ cat }}">{{ m }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main class="admin-main">
+      {% block admin_content %}{% endblock %}
+    </main>
+  </section>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('admin.static', filename='js/admin.js') }}" defer></script>
+{% endblock %}

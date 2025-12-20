@@ -1,0 +1,176 @@
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/admin.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/modulos.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="admin-container">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% if msgs %}
+        <div class="admin-flashes">
+          {% for cat, m in msgs %}
+            <div class="flash {{ cat }}">{{ m }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block admin_content %}
+    <div class="mods-wrapper">
+      <h2 style="margin: 0 0 12px 0;">Módulos da Instituição</h2>
+
+      <form id="formModulos" method="post" action="{{ url_for('admin.modulos') }}">
+        <div class="mods-head">
+          <div class="field">
+            <label for="filtro">Filtrar módulos</label>
+            <input id="filtro" type="text" placeholder="Buscar por nome..." autocomplete="off">
+          </div>
+
+          <div class="mods-actions">
+            <button type="button" class="btn ghost" id="marcarTodos">Marcar todos</button>
+            <button type="button" class="btn ghost" id="desmarcarTodos">Desmarcar todos</button>
+            <span class="muted">|</span>
+            <button type="button" class="btn" id="presetBasico" title="Básico">Preset: Básico</button>
+            <button type="button" class="btn" id="presetCompleto" title="Todos os módulos">Preset: Completo</button>
+
+            <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+              <span class="muted">Estado rápido:</span>
+              <label class="switch" title="Ativar/Desativar todos">
+                <input type="checkbox" id="masterSwitch">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="legend">Selecione os módulos que a instituição poderá <strong>ver e acessar</strong>.</div>
+
+        <div class="mods-grid" id="modsGrid">
+          <!-- Cadastro -->
+          <div class="mod-card" data-key="cadastro" data-search="cadastro">
+            <h4>Cadastro</h4>
+            <div class="mod-desc">Cadastro de cidadãos / profissionais / perfis básicos.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>cadastro</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="cadastro" {% if 'cadastro' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Pacientes -->
+          <div class="mod-card" data-key="pacientes" data-search="pacientes">
+            <h4>Pacientes</h4>
+            <div class="mod-desc">Ficha do paciente, prontuário e visão consolidada.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>pacientes</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="pacientes" {% if 'pacientes' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Lista de Atendimentos -->
+          <div class="mod-card" data-key="atendimentos" data-search="lista de atendimentos atendimentos">
+            <h4>Lista de Atendimentos</h4>
+            <div class="mod-desc">Registro e listagem de atendimentos individuais e em grupo.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>atendimentos</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="atendimentos" {% if 'atendimentos' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Agenda -->
+          <div class="mod-card" data-key="agenda" data-search="agenda calendario horarios">
+            <h4>Agenda</h4>
+            <div class="mod-desc">Agenda semanal, criação e gestão de horários e salas.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>agenda</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="agenda" {% if 'agenda' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Exportações -->
+          <div class="mod-card" data-key="export" data-search="export exportar bpa-i apac ciha">
+            <h4>Export</h4>
+            <div class="mod-desc">Libere tudo ou selecione granularmente os formatos regulamentares.</div>
+            <div class="card-footer" style="justify-content:flex-start; gap:14px; flex-wrap:wrap;">
+              <span class="muted">Chave: <code>export</code></span>
+              <label class="switch" title="Liberar todas as exportações">
+                <input type="checkbox" id="export_all" name="modulos" value="export_all" {% if 'export_all' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <span class="muted">Tudo</span>
+              <span class="muted" style="opacity:.6;">|</span>
+              <label class="switch" title="BPA-i">
+                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_bpai" {% if 'export_bpai' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <span class="muted">BPA-i</span>
+              <label class="switch" title="APAC">
+                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_apac" {% if 'export_apac' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <span class="muted">APAC</span>
+              <label class="switch" title="CIHA">
+                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_ciha" {% if 'export_ciha' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <span class="muted">CIHA</span>
+            </div>
+          </div>
+
+          <!-- Financeiro -->
+          <div class="mod-card" data-key="financeiro" data-search="financeiro contas pagar receber">
+            <h4>Financeiro</h4>
+            <div class="mod-desc">Contas a pagar/receber, repasses e faturamento interno.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>financeiro</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="financeiro" {% if 'financeiro' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- RH -->
+          <div class="mod-card" data-key="rh" data-search="rh recursos humanos pessoas">
+            <h4>RH</h4>
+            <div class="mod-desc">Gestão de pessoas, cargos, férias e documentos de equipe.</div>
+            <div class="card-footer">
+              <span class="muted">Chave: <code>rh</code></span>
+              <label class="switch">
+                <input type="checkbox" name="modulos" value="rh" {% if 'rh' in habilitados %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="save-bar">
+          <div class="panel">
+            <span id="contadorSel">0 selecionados</span>
+            <button type="submit" class="btn primary">Salvar alterações</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    {% endblock %}
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('admin.static', filename='js/modulos.js') }}" defer></script>
+{% endblock %}

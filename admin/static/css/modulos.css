@@ -1,0 +1,218 @@
+/* ===========================
+   Módulos - Estilo Profissional
+   =========================== */
+
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1e40af;
+  --success: #10b981;
+  --danger: #dc2626;
+  --bg-light: #f9fafb;
+  --bg-card: #ffffff;
+  --text-dark: #111827;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* Container geral */
+.mods-wrapper {
+  max-width: 1200px;
+  margin: 30px auto;
+  padding: 0 12px;
+}
+
+/* Cabeçalho de filtros e ações */
+.mods-head {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.mods-head .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mods-head label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.mods-head input[type="text"] {
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+.mods-head input[type="text"]:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.1);
+}
+
+/* Botões */
+.btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.btn.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.btn.primary:hover {
+  background: var(--primary-dark);
+}
+
+.btn.ghost {
+  background: var(--bg-light);
+}
+
+.btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* Grid de módulos */
+.mods-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 16px;
+}
+
+/* Card de módulo */
+.mod-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.mod-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+}
+
+.mod-card h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.mod-desc {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  flex-grow: 1;
+  line-height: 1.4;
+}
+
+/* Switch estilizado */
+.switch {
+  position: relative;
+  width: 50px;
+  height: 28px;
+  display: inline-block;
+}
+.switch input { display:none; }
+
+.slider {
+  position:absolute;
+  cursor:pointer;
+  top:0; left:0; right:0; bottom:0;
+  background:#d1d5db;
+  transition:.25s;
+  border-radius: 999px;
+}
+.slider:before {
+  position:absolute;
+  content:"";
+  height:22px; width:22px;
+  left:3px; top:3px;
+  background:#fff;
+  transition:.25s;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,.15);
+}
+input:checked + .slider {
+  background: var(--success);
+}
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* Footer dos cards */
+.card-footer {
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Barra de salvar */
+.save-bar {
+  position: sticky;
+  bottom: 16px;
+  margin-top: 24px;
+  display:flex;
+  justify-content: flex-end;
+}
+.save-bar .panel {
+  background: var(--text-dark);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.3);
+}
+.save-bar .panel .btn {
+  border-color: transparent;
+}
+
+/* Legenda */
+.legend {
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .mods-head {
+    grid-template-columns: 1fr;
+  }
+}

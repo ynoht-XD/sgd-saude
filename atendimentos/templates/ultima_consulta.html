@@ -1,0 +1,173 @@
+<!-- templates/ultima_consulta.html -->
+<div id="modalUltimaConsulta" class="uc-modal" aria-hidden="true" role="dialog" aria-labelledby="ucTitle">
+  <div class="uc-backdrop" data-close></div>
+
+  <div class="uc-dialog" role="document">
+    <header class="uc-header">
+      <h3 id="ucTitle">Último Atendimento</h3>
+      <button class="uc-close" title="Fechar" aria-label="Fechar" data-close>&times;</button>
+    </header>
+
+    <section class="uc-body">
+      <div class="uc-grid">
+        <div>
+          <div class="uc-label">Paciente</div>
+          <div id="ucPaciente" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Prontuário</div>
+          <div id="ucProntuario" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Data do atendimento</div>
+          <div id="ucData" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Profissional</div>
+          <div id="ucProfissional" class="uc-value">—</div>
+        </div>
+      </div>
+
+      <div class="uc-grid">
+        <div>
+          <div class="uc-label">Procedimento</div>
+          <div id="ucProcedimento" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Código SIGTAP</div>
+          <div id="ucSigtap" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Status do atendimento</div>
+          <div id="ucStatus" class="uc-value">—</div>
+        </div>
+        <div>
+          <div class="uc-label">Anexo / Atestado</div>
+          <div id="ucAnexo" class="uc-value">—</div>
+        </div>
+      </div>
+
+      <div class="uc-block">
+        <div class="uc-label">Justificativa</div>
+        <pre id="ucJustificativa" class="uc-pre">—</pre>
+      </div>
+
+      <div class="uc-block">
+        <div class="uc-label">Evolução</div>
+        <pre id="ucEvolucao" class="uc-pre">—</pre>
+      </div>
+    </section>
+
+    <footer class="uc-footer">
+      <a id="ucBtnProntuario" class="uc-btn" href="#" target="_blank" rel="noopener">Ver prontuário</a>
+      <a id="ucBtnHistorico" class="uc-btn uc-btn-outline" href="#" target="_blank" rel="noopener">Ver histórico</a>
+    </footer>
+  </div>
+</div>
+
+<style>
+  .uc-modal{position:fixed;inset:0;display:none;z-index:1000}
+  .uc-modal[aria-hidden="false"]{display:block}
+  .uc-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+    .uc-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 920px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    z-index: 1001;
+    }
+
+  .uc-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #eee}
+  .uc-body{padding:16px 20px}
+  .uc-footer{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;border-top:1px solid #eee}
+  .uc-close{background:none;border:0;font-size:28px;line-height:1;cursor:pointer}
+  .uc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+  @media (max-width:900px){.uc-grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:520px){.uc-grid{grid-template-columns:1fr}}
+  .uc-label{font-size:12px;color:#666;margin-bottom:4px}
+  .uc-value{font-size:15px;font-weight:600}
+  .uc-block{margin-top:12px}
+  .uc-pre{white-space:pre-wrap;background:#fafafa;border:1px solid #eee;border-radius:8px;padding:10px;margin:6px 0 0 0}
+  .uc-btn{appearance:none;border:1px solid transparent;background:#3b82f6;color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;text-decoration:none;font-weight:600}
+  .uc-btn:hover{filter:brightness(.95)}
+  .uc-btn-outline{background:#fff;color:#111;border-color:#ddd}
+</style>
+
+<script>
+  // Expor funções globais simples (sem poluir muito)
+  window.UCModal = {
+    open() {
+      const m = document.getElementById('modalUltimaConsulta');
+      if (!m) return;
+      m.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    },
+    close() {
+      const m = document.getElementById('modalUltimaConsulta');
+      if (!m) return;
+      m.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    },
+    fill(data) {
+      const br = (iso) => {
+        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '—';
+        const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`;
+      };
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = (val ?? '—') || '—'; };
+
+      set('ucPaciente', data.paciente_nome);
+      set('ucProntuario', data.prontuario);
+      set('ucData', br(data.data_atendimento));
+      set('ucProfissional', data.profissional_nome || '—');
+      set('ucProcedimento', data.procedimento);
+      set('ucSigtap', data.codigo_sigtap);
+      set('ucStatus', data.status);
+      set('ucJustificativa', data.justificativa);
+      set('ucEvolucao', data.evolucao);
+
+      const an = document.getElementById('ucAnexo');
+      if (an) {
+        if (data.anexo_atestado) {
+          // se for caminho estático salvo
+          const a = document.createElement('a');
+          a.href = `/${data.anexo_atestado}`.replace(/^\/+/, '/');
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = 'Abrir anexo';
+          an.innerHTML = '';
+          an.appendChild(a);
+        } else {
+          an.textContent = '—';
+        }
+      }
+
+      // Botões de ação
+      const btnP = document.getElementById('ucBtnProntuario');
+      const btnH = document.getElementById('ucBtnHistorico');
+      if (btnP) btnP.href = `/pacientes/prontuario?paciente_id=${encodeURIComponent(data.paciente_id)}`;
+      if (btnH) btnH.href = `/atendimentos/historico?paciente_id=${encodeURIComponent(data.paciente_id)}`;
+    },
+    bind() {
+      const m = document.getElementById('modalUltimaConsulta');
+      if (!m) return;
+      m.querySelectorAll('[data-close]').forEach(el => {
+        el.addEventListener('click', () => UCModal.close());
+      });
+      // fecha com ESC
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') UCModal.close();
+      });
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.UCModal) window.UCModal.bind();
+  });
+</script>

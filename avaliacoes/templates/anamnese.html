@@ -1,0 +1,204 @@
+{# sgd/avaliacoes/templates/avaliacoes/anamnese.html #}
+{% extends "layout.html" %}
+
+{% block title %}Anamnese · Avaliações{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ==========================
+     ANAMNESE · UI (SGD)
+     ========================== */
+  .page-avaliacao{
+    max-width:min(1100px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+
+  .av-head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .av-head h2{margin:0;font-size:22px;font-weight:900}
+  .av-head p{margin:4px 0 0;color:#64748b}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+  }
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{
+    border:0;cursor:pointer;padding:10px 14px;border-radius:12px;
+    font-weight:800;font-size:.95rem;
+  }
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+
+  form{padding:14px}
+
+  .grid{display:grid;gap:12px}
+  @media(min-width:900px){
+    .cols-2{grid-template-columns:1fr 1fr}
+    .cols-3{grid-template-columns:1fr 1fr 1fr}
+  }
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-weight:800;font-size:.9rem}
+  .hint{font-size:.82rem;color:#64748b}
+
+  input,textarea{
+    border:1px solid #e5e7eb;border-radius:12px;
+    padding:10px 12px;font-size:.95rem;
+  }
+  textarea{min-height:90px;resize:vertical}
+
+  details.section{
+    border:1px solid #e5e7eb;border-radius:14px;
+    overflow:hidden;margin-top:10px;
+  }
+  summary.section-title{
+    cursor:pointer;padding:12px;font-weight:900;
+    background:#f8fafc;list-style:none;
+    display:flex;justify-content:space-between;
+  }
+  summary::-webkit-details-marker{display:none}
+  .section-body{padding:12px;border-top:1px solid #eef2f7}
+
+  .footer{
+    display:flex;gap:10px;justify-content:flex-end;
+    margin-top:14px;padding-top:12px;border-top:1px dashed #e5e7eb;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-avaliacao">
+
+  <!-- ==========================
+       CABEÇALHO
+       ========================== -->
+  <div class="av-head">
+    <div>
+      <h2>🩺 Anamnese</h2>
+      <p>Avaliação clínica inicial — dados flexíveis e estruturados</p>
+    </div>
+    <div class="toolbar">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <button class="btn btn-primary" type="submit" form="formAnamnese">Salvar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="formAnamnese" method="POST" action="{{ url_for('avaliacoes.nova') }}">
+
+      <!-- ==========================
+           CAMPOS FIXOS
+           ========================== -->
+      <input type="hidden" name="tipo" value="anamnese">
+
+      {# 🔗 Referência forte ao paciente #}
+      <input type="hidden" name="paciente_id" id="paciente_id">
+
+      <!-- ==========================
+           IDENTIFICAÇÃO DO PACIENTE
+           ========================== -->
+      <div class="grid cols-3">
+        <div class="field">
+          <label class="label">Paciente</label>
+          <input
+            type="text"
+            id="paciente_busca"
+            name="paciente_nome"
+            placeholder="Digite ao menos 3 letras do nome"
+            autocomplete="off"
+            required
+          >
+          <div class="hint">
+            Busca automática por nome, prontuário ou ID
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">CPF (opcional)</label>
+          <input name="paciente_cpf" inputmode="numeric">
+        </div>
+
+        <div class="field">
+          <label class="label">Cidade / Data</label>
+          <input name="cidade_data" placeholder="Ex: Maceió, 19/12/2025">
+        </div>
+      </div>
+
+      <!-- ==========================
+           DIAGNÓSTICO E QUEIXA
+           ========================== -->
+      <details class="section" open>
+        <summary class="section-title">Diagnóstico e Queixa</summary>
+        <div class="section-body grid cols-2">
+          <div class="field">
+            <label class="label">Diagnóstico clínico</label>
+            <input name="diagnostico_clinico">
+          </div>
+          <div class="field">
+            <label class="label">Queixa principal</label>
+            <input name="queixa_principal">
+          </div>
+          <div class="field">
+            <label class="label">História da Doença Atual (HDA)</label>
+            <textarea name="hda"></textarea>
+          </div>
+          <div class="field">
+            <label class="label">História Patológica Pregressa (HPP)</label>
+            <textarea name="hpp"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- ==========================
+           DESENVOLVIMENTO
+           ========================== -->
+      <details class="section">
+        <summary class="section-title">Desenvolvimento e Funções</summary>
+        <div class="section-body grid cols-2">
+          <div class="field"><label class="label">Comunicação</label><textarea name="comunicacao"></textarea></div>
+          <div class="field"><label class="label">Neuromotor</label><textarea name="neuromotor"></textarea></div>
+          <div class="field"><label class="label">Alimentação</label><textarea name="alimentacao"></textarea></div>
+          <div class="field"><label class="label">Psicológico</label><textarea name="psicologico"></textarea></div>
+          <div class="field"><label class="label">Hábitos orais</label><textarea name="habitos_orais"></textarea></div>
+          <div class="field"><label class="label">Observações</label><textarea name="observacoes"></textarea></div>
+        </div>
+      </details>
+
+      <!-- ==========================
+           ENCAMINHAMENTOS
+           ========================== -->
+      <details class="section">
+        <summary class="section-title">Encaminhamentos e Plano</summary>
+        <div class="section-body grid cols-2">
+          <div class="field">
+            <label class="label">Encaminhamentos</label>
+            <textarea name="encaminhamentos"></textarea>
+          </div>
+          <div class="field">
+            <label class="label">Plano de tratamento / objetivos</label>
+            <textarea name="plano_tratamento"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- ==========================
+           AÇÕES
+           ========================== -->
+      <div class="footer">
+        <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Salvar Anamnese</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('avaliacoes.static', filename='js/avaliacoes.js') }}"></script>
+{% endblock %}

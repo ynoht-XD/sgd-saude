@@ -1,0 +1,124 @@
+/* ===========================================================
+   PTS (Projeto Terapêutico Singular) — Estilo SGD
+   =========================================================== */
+
+:root{
+  --pts-bg: #f3f4f6;
+  --pts-panel:#ffffff;
+  --pts-text:#0f172a;
+  --pts-muted:#6b7280;
+  --pts-line:#e5e7eb;
+  --pts-soft:#f9fafb;
+
+  --pts-primary:#2563eb;
+  --pts-primary-600:#1d4ed8;
+
+  --pts-shadow:0 2px 8px rgba(0,0,0,.06);
+  --pts-shadow-lg:0 12px 34px rgba(0,0,0,.12);
+  --pts-radius:14px;
+}
+
+.pts-container{
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.pts-flashes{ margin: 0 0 12px 0; display:grid; gap:8px; }
+.pts-flashes .flash{ padding:10px 12px; border-radius:10px; border:1px solid var(--pts-line); background:#fff; }
+.pts-flashes .flash.success{ border-color:#10b981; }
+.pts-flashes .flash.error{ border-color:#ef4444; }
+.pts-flashes .flash.info{ border-color:#0ea5e9; }
+
+.pts-head{
+  display:grid; grid-template-columns: 1fr auto; gap:12px; align-items:center; margin-bottom:16px;
+}
+.pts-head h2{ margin:0; font-size:1.7rem; color:var(--pts-text); }
+.pts-head .muted{ color:var(--pts-muted); }
+.pts-head .actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.btn{
+  border:1px solid var(--pts-line);
+  background:#fff; color:var(--pts-text);
+  padding:9px 14px; border-radius:12px; cursor:pointer;
+  transition: .15s ease; box-shadow: 0 0 0 rgba(0,0,0,0);
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: var(--pts-shadow); }
+.btn.primary{ background:var(--pts-primary); color:#fff; border-color:var(--pts-primary); }
+.btn.primary:hover{ background:var(--pts-primary-600); }
+.btn.ghost{ background:#f9fafb; }
+
+.card{
+  background: var(--pts-panel);
+  border:1px solid var(--pts-line);
+  border-radius: var(--pts-radius);
+  box-shadow: var(--pts-shadow);
+  padding:16px; margin-bottom:16px;
+}
+.section-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;
+}
+.section-title{ margin:0; font-size:1.1rem; color:var(--pts-text); }
+.section-actions{ display:flex; gap:8px; }
+
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:.9rem; color:#374151; }
+.field .req{ color:#ef4444; }
+.field input[type="text"],
+.field input[type="email"],
+.field input[type="date"],
+.field input[type="number"],
+.field select,
+.field textarea{
+  height:40px; border:1px solid var(--pts-line); border-radius:10px; padding:0 10px; background:#fff; color:var(--pts-text);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.field textarea{ min-height:100px; padding:8px 10px; height:auto; resize:vertical; }
+.field input:focus, .field select:focus, .field textarea:focus{
+  outline:none; border-color:var(--pts-primary); box-shadow: 0 0 0 3px rgba(37,99,235,.16);
+}
+
+.grid{ display:grid; gap:12px; }
+.grid.two{ grid-template-columns: 1fr 1fr; }
+.grid.three{ grid-template-columns: repeat(3, 1fr); }
+
+@media (max-width: 920px){
+  .grid.two, .grid.three{ grid-template-columns: 1fr; }
+  .pts-head{ grid-template-columns: 1fr; }
+}
+
+/* Autocomplete */
+.sugg-box{
+  position:absolute; left:0; right:0; top: calc(100% + 6px);
+  background:#fff; border:1px solid var(--pts-line); border-radius:10px;
+  box-shadow: var(--pts-shadow);
+  display:none; max-height: 220px; overflow:auto; z-index: 30;
+}
+.sugg-item{
+  padding:10px 12px; border-bottom:1px solid #f1f5f9; cursor:pointer; display:flex; justify-content:space-between; gap:8px;
+}
+.sugg-item:last-child{ border-bottom:0; }
+.sugg-item:hover{ background:#f8fafc; }
+.sugg-item .title{ font-weight:600; color:#111827; }
+.sugg-item .sub{ color:#6b7280; font-size:.85rem; }
+
+/* Participantes */
+.participants{ display:grid; gap:10px; }
+.participant-row{
+  display:grid; grid-template-columns: 2fr 2fr auto; gap:10px; align-items: end;
+}
+.participant-row .btn{ height:40px; }
+
+/* Save bar */
+.save-bar{
+  position: sticky; bottom:16px; margin-top: 18px; display:flex; justify-content:flex-end;
+}
+.save-bar .panel{
+  background:#0b1220; color:#fff; border-radius: 12px; border:1px solid #1f2937;
+  display:flex; align-items:center; gap:12px; padding:10px 12px; box-shadow: var(--pts-shadow-lg);
+}
+.save-bar .panel .btn{ border-color: transparent; }
+
+/* Aux */
+.muted{ color: var(--pts-muted); }
+.legend{ font-size:.9rem; margin-top: 4px; }

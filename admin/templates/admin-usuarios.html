@@ -1,0 +1,308 @@
+{# templates/admin-usuarios.html #}
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/admin.css') }}">
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/usuarios.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="admin-flashes">
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="usuarios-wrapper">
+    <div class="usuarios-header">
+      <div class="title-area">
+        <h2>Usuários</h2>
+        <p class="muted">Gerencie contas.</p>
+      </div>
+      <div class="actions">
+        <button id="btnNovoUsuario" class="btn primary" type="button">+ Novo usuário</button>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <form id="filtrosUsuarios" class="usuarios-filters" method="get" action="{{ url_for('admin.usuarios_listar') }}">
+      <input type="text" id="f_busca" name="q" placeholder="Buscar por nome, CPF, e-mail..." value="{{ request.args.get('q','') }}">
+      <select id="f_nivel" name="nivel">
+        <option value="">Todos os níveis</option>
+        {% for n in niveis|default([]) %}
+          <option value="{{ n.slug }}" {{ 'selected' if request.args.get('nivel')==n.slug else '' }}>{{ n.nome }}</option>
+        {% endfor %}
+      </select>
+      <select id="f_status" name="status">
+        <option value="">Status</option>
+        <option value="ativo" {{ 'selected' if request.args.get('status')=='ativo' else '' }}>Ativo</option>
+        <option value="inativo" {{ 'selected' if request.args.get('status')=='inativo' else '' }}>Inativo</option>
+      </select>
+      <button class="btn">Filtrar</button>
+    </form>
+
+    <!-- Tabela -->
+    <div class="usuarios-table-wrap">
+      <table class="usuarios-table" id="tUsuarios">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>CPF</th>
+            <th>E-mail</th>
+            <th>Nível</th>
+            <th>Status</th>
+            <th style="width:200px">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in usuarios|default([]) %}
+          <tr data-id="{{ u.id }}">
+            <td>{{ u.nome }}</td>
+            <td>{{ u.cpf }}</td>
+            <td>{{ u.email or '—' }}</td>
+            <td>{{ u.role or '—' }}</td>
+            <td>
+              {% if u.is_active %}
+                <span class="badge success">Ativo</span>
+              {% else %}
+                <span class="badge">Inativo</span>
+              {% endif %}
+            </td>
+            <td class="row-actions">
+              <button type="button" class="btn xs" data-action="edit">Editar</button>
+              <button type="button" class="btn xs" data-action="password">Senha</button>
+              <form class="inline" method="post" action="{{ url_for('admin.usuarios_remover', uid=u.id) }}"
+                    onsubmit="return confirm('Remover o usuário {{ u.nome }}? Esta ação não pode ser desfeita.');"
+                    style="display:inline">
+                <button type="submit" class="btn xs danger">Remover</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="muted center">Nenhum usuário cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal: Novo/Editar Usuário -->
+  <dialog id="modalUsuario" class="modal">
+    <form id="formUsuario" method="post" action="{{ url_for('admin.usuarios_criar') }}" class="modal-content">
+      <input type="hidden" id="u_id_hidden" name="uid" value="">
+
+      <header class="modal-header">
+        <h3 id="tituloModalUsuario">Novo usuário</h3>
+        <button type="button" class="icon-btn modal-close" data-modal-close aria-label="Fechar">×</button>
+      </header>
+
+      <section class="modal-body">
+        <div class="grid two">
+          <div class="field">
+            <label>Nome civil *</label>
+            <input type="text" name="nome" id="u_nome" required>
+          </div>
+          <div class="field">
+            <label>E-mail</label>
+            <input type="email" name="email" id="u_email">
+          </div>
+        </div>
+
+        <div class="grid four">
+          <div class="field">
+            <label>CPF *</label>
+            <input type="text" name="cpf" id="u_cpf" maxlength="14" placeholder="000.000.000-00" required>
+          </div>
+          <div class="field">
+            <label>CNS</label>
+            <input type="text" name="cns" id="u_cns" maxlength="15" placeholder="15 dígitos">
+          </div>
+          <div class="field">
+            <label>Data de nascimento</label>
+            <input type="date" name="nascimento" id="u_nascimento">
+          </div>
+          <div class="field">
+            <label>Sexo</label>
+            <select name="sexo" id="u_sexo">
+              <option value="">—</option>
+              <option value="M">Masculino</option>
+              <option value="F">Feminino</option>
+              <option value="I">Indeterminado</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid four">
+          <div class="field">
+            <label>Conselho de classe</label>
+            <select name="conselho" id="u_conselho">
+              <option value="">—</option>
+              <option value="CRM">CRM</option>
+              <option value="CREFITO">CREFITO</option>
+              <option value="CREFONO">CREFONO</option>
+              <option value="CRO">CRO</option>
+              <option value="COREN">COREN</option>
+              <option value="CRP">CRP</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Registro no conselho</label>
+            <input type="text" name="registro_conselho" id="u_registro_conselho">
+          </div>
+          <div class="field">
+            <label>UF emissora</label>
+            <select name="uf_conselho" id="u_uf_conselho">
+              <option value="">—</option>
+              {% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}
+              <option value="{{ uf }}">{{ uf }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>CBO</label>
+            <select name="cbo" id="u_cbo">
+              <option value="">—</option>
+              {% for c in cbos_catalogo|default([]) %}
+                <option value="{{ c.codigo }}">{{ c.codigo }} — {{ c.descricao }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="grid three">
+          <div class="field">
+            <label>Telefone</label>
+            <input type="text" name="telefone" id="u_telefone" placeholder="(00) 00000-0000">
+          </div>
+          <div class="field">
+            <label>Nível *</label>
+            <select name="role" id="u_role" required>
+              {% for n in niveis|default([{'slug':'ADMIN','nome':'Administrador'},{'slug':'RECEPCAO','nome':'Recepção'},{'slug':'PROFISSIONAL','nome':'Profissional'}]) %}
+                <option value="{{ n.slug }}">{{ n.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select name="is_active" id="u_status">
+              <option value="1" selected>Ativo</option>
+              <option value="0">Inativo</option>
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="fieldset">
+          <legend>Endereço residencial</legend>
+          <div class="grid four">
+            <div class="field">
+              <label>CEP</label>
+              <input type="text" name="cep" id="u_cep" placeholder="00000-000">
+            </div>
+            <div class="field">
+              <label>Logradouro</label>
+              <input type="text" name="logradouro" id="u_logradouro">
+            </div>
+            <div class="field">
+              <label>Número</label>
+              <input type="text" name="numero" id="u_numero">
+            </div>
+            <div class="field">
+              <label>Complemento</label>
+              <input type="text" name="complemento" id="u_complemento">
+            </div>
+          </div>
+          <div class="grid three">
+            <div class="field">
+              <label>Bairro</label>
+              <input type="text" name="bairro" id="u_bairro">
+            </div>
+            <div class="field">
+              <label>Município</label>
+              <input type="text" name="municipio" id="u_municipio">
+            </div>
+            <div class="field">
+              <label>UF</label>
+              <select name="uf" id="u_uf">
+                <option value="">—</option>
+                {% for uf in ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'] %}
+                <option value="{{ uf }}">{{ uf }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Senhas (visível APENAS para "Novo usuário") -->
+        <div id="u_senhas_group" class="grid two">
+          <div class="field">
+            <label>Senha *</label>
+            <div class="input-with-eye">
+              <input type="password" name="senha" id="u_senha" required minlength="6" autocomplete="new-password">
+              <button type="button" class="eye-btn" data-toggle-pass="#u_senha" aria-label="Mostrar/ocultar senha">👁</button>
+            </div>
+            <small class="muted">Mínimo de 6 caracteres.</small>
+          </div>
+
+          <div class="field">
+            <label>Confirmar senha *</label>
+            <div class="input-with-eye">
+              <input type="password" name="senha2" id="u_senha2" required minlength="6" autocomplete="new-password">
+              <button type="button" class="eye-btn" data-toggle-pass="#u_senha2" aria-label="Mostrar/ocultar senha">👁</button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Modal: Alterar Senha -->
+  <dialog id="modalSenha" class="modal">
+    <form id="formSenha" method="post" action="#" class="modal-content">
+      <header class="modal-header">
+        <h3>Alterar senha</h3>
+        <button type="button" class="icon-btn modal-close" data-modal-close aria-label="Fechar">×</button>
+      </header>
+      <section class="modal-body">
+        <input type="hidden" id="u_id_senha" value="">
+        <div class="grid two">
+          <div class="field">
+            <label>Nova senha *</label>
+            <div class="input-with-eye">
+              <input type="password" name="senha" id="s_senha" required minlength="6" autocomplete="new-password">
+              <button type="button" class="eye-btn" data-toggle-pass="#s_senha" aria-label="Mostrar/ocultar senha">👁</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Confirmar senha *</label>
+            <div class="input-with-eye">
+              <input type="password" name="senha2" id="s_senha2" required minlength="6" autocomplete="new-password">
+              <button type="button" class="eye-btn" data-toggle-pass="#s_senha2" aria-label="Mostrar/ocultar senha">👁</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Atualizar</button>
+      </footer>
+    </form>
+  </dialog>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('admin.static', filename='js/usuarios.js') }}" defer></script>
+{% endblock %}

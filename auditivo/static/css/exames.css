@@ -1,0 +1,80 @@
+:root{
+  --card:#fff; --border:#e5e7eb; --muted:#6b7280; --text:#111827;
+  --primary:#2563eb; --primary-600:#1d4ed8; --shadow:0 2px 10px rgba(0,0,0,.06);
+  --radius:12px;
+}
+
+.exa-wrap{ max-width:1200px; margin:22px auto; padding:0 12px; }
+.exa-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.muted{ color:var(--muted); }
+
+.card{ background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); }
+.card.pad{ padding:16px; }
+.card.lite{ padding:12px; border-radius:10px; }
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border:1px solid var(--border); background:#fff; color:var(--text);
+  padding:8px 12px; border-radius:10px; cursor:pointer;
+  transition:transform .02s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.btn:hover{ box-shadow:var(--shadow); }
+.btn:active{ transform:translateY(1px); }
+.btn.primary{ background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn.primary:hover{ background:var(--primary-600); }
+.btn.gray{ background:#f3f4f6; }
+.btn.ghost{ background:#f9fafb; }
+.btn.xs{ padding:4px 8px; font-size:.85rem; }
+
+.sec{ margin-bottom:16px; }
+.sec-head{ margin-bottom:10px; }
+.sec-title{ margin:0; font-size:1.05rem; }
+
+.grid{ display:grid; gap:12px; }
+.one{ grid-template-columns:1fr; }
+.two{ grid-template-columns:repeat(2,1fr); }
+.three{ grid-template-columns:repeat(3,1fr); }
+.four{ grid-template-columns:repeat(4,1fr); }
+
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:.9rem; color:#374151; }
+.field input, .field select, .field textarea{
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.95rem; background:#fff;
+}
+.req{ color:#ef4444; }
+
+.subhead{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-size:.95rem; }
+
+/* Sugestões de pacientes */
+.sugg{
+  position:absolute; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid var(--border);
+  border-radius:8px; box-shadow:var(--shadow); max-height:220px; overflow:auto; z-index:20;
+}
+.sugg div{ padding:8px 10px; cursor:pointer; border-bottom:1px solid #f3f4f6; }
+.sugg div:hover{ background:#f9fafb; }
+
+/* Tabelas de frequências */
+.freq-table{ border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.freq-row{ display:grid; grid-template-columns:110px repeat(8, 1fr); }
+.freq-row .cell{ border-top:1px solid #f3f4f6; padding:6px; }
+.freq-row.head{ background:#f9fafb; font-weight:600; }
+.freq-row .label{ background:#f9fafb; font-weight:600; }
+.freq-row input{ width:100%; text-align:center; }
+
+/* Reflexos grid */
+.reflex-grid{
+  display:grid; grid-template-columns:80px repeat(4, 1fr); gap:6px; align-items:center; margin-top:8px;
+}
+.r-head{ font-weight:600; background:#f9fafb; padding:6px; border:1px solid var(--border); text-align:center; }
+.r-rowlabel{ font-weight:600; text-align:right; padding-right:6px; }
+.reflex-grid input{ width:100%; text-align:center; border:1px solid var(--border); border-radius:6px; padding:6px; }
+
+/* Savebar */
+.savebar{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+
+/* Responsivo */
+@media (max-width: 900px){
+  .two{ grid-template-columns:1fr; }
+  .three, .four{ grid-template-columns:1fr; }
+  .freq-row{ grid-template-columns:90px repeat(8, 1fr); }
+}

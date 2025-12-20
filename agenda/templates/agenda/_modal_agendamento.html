@@ -1,0 +1,322 @@
+<!-- Modal: criar/editar agendamento -->
+<dialog id="dlg-ag" class="ag-modal">
+  <style>
+    /* ===== Modal (escopo local) ===== */
+    #dlg-ag.ag-modal {
+      border: none;
+      padding: 0;
+      width: 100%;
+      max-width: 720px;
+      border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(2,6,23,.25);
+      background: #ffffff;
+      color: #0f172a;
+    }
+    #dlg-ag::backdrop { background: rgba(2,6,23,.55); }
+
+    .ag-modal-card { display: grid; grid-template-rows: auto 1fr auto; }
+
+    .ag-modal-card > header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 18px; border-bottom: 1px solid #e5e7eb;
+      background: linear-gradient(180deg,#f8fafc, #ffffff 60%);
+      border-top-left-radius: 16px; border-top-right-radius: 16px;
+    }
+    .ag-modal-card > header h3 {
+      margin: 0; font-size: 18px; font-weight: 700; letter-spacing:.2px;
+    }
+    #ag-fechar.btn.icon {
+      border: none; background: transparent; font-size: 18px; line-height: 1;
+      padding: 8px; border-radius: 10px; cursor: pointer;
+    }
+    #ag-fechar.btn.icon:hover { background: #f1f5f9; }
+
+    .ag-modal-body {
+      display: grid; gap: 12px; padding: 18px; grid-template-columns: 1fr 1fr;
+    }
+    .ag-modal-body label {
+      font-size: 12px; color: #475569; margin-top: 6px;
+      grid-column: span 2;
+    }
+    .ag-modal-body input[type="text"],
+    .ag-modal-body input[type="date"],
+    .ag-modal-body input[type="time"],
+    .ag-modal-body input[type="number"],
+    .ag-modal-body select {
+      width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px;
+      font-size: 14px; background: #ffffff; outline: none;
+    }
+    .ag-modal-body input:focus,
+    .ag-modal-body select:focus { border-color: #2c7be5; box-shadow: 0 0 0 3px rgba(44,123,229,.12); }
+
+    /* campos em duas colunas quando faz sentido */
+    .ag-field-2col { grid-column: span 1; }
+    .ag-field-1col { grid-column: span 2; }
+
+    /* Paciente + Profissional em largura total */
+    #ag-paciente, #ag-profissional { grid-column: span 2; }
+
+    .tipo-agendamento {
+      grid-column: span 2;
+      display: grid; gap: 10px;
+      grid-template-columns: 1fr 1fr;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 12px;
+    }
+    .tipo-row {
+      display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    }
+    .tipo-row label { margin-top: 0; font-size: 13px; color: #0f172a; }
+    .tipo-extra {
+      display: flex; gap: 12px; align-items: center; justify-content: flex-start;
+    }
+    .tipo-extra .qtd-box {
+      display: flex; align-items: center; gap: 8px;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 8px;
+    }
+    .tipo-extra input[type="number"] {
+      width: 110px; padding: 6px 8px; border: none; outline: none;
+    }
+    .tipo-hint { font-size: 12px; color: #64748b; }
+
+    .ag-modal-card > footer {
+      display: flex; gap: 8px; align-items: center; justify-content: flex-end;
+      padding: 14px 18px; border-top: 1px solid #e5e7eb;
+      border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;
+      background: #fafafa;
+    }
+    .btn { border: 1px solid #e5e7eb; background: #fff; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+    .btn:hover { background: #f8fafc; }
+    .btn.pri { background: #2c7be5; color:#fff; border-color:#2c7be5; }
+    .btn.pri:hover { filter: brightness(.95); }
+    .btn.danger { background: #ef4444; color:#fff; border-color:#ef4444; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 640px) {
+      .ag-modal-body { grid-template-columns: 1fr; }
+      .ag-field-2col, .ag-field-1col, #ag-paciente, #ag-profissional, .tipo-agendamento { grid-column: span 1; }
+    }
+  </style>
+
+  <div class="ag-modal-card">
+    <header>
+      <h3 id="ag-title">Novo Agendamento</h3>
+      <button class="btn icon" type="button" id="ag-fechar" aria-label="Fechar">✕</button>
+    </header>
+
+    <form id="ag-form" class="ag-modal-body" method="dialog" onsubmit="return false;">
+      <input type="hidden" id="ag-id" />
+      <input type="hidden" id="ag-paciente-id" />
+
+      <!-- Paciente -->
+      <label for="ag-paciente" class="ag-field-1col">Paciente</label>
+      <input id="ag-paciente" class="ag-field-1col" type="text" placeholder="Nome do paciente"
+             list="listaPacientes" autocomplete="off" />
+
+      <!-- Profissional (vindo da tabela usuarios) -->
+      <label for="ag-profissional" class="ag-field-1col">Profissional</label>
+      <select id="ag-profissional" class="ag-field-1col" required>
+        <option value="">Selecionar…</option>
+        {# Preferencial: lista com id/nome/cbo vindos de 'usuarios_profissionais' (tabela usuarios) #}
+        {% if usuarios_profissionais %}
+          {% for u in usuarios_profissionais %}
+            <option value="{{ u.id }}">{{ u.nome }}{% if u.cbo %} — {{ u.cbo }}{% endif %}</option>
+          {% endfor %}
+        {% elif profissionais %}
+          {# Fallback antigo: se vier só nomes #}
+          {% for p in profissionais %}
+            <option value="{{ p|e }}">{{ p }}</option>
+          {% endfor %}
+        {% else %}
+          <option value="1">Profissional (exemplo)</option>
+        {% endif %}
+      </select>
+
+      <!-- Dia e Horário -->
+      <div class="ag-field-2col">
+        <label for="ag-data">Dia</label>
+        <input id="ag-data" type="date" required />
+      </div>
+      <div class="ag-field-2col">
+        <label for="ag-hora">Horário</label>
+        <input id="ag-hora" type="time" step="60" required />
+      </div>
+
+      <!-- Tipo de Agendamento (três opções unificadas) -->
+      <div class="tipo-agendamento">
+        <div class="tipo-row" role="group" aria-label="Tipo de agendamento">
+          <label><input type="radio" name="ag-tipo" value="unico" checked> Único</label>
+          <label><input type="radio" name="ag-tipo" value="recorrente"> Recorrente (nº sessões)</label>
+          <label><input type="radio" name="ag-tipo" value="indefinido"> Recorrente (indefinido)</label>
+        </div>
+
+        <div class="tipo-extra">
+          <div class="qtd-box" id="box-qtd-sessoes" hidden>
+            <span>Qtd de sessões</span>
+            <input type="number" id="ag-qtd-sessoes" min="1" inputmode="numeric" placeholder="ex.: 10">
+          </div>
+          <span class="tipo-hint">Para “Recorrente (nº sessões)”, informe a quantidade. Para “Indefinido”, deixe em branco.</span>
+        </div>
+      </div>
+
+      <!-- Observação -->
+      <label for="ag-observacao" class="ag-field-1col">Observação (opcional)</label>
+      <input id="ag-observacao" class="ag-field-1col" type="text" placeholder="Observação" />
+    </form>
+
+    <footer>
+      <button class="btn pri" type="button" id="ag-salvar">Salvar</button>
+      <button class="btn hidden" type="button" id="ag-salvar-edicao">Salvar edição</button>
+      <button class="btn danger hidden" type="button" id="ag-excluir">Excluir</button>
+    </footer>
+  </div>
+
+  <!-- Datalist de pacientes (autocomplete de nome) -->
+  <datalist id="listaPacientes">
+    {# Opcional: popular com nomes; o id real será resolvido no backend/JS #}
+    {% if pacientes %}
+      {% for pac in pacientes %}
+        <option value="{{ pac.nome }}"></option>
+      {% endfor %}
+    {% endif %}
+  </datalist>
+
+  <script>
+    (function(){
+      const dlg = document.getElementById('dlg-ag');
+      const btnFechar = document.getElementById('ag-fechar');
+      const btnSalvar = document.getElementById('ag-salvar');
+      const btnSalvarEd = document.getElementById('ag-salvar-edicao');
+      const btnExcluir = document.getElementById('ag-excluir');
+
+      const inputPaciente = document.getElementById('ag-paciente');
+      const inputPacienteId = document.getElementById('ag-paciente-id');
+      const selectProf = document.getElementById('ag-profissional');
+      const inputData = document.getElementById('ag-data');
+      const inputHora = document.getElementById('ag-hora');
+      const inputObs = document.getElementById('ag-observacao');
+      const boxQtd = document.getElementById('box-qtd-sessoes');
+      const inputQtd = document.getElementById('ag-qtd-sessoes');
+
+      const radiosTipo = Array.from(document.querySelectorAll('input[name="ag-tipo"]'));
+
+      // Fechar modal
+      btnFechar.addEventListener('click', () => dlg.close());
+      dlg.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') dlg.close(); });
+      dlg.addEventListener('close', () => { /* opcional: limpar ao fechar */ });
+
+      // Tipo -> controla campo Qtd Sessões
+      const refreshQtd = () => {
+        const val = (radiosTipo.find(r => r.checked) || {}).value;
+        if (val === 'recorrente') {
+          boxQtd.hidden = false;
+          inputQtd.required = true;
+        } else {
+          boxQtd.hidden = true;
+          inputQtd.required = false;
+          inputQtd.value = '';
+        }
+      };
+      radiosTipo.forEach(r => r.addEventListener('change', refreshQtd));
+      refreshQtd();
+
+      // TODO: Integração real — ao selecionar paciente pelo nome, buscar id no backend
+      // Por ora, mantemos o ID em branco e o backend resolve pelo nome (ou você pode
+      // preencher inputPacienteId via uma busca AJAX quando o usuário sai do campo).
+      inputPaciente.addEventListener('blur', () => {
+        // exemplo: limpar id se o nome for alterado manualmente
+        inputPacienteId.value = '';
+      });
+
+      // Validação rápida e payload de saída (deixa pronto pra agenda.js consumir)
+      function coletarDados() {
+        const tipo = (radiosTipo.find(r => r.checked) || {}).value || 'unico';
+        const payload = {
+          id: document.getElementById('ag-id').value || null,
+          paciente_nome: inputPaciente.value.trim(),
+          paciente_id: inputPacienteId.value || null,
+          profissional_id: selectProf.value || null,
+          data: inputData.value,
+          hora: inputHora.value,
+          tipo, // unico | recorrente | indefinido
+          qtd_sessoes: tipo === 'recorrente' ? (inputQtd.value ? parseInt(inputQtd.value, 10) : null) : null,
+          observacao: inputObs.value.trim()
+        };
+        return payload;
+      }
+
+      function validarBasico(p) {
+        if (!p.paciente_nome) return "Informe o paciente.";
+        if (!p.profissional_id) return "Selecione o profissional.";
+        if (!p.data) return "Selecione o dia.";
+        if (!p.hora) return "Selecione o horário.";
+        if (p.tipo === 'recorrente' && (!p.qtd_sessoes || p.qtd_sessoes < 1)) return "Informe a quantidade de sessões.";
+        return null;
+      }
+
+      // Botões ação (integre com sua agenda.js)
+      btnSalvar.addEventListener('click', () => {
+        const dados = coletarDados();
+        const erro = validarBasico(dados);
+        if (erro) { alert(erro); return; }
+        // Dispare um evento custom p/ agenda.js interceptar e fazer POST
+        dlg.dispatchEvent(new CustomEvent('agendar:create', { detail: dados }));
+      });
+
+      btnSalvarEd.addEventListener('click', () => {
+        const dados = coletarDados();
+        const erro = validarBasico(dados);
+        if (erro) { alert(erro); return; }
+        dlg.dispatchEvent(new CustomEvent('agendar:update', { detail: dados }));
+      });
+
+      btnExcluir.addEventListener('click', () => {
+        const id = document.getElementById('ag-id').value;
+        if (!id) return;
+        if (!confirm("Deseja realmente excluir este agendamento?")) return;
+        dlg.dispatchEvent(new CustomEvent('agendar:delete', { detail: { id } }));
+      });
+
+      // APIzinha de ajuda para abrir em modo criação/edição
+      // Use: document.getElementById('dlg-ag').openForCreate({data:'2025-09-18', hora:'08:00'});
+      // ou  : document.getElementById('dlg-ag').openForEdit(registro)
+      dlg.openForCreate = (prefill = {}) => {
+        document.getElementById('ag-title').textContent = 'Novo Agendamento';
+        document.getElementById('ag-id').value = '';
+        inputPaciente.value = prefill.paciente_nome || '';
+        inputPacienteId.value = prefill.paciente_id || '';
+        selectProf.value = prefill.profissional_id || '';
+        inputData.value = prefill.data || '';
+        inputHora.value = prefill.hora || '';
+        inputObs.value = prefill.observacao || '';
+        // Tipo default: unico
+        radiosTipo.forEach(r => r.checked = (r.value === (prefill.tipo || 'unico')));
+        refreshQtd();
+        inputQtd.value = prefill.qtd_sessoes || '';
+        btnSalvar.classList.remove('hidden');
+        btnSalvarEd.classList.add('hidden');
+        btnExcluir.classList.add('hidden');
+        if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open','');
+      };
+
+      dlg.openForEdit = (reg) => {
+        document.getElementById('ag-title').textContent = 'Editar Agendamento';
+        document.getElementById('ag-id').value = reg.id ?? '';
+        inputPaciente.value = reg.paciente_nome ?? '';
+        inputPacienteId.value = reg.paciente_id ?? '';
+        selectProf.value = reg.profissional_id ?? '';
+        inputData.value = reg.data ?? '';
+        inputHora.value = reg.hora ?? '';
+        inputObs.value = reg.observacao ?? '';
+        const tipo = reg.tipo || 'unico';
+        radiosTipo.forEach(r => r.checked = (r.value === tipo));
+        refreshQtd();
+        inputQtd.value = reg.qtd_sessoes ?? '';
+        btnSalvar.classList.add('hidden');
+        btnSalvarEd.classList.remove('hidden');
+        btnExcluir.classList.remove('hidden');
+        if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open','');
+      };
+    })();
+  </script>
+</dialog>

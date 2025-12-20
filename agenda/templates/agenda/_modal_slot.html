@@ -1,0 +1,248 @@
+<!-- Modal: lista de agendamentos do slot -->
+<dialog id="dlg-slot" class="ag-modal">
+  <style>
+    /* ===== Estilos locais deste modal =====
+       Regras só valem quando o dialog está ABERTO.  */
+    #dlg-slot:not([open]) { display: none !important; }
+
+    /* Centraliza o <dialog> e dá respiro vertical APENAS quando [open] */
+    #dlg-slot[open] {
+      inset: 0;
+      display: grid;
+      place-items: start center;
+      padding: 10vh 16px;
+      border: none;
+      max-width: 100vw;
+      background: transparent; 
+    }
+
+    #dlg-slot::backdrop { background: rgba(2,6,23,.55); }
+
+    /* Card e layout */
+    #dlg-slot[open] .ag-modal-card {
+      width: min(860px, 95vw);
+      max-height: 80vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background:#fff; color:#0f172a; border-radius:16px;
+      overflow: hidden; /* garante que o conteúdo role dentro */
+      box-shadow: 0 20px 60px rgba(2,6,23,.25);
+    }
+
+    #dlg-slot[open] header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; border-bottom:1px solid #e5e7eb;
+      background:linear-gradient(180deg,#f8fafc,#fff 60%);
+    }
+    #dlg-slot[open] header h3 { margin:0; font-size:18px; font-weight:700; }
+    #dlg-slot[open] .btn.icon { border:none; background:transparent; padding:8px; border-radius:10px; cursor:pointer; }
+    #dlg-slot[open] .btn.icon:hover { background:#f1f5f9; }
+
+    #dlg-slot[open] .ag-modal-body {
+      padding:16px; display:grid; gap:16px; grid-template-columns: 1fr;
+      overflow: auto; /* rolagem do conteúdo */
+      background:#fff;
+    }
+
+    /* Itens da lista */
+    #dlg-slot[open] .ag-item { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; }
+    #dlg-slot[open] .ag-item .left { display:flex; flex-direction:column; gap:4px; }
+    #dlg-slot[open] .ag-item .right { display:flex; align-items:center; gap:12px; }
+    #dlg-slot[open] .ag-item .muted { color:#64748b; font-size:12px; }
+
+    /* Quick add */
+    #dlg-slot[open] .quick-add { border:1px solid #e2e8f0; border-radius:12px; padding:12px; background:#f8fafc; }
+    #dlg-slot[open] .quick-add h4 { margin:0 0 8px 0; font-size:14px; font-weight:700; }
+    #dlg-slot[open] .qa-grid { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
+    #dlg-slot[open] .qa-grid label { font-size:12px; color:#475569; }
+    #dlg-slot[open] .qa-grid input[type="text"],
+    #dlg-slot[open] .qa-grid select,
+    #dlg-slot[open] .qa-grid input[type="number"] {
+      width:100%; padding:9px 10px; border:1px solid #e5e7eb; border-radius:10px; font-size:14px; background:#fff; outline:none;
+    }
+    #dlg-slot[open] .qa-grid input:focus, #dlg-slot[open] .qa-grid select:focus { border-color:#2c7be5; box-shadow:0 0 0 3px rgba(44,123,229,.12); }
+
+    #dlg-slot[open] .tipo { grid-column: span 2; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    #dlg-slot[open] .qtd { display:flex; align-items:center; gap:8px; }
+    #dlg-slot[open] .qtd[hidden] { display:none; }
+    #dlg-slot[open] .qa-actions { display:flex; gap:8px; justify-content:flex-end; }
+    #dlg-slot[open] .btn { border:1px solid #e5e7eb; background:#fff; padding:10px 14px; border-radius:10px; cursor:pointer; }
+    #dlg-slot[open] .btn:hover { background:#f8fafc; }
+    #dlg-slot[open] .btn.pri { background:#2c7be5; color:#fff; border-color:#2c7be5; }
+    #dlg-slot[open] .btn.pri:hover { filter:brightness(.95); }
+
+    #dlg-slot[open] footer { display:flex; gap:8px; align-items:center; justify-content:flex-end; padding:12px 16px; border-top:1px solid #e5e7eb; background:#fafafa; }
+
+    @media (max-width:720px){
+      #dlg-slot[open] .qa-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="ag-modal-card">
+    <header>
+      <h3 id="dlg-title">Horário</h3>
+      <button class="btn icon" type="button" data-close aria-label="Fechar">✕</button>
+    </header>
+
+    <div class="ag-modal-body">
+      <!-- bloco de inserção rápida -->
+      <section class="quick-add" id="qa">
+        <h4>Novo agendamento neste horário</h4>
+        <form id="qa-form" onsubmit="return false;">
+          <div class="qa-grid">
+            <div>
+              <label for="qa-paciente">Paciente</label>
+              <input id="qa-paciente" type="text" placeholder="Nome do paciente" list="listaPacientes" autocomplete="off">
+            </div>
+            
+            <div>
+              <label for="qa-prof">Profissional</label>
+              <select id="qa-prof" name="profissional_cpf">
+                <option value="">Selecionar…</option>
+                {% for p in profissionais %}
+                  <option value="{{ p.cpf }}">{{ p.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+
+            <div class="tipo">
+              <label><input type="radio" name="qa-tipo" value="unico" checked> Único</label>
+              <label><input type="radio" name="qa-tipo" value="recorrente"> Recorrente (nº sessões)</label>
+              <label><input type="radio" name="qa-tipo" value="indefinido"> Recorrente (indefinido)</label>
+
+              <span class="qtd" id="qa-qtd-box" hidden>
+                <span>Qtd</span>
+                <input id="qa-qtd" type="number" min="1" placeholder="ex.: 10" style="width:110px;">
+              </span>
+            </div>
+
+            <div style="grid-column: span 2;">
+              <label for="qa-obs">Observação (opcional)</label>
+              <input id="qa-obs" type="text" placeholder="Observação">
+            </div>
+          </div>
+
+          <div class="qa-actions">
+            <button type="button" class="btn pri" id="qa-add">Adicionar</button>
+          </div>
+        </form>
+        <small class="muted">Data e horário fixos por este slot.</small>
+      </section>
+
+      <!-- lista de agendamentos do slot -->
+      <div id="dlg-list"><!-- preenchido via JS --></div>
+    </div>
+
+    <footer>
+      <button class="btn sec" type="button" data-close>Fechar</button>
+    </footer>
+  </div>
+
+  <script>
+    (function(){
+      const dlg = document.getElementById('dlg-slot');
+      const card = dlg.querySelector('.ag-modal-card');
+
+      // Garante que nunca inicie aberto (proteção extra)
+      dlg.removeAttribute('open');
+      try { dlg.close(); } catch(_) {}
+
+      // fechar via botões
+      dlg.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => dlg.close()));
+
+      // fechar ao clicar fora do card (backdrop click)
+      dlg.addEventListener('click', (e) => {
+        const r = card.getBoundingClientRect();
+        const clicouFora = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+        if (clicouFora) dlg.close();
+      });
+
+      // fechar com ESC
+      dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') dlg.close(); });
+
+      // ---- Inserção rápida ----
+      const inpPac = document.getElementById('qa-paciente');
+      const selProf = document.getElementById('qa-prof');
+      const inpObs = document.getElementById('qa-obs');
+      const radios = Array.from(dlg.querySelectorAll('input[name="qa-tipo"]'));
+      const boxQtd = document.getElementById('qa-qtd-box');
+      const inpQtd = document.getElementById('qa-qtd');
+      const btnAdd = document.getElementById('qa-add');
+
+      function curTipo(){ return (radios.find(r=>r.checked)||{}).value || 'unico'; }
+      function refreshQtd(){
+        if (curTipo() === 'recorrente') { boxQtd.hidden = false; inpQtd.required = true; }
+        else { boxQtd.hidden = true; inpQtd.required = false; inpQtd.value = ''; }
+      }
+      radios.forEach(r => r.addEventListener('change', refreshQtd));
+      refreshQtd();
+
+      // extrai "YYYY-MM-DD HH:MM" do título "Horário 2025-09-18 14:00 · ..."
+      function parseSlotFromTitle(){
+        const t = (document.getElementById('dlg-title')?.textContent || '').trim();
+        const m = t.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/);
+        if (!m) return null;
+        return `${m[1]} ${m[2]}`; // 'YYYY-MM-DD HH:MM'
+      }
+
+      async function postCreate(payload){
+        const r = await fetch('/agenda/api/agendamentos', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        let data = null;
+        try { data = await r.json(); } catch(_){}
+        if (!r.ok) {
+          const msg = (data && (data.error || data.detail)) || 'Erro ao criar agendamento';
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      btnAdd.addEventListener('click', async () => {
+        const paciente = (inpPac.value || '').trim();
+        const profissional = (selProf.value || '').trim();
+        if (!paciente)   { alert('Informe o paciente.');   return; }
+        if (!profissional){ alert('Selecione o profissional.'); return; }
+
+        const slot = parseSlotFromTitle();
+        if (!slot) { alert('Não foi possível identificar o slot.'); return; }
+
+        const tipo = curTipo();
+        const payload = {
+          paciente,
+          profissional,
+          inicio: slot,         // 'YYYY-MM-DD HH:MM'
+          duracao_min: 30,
+          observacao: (inpObs.value || null),
+          tipo
+        };
+        if (tipo === 'recorrente') {
+          const qtd = parseInt(inpQtd.value || '0', 10);
+          if (!(qtd >= 1)) { alert('Informe a quantidade de sessões (>=1) ou escolha "Recorrente (indefinido)".'); return; }
+          payload.quantidadeSessoes = qtd;
+        } else if (tipo === 'indefinido') {
+          payload.pacienteRecorrente = true;
+        }
+
+        btnAdd.disabled = true; btnAdd.textContent = 'Adicionando…';
+        try {
+          await postCreate(payload);
+          dlg.close();
+          // força refresh na semana
+          const toolbarDate = document.getElementById('ag-data');
+          toolbarDate?.dispatchEvent(new Event('change', { bubbles:true }));
+        } catch (e) {
+          alert(e.message || 'Falha ao salvar.');
+        } finally {
+          btnAdd.disabled = false; btnAdd.textContent = 'Adicionar';
+        }
+      });
+
+      // Fechar automaticamente se o navegador restaurar BFCache com o dialog aberto
+      window.addEventListener('pageshow', () => { dlg.removeAttribute('open'); try{dlg.close();}catch(_){} });
+    })();
+  </script>
+</dialog>

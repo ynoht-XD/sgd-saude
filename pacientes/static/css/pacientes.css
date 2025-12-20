@@ -1,0 +1,565 @@
+/* ==========================================================
+   SGD · Pacientes — Cards + Filtros (3 cards lado a lado)
+   Cabeçalho do card em 3 linhas:
+   1) Nº + Nome
+   2) Modalidade + Status
+   3) Ações (horizontal)
+   Arquivo: pacientes.css
+   ========================================================== */
+
+:root {
+  --bg: #f7f9fc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+
+  --primary: #1f6feb;
+  --primary-hover: #145cc9;
+
+  --success: #28a745;
+  --success-hover: #1e7e34;
+
+  --danger: #dc3545;
+  --danger-hover: #b02a37;
+
+  --warning: #ffc107;
+  --warning-hover: #e0a800;
+
+  --neutral: #6c757d;
+  --neutral-hover: #5a6268;
+
+  --radius: 12px;
+
+  --shadow: 0 8px 26px rgba(2, 6, 23, 0.08);
+  --shadow-sm: 0 4px 14px rgba(2, 6, 23, 0.06);
+
+  --focus: 0 0 0 3px rgba(31, 111, 235, 0.18);
+
+  --chip-bg: #eef3ff;
+  --chip-text: #123a7a;
+
+  --chip-ok-bg: #e9f9ef;
+  --chip-ok-text: #166534;
+}
+
+/* ===== Base ===== */
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* container */
+.pacientes-container {
+  max-width: 1100px;
+  margin: 14px auto 22px;
+  padding: 12px;
+}
+
+/* ===== Filtros ===== */
+.filtros-form {
+  background-color: #f1f3f5;
+  padding: 12px 12px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(229, 231, 235, 0.9);
+}
+
+.filtros-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.filtros-grid input,
+.filtros-grid select {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--card);
+  color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.12s;
+}
+
+.filtros-grid input::placeholder {
+  color: rgba(107, 114, 128, 0.9);
+}
+
+.filtros-grid input:focus,
+.filtros-grid select:focus {
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.filtros-botoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.botao-filtrar {
+  background-color: var(--neutral);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition: background-color 0.2s, transform 0.12s;
+}
+
+.botao-filtrar:hover {
+  background-color: var(--neutral-hover);
+}
+
+.botao-filtrar:active {
+  transform: translateY(1px);
+}
+
+.botao-exportar {
+  background-color: var(--warning);
+  color: #212529;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 900;
+  transition: background-color 0.2s, transform 0.12s;
+}
+
+.botao-exportar:hover {
+  background-color: var(--warning-hover);
+}
+
+.botao-exportar:active {
+  transform: translateY(1px);
+}
+
+/* ==========================================================
+   CARDS (3 colunas)
+   ========================================================== */
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+/* Card base */
+.pac-card {
+  background: var(--card);
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+  min-width: 0;
+}
+
+.pac-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+  border-color: rgba(31, 111, 235, 0.22);
+}
+
+/* ==========================================================
+   CABEÇALHO (NOVO LAYOUT: 3 LINHAS)
+   ========================================================== */
+
+/* vira grid com 3 linhas */
+.pac-head {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 8px;
+  padding: 10px 12px 10px;
+  border-bottom: 1px solid rgba(229, 231, 235, 0.85);
+  background: linear-gradient(180deg, rgba(31, 111, 235, 0.05), rgba(255,255,255,0));
+}
+
+/* 1ª linha: nº + nome juntos */
+.pac-head-left {
+  display: flex;
+  align-items: center;        /* 👈 alinha nº com nome */
+  gap: 10px;
+  min-width: 0;
+}
+
+/* badge */
+.pac-num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+  background: rgba(31, 111, 235, 0.12);
+  color: #123a7a;
+  font-weight: 900;
+  font-size: 12.5px;
+  border: 1px solid rgba(31, 111, 235, 0.18);
+  flex: 0 0 auto;
+}
+
+/* “título” agora vira uma coluna e a gente “separa” badges em baixo */
+.pac-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0;                     /* 👈 o espaçamento vai ser controlado pelo grid do head */
+  min-width: 0;
+}
+
+/* nome com mais espaço */
+.pac-nome {
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.15px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 2ª linha: badges (modalidade + status) */
+.pac-badges {
+  grid-row: 2;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* tira badges de dentro do fluxo do “left”, mas sem precisar mexer no HTML */
+.pac-head-left .pac-badges {
+  margin-left: 40px;          /* 👈 “alinha” badges com o começo do nome (30 badge + gap) */
+}
+
+/* 3ª linha: ações horizontal */
+.pac-actions {
+  grid-row: 3;
+  display: flex;
+  gap: 7px;
+  flex-wrap: nowrap;          /* 👈 mantém horizontal */
+  overflow-x: auto;           /* 👈 se faltar espaço, scroll suave ao invés de quebrar */
+  padding-bottom: 2px;
+  justify-content: flex-start;
+}
+
+/* scrollbar discreta no Chrome/Edge */
+.pac-actions::-webkit-scrollbar { height: 6px; }
+.pac-actions::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+}
+
+/* ==========================================================
+   Chips / badges
+   ========================================================== */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  border: 1px solid rgba(31, 111, 235, 0.16);
+  background: var(--chip-bg);
+  color: var(--chip-text);
+}
+
+.chip-status {
+  border-color: rgba(108, 117, 125, 0.25);
+  background: rgba(108, 117, 125, 0.10);
+  color: #374151;
+}
+
+.chip-mod {
+  border-color: rgba(31, 111, 235, 0.22);
+  background: rgba(31, 111, 235, 0.12);
+  color: #123a7a;
+}
+
+.chip-cbo {
+  border-color: rgba(14, 165, 233, 0.28);
+  background: rgba(14, 165, 233, 0.12);
+  color: #0b4f7a;
+}
+
+.muted {
+  color: var(--muted);
+  font-weight: 700;
+  margin-left: 6px;
+  font-size: 13px;
+}
+
+/* ===== Ações ===== */
+.form-inline {
+  display: inline;
+  margin: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 9px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-weight: 950;
+  font-size: 12.5px;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  flex: 0 0 auto; /* 👈 não encolhe */
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-prontuario {
+  background: var(--primary);
+  color: #fff;
+  border-color: rgba(0,0,0,0.05);
+}
+
+.btn-prontuario:hover {
+  background: var(--primary-hover);
+}
+
+.btn-editar {
+  background: rgba(40, 167, 69, 0.12);
+  color: #14532d;
+  border-color: rgba(40, 167, 69, 0.25);
+}
+
+.btn-editar:hover {
+  background: rgba(40, 167, 69, 0.18);
+  border-color: rgba(40, 167, 69, 0.35);
+}
+
+.btn-excluir {
+  background: rgba(220, 53, 69, 0.12);
+  color: #7f1d1d;
+  border-color: rgba(220, 53, 69, 0.22);
+}
+
+.btn-excluir:hover {
+  background: rgba(220, 53, 69, 0.18);
+  border-color: rgba(220, 53, 69, 0.34);
+}
+
+/* ==========================================================
+   Linhas internas
+   ========================================================== */
+
+.pac-row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+
+.pac-col {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pac-row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 12px 10px;
+}
+
+.pac-grid-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  padding: 10px 12px 10px;
+  border-top: 1px dashed rgba(229, 231, 235, 0.9);
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.kv .k {
+  font-size: 10.5px;
+  font-weight: 950;
+  color: rgba(107, 114, 128, 0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.55px;
+}
+
+.kv .v {
+  font-size: 13.2px;
+  font-weight: 750;
+  color: var(--text);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.kv-wide {
+  grid-column: 1 / -1;
+}
+
+/* Inputs */
+.inp {
+  width: 100%;
+  padding: 8px 9px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font-size: 13.2px;
+  font-weight: 750;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.inp::placeholder {
+  color: rgba(107, 114, 128, 0.9);
+  font-weight: 650;
+}
+
+.inp:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.inp-sm {
+  padding: 7px 9px;
+  font-size: 12.8px;
+}
+
+/* ==========================================================
+   Comorbidades / Projetos
+   ========================================================== */
+.pac-comorb {
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgba(229, 231, 235, 0.85);
+  background: rgba(2, 6, 23, 0.012);
+}
+
+.section-title {
+  font-weight: 1000;
+  font-size: 11px;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+  color: rgba(107, 114, 128, 0.95);
+  margin-bottom: 8px;
+}
+
+.chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip-check {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chip-pick {
+  background: rgba(108, 117, 125, 0.10);
+  border-color: rgba(108, 117, 125, 0.22);
+  color: #374151;
+  transition: transform 0.12s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.chip-toggle:hover .chip-pick {
+  transform: translateY(-0.5px);
+}
+
+.chip-toggle input:checked + .chip-pick {
+  background: var(--chip-ok-bg);
+  color: var(--chip-ok-text);
+  border-color: rgba(22, 101, 52, 0.28);
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.10);
+}
+
+.pac-notes {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ===== Estado vazio ===== */
+.pacientes-container p {
+  text-align: center;
+  color: var(--muted);
+  padding: 18px 0;
+  font-size: 14px;
+}
+
+/* ==========================================================
+   Responsividade (grade de cards)
+   ========================================================== */
+@media (max-width: 1100px) {
+  .cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ajustes internos do card */
+@media (max-width: 960px) {
+  /* mantém o cabeçalho em 3 linhas e só ajusta espaçamentos */
+  .pac-head-left .pac-badges {
+    margin-left: 0; /* no mobile não precisa alinhar com badge */
+  }
+
+  .pac-row2,
+  .pac-row3 {
+    grid-template-columns: 1fr;
+  }
+
+  .pac-grid-info {
+    grid-template-columns: 1fr;
+  }
+
+  .pac-notes {
+    grid-template-columns: 1fr;
+  }
+
+  .pac-nome {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .filtros-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+}
+

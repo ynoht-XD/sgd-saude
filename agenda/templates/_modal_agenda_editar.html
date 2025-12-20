@@ -1,0 +1,81 @@
+{# agenda/templates/_modal_agenda_editar.html #}
+<div class="agenda-modal" id="modal-agenda-editar" aria-hidden="true" role="dialog" aria-labelledby="mae_titulo">
+  <div class="agenda-modal-backdrop" data-close="modal-agenda-editar"></div>
+
+  <section class="agenda-modal-panel" aria-modal="true">
+    <header class="agenda-modal-head">
+      <h2 id="mae_titulo">Editar agendamento</h2>
+      <button type="button"
+              class="agenda-modal-close"
+              data-close="modal-agenda-editar"
+              aria-label="Fechar">
+        ✕
+      </button>
+    </header>
+
+    <div class="agenda-modal-body">
+      <form id="form-agenda-editar" novalidate>
+        <input type="hidden" id="ag_edit_id">
+
+        <div class="mae-grid">
+          <div class="mae-col-6">
+            <label for="ag_edit_paciente">Paciente</label>
+            <input id="ag_edit_paciente" type="text" readonly>
+            <p class="mae-helper">Para horários vagos, o nome será exibido como “VAGO”.</p>
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_profissional">Profissional</label>
+            <select id="ag_edit_profissional" required>
+              <option value="">Selecione…</option>
+              {# será preenchido via JS com /agenda/api/profissionais #}
+            </select>
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_dia">Dia da semana</label>
+            <select id="ag_edit_dia" required>
+              {% for code, label in dow_labels %}
+                <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_hora_de">Horário inicial</label>
+            <input id="ag_edit_hora_de" type="time" step="300" required>
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_hora_ate">Horário final</label>
+            <input id="ag_edit_hora_ate" type="time" step="300">
+            <p class="mae-helper">Se vazio, o sistema pode assumir 30 minutos.</p>
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_qtd">Qtd. de sessões</label>
+            <input id="ag_edit_qtd" type="number" min="1" value="1">
+          </div>
+
+          <div class="mae-col-3">
+            <label for="ag_edit_valor">Valor por sessão</label>
+            <input id="ag_edit_valor" type="number" step="0.01" placeholder="0,00">
+          </div>
+        </div>
+
+        <p class="mae-msg" id="ag_edit_msg"></p>
+
+        <footer class="agenda-modal-foot">
+          <button type="button"
+                  class="btn ghost"
+                  data-close="modal-agenda-editar">
+            Cancelar
+          </button>
+          <button type="submit" class="btn" id="btnAgendaSalvarEdicao">
+            Salvar alterações
+          </button>
+        </footer>
+      </form>
+    </div>
+  </section>
+</div>

@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('digitador.static', filename='css/apac.css') }}">
+{% endblock %}
+{% block content %}
+  <div class="apac-container">
+    <div class="apac-head">
+      <div class="title-area">
+        <h2>Digitador — BPA-i</h2>
+        <p class="muted">Pré-preenchimento para digitação do Boletim de Produção Ambulatorial</p>
+      </div>
+    </div>
+    <section class="card">
+      <p class="muted">Em breve: formulário de BPA-i.</p>
+    </section>
+  </div>
+{% endblock %}

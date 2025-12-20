@@ -1,0 +1,371 @@
+{# sgd/avaliacoes/templates/psicologia_infantil.html #}
+{% extends "layout.html" %}
+
+{% block title %}Psicologia Infantil · Avaliações{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-av{
+    max-width:min(1100px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .head h2{margin:0;font-size:22px;font-weight:950}
+  .head p{margin:4px 0 0;color:#64748b}
+
+  .btn{
+    border:0;cursor:pointer;padding:10px 14px;border-radius:12px;
+    font-weight:900;font-size:.95rem;text-decoration:none;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:transform .08s ease, filter .2s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+  }
+  form{padding:14px}
+
+  .grid{display:grid;gap:12px}
+  @media(min-width:900px){
+    .cols-2{grid-template-columns:1fr 1fr}
+    .cols-3{grid-template-columns:1fr 1fr 1fr}
+  }
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-weight:900;font-size:.9rem}
+
+  input, textarea{
+    border:1px solid #e5e7eb;border-radius:12px;
+    padding:10px 12px;font-size:.95rem;
+    outline:none;background:#fff;
+  }
+  input:focus, textarea:focus{
+    border-color:#93c5fd;
+    box-shadow:0 0 0 4px rgba(59,130,246,.12);
+  }
+  textarea{min-height:90px;resize:vertical}
+
+  details{
+    border:1px solid #e5e7eb;border-radius:14px;margin-top:10px;
+    overflow:hidden;background:#fff;
+  }
+  summary{
+    cursor:pointer;font-weight:950;padding:12px;
+    background:#f8fafc;list-style:none;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  summary::-webkit-details-marker{display:none}
+  .sec{padding:12px;border-top:1px solid #eef2f7}
+
+  .footer{
+    display:flex;justify-content:flex-end;gap:10px;margin-top:14px;
+    border-top:1px dashed #e5e7eb;padding-top:12px;
+  }
+
+  @media (prefers-color-scheme: dark){
+    .page-av{color:#e5e7eb}
+    .card, details{background:#0b1220;border-color:#1f2937;box-shadow:none}
+    summary{background:#0f172a}
+    .sec{border-color:#111827}
+    input, textarea{background:#0b1220;color:#e5e7eb;border-color:#1f2937}
+    .btn-ghost{background:#111827;color:#e5e7eb}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-av">
+
+  <div class="head">
+    <div>
+      <h2>🧠 Psicologia Infantil / Psicopedagogia</h2>
+      <p>Anamnese infantil e avaliação psicopedagógica</p>
+    </div>
+    <div class="row">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <button class="btn btn-primary" type="submit" form="formPsi">Salvar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="formPsi" method="POST" action="{{ url_for('avaliacoes.nova') }}">
+      <input type="hidden" name="tipo" value="psicologia_infantil">
+
+      <!-- ✅ pro backend -->
+      <input type="hidden" name="paciente_id" id="paciente_id">
+      <input type="hidden" name="paciente_prontuario" id="paciente_prontuario">
+
+      <!-- IDENTIFICAÇÃO -->
+      <details open>
+        <summary>1️⃣ Dados de Identificação</summary>
+        <div class="sec grid cols-3">
+
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label" for="paciente_nome">Nome</label>
+            <input
+              id="paciente_nome"
+              name="paciente_nome"
+              required
+              placeholder="Digite ao menos 3 letras…"
+              list="dlPacientes"
+              autocomplete="off"
+            >
+            <datalist id="dlPacientes"></datalist>
+          </div>
+
+          <div class="field">
+            <label class="label" for="prontuario_show">Prontuário</label>
+            <input id="prontuario_show" type="text" readonly placeholder="—">
+          </div>
+
+          <div class="field">
+            <label class="label" for="data_nascimento_show">Data de Nascimento</label>
+            <input id="data_nascimento_show" type="date" readonly>
+          </div>
+
+          <div class="field">
+            <label class="label" for="idade_show">Idade</label>
+            <input id="idade_show" type="text" readonly placeholder="—">
+          </div>
+
+          <div class="field">
+            <label class="label">Sexo</label>
+            <input name="sexo">
+          </div>
+
+          <div class="field">
+            <label class="label">Telefone</label>
+            <input name="telefone">
+          </div>
+
+          <div class="field">
+            <label class="label">Responsável</label>
+            <input name="responsavel">
+          </div>
+
+          <div class="field">
+            <label class="label">Nome da Mãe</label>
+            <input name="nome_mae">
+          </div>
+
+          <div class="field">
+            <label class="label">CID</label>
+            <input name="cid">
+          </div>
+
+        </div>
+      </details>
+
+      <!-- AMBIENTE FAMILIAR -->
+      <details>
+        <summary>2️⃣ Ambiente Familiar</summary>
+        <div class="sec grid cols-2">
+          <div class="field"><label class="label">Pai / Idade / Profissão</label><input name="pai_info"></div>
+          <div class="field"><label class="label">Mãe / Idade / Profissão</label><input name="mae_info"></div>
+          <div class="field"><label class="label">Situação conjugal</label><input name="situacao_conjugal"></div>
+          <div class="field"><label class="label">Irmãos</label><input name="irmaos"></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Como é o ambiente familiar?</label>
+            <textarea name="ambiente_familiar"></textarea>
+          </div>
+          <div class="field"><label class="label">Com quem a criança costuma ficar?</label><input name="com_quem_fica"></div>
+          <div class="field"><label class="label">Escolaridade do responsável</label><input name="escolaridade_responsavel"></div>
+          <div class="field"><label class="label">Teve dificuldade de aprendizagem?</label><input name="dificuldade_aprendizagem"></div>
+        </div>
+      </details>
+
+      <!-- ESCOLARIZAÇÃO -->
+      <details>
+        <summary>3️⃣ Escolarização</summary>
+        <div class="sec grid cols-2">
+          <div class="field"><label class="label">Escola</label><input name="escola"></div>
+          <div class="field"><label class="label">Série / Turno</label><input name="serie_turno"></div>
+          <div class="field"><label class="label">Rendimento escolar</label><input name="rendimento"></div>
+          <div class="field"><label class="label">Já estudou em outra escola?</label><input name="outra_escola"></div>
+          <div class="field"><label class="label">Repete série?</label><input name="repete"></div>
+          <div class="field"><label class="label">Recebe orientação escolar?</label><input name="orientacao_escolar"></div>
+          <div class="field"><label class="label">Teve dificuldade de adaptação?</label><input name="adaptacao_escola"></div>
+          <div class="field"><label class="label">Auxiliar em sala?</label><input name="auxiliar_sala"></div>
+        </div>
+      </details>
+
+      <!-- QUEIXA / HISTÓRICO -->
+      <details>
+        <summary>4️⃣ Queixa Principal e Histórico</summary>
+        <div class="sec grid cols-2">
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Queixa principal</label>
+            <textarea name="queixa_principal"></textarea>
+          </div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">História da Doença Atual</label>
+            <textarea name="hda"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- DESENVOLVIMENTO -->
+      <details>
+        <summary>5️⃣ Desenvolvimento / Linguagem / Psicomotor</summary>
+        <div class="sec grid cols-2">
+          <div class="field"><label class="label">Desenvolvimento gestacional</label><input name="desenv_gestacional"></div>
+          <div class="field"><label class="label">Andou com quantos anos</label><input name="andou_idade"></div>
+          <div class="field"><label class="label">Falou com quantos anos</label><input name="falou_idade"></div>
+          <div class="field"><label class="label">Contato visual</label><input name="contato_visual"></div>
+          <div class="field"><label class="label">Movimentos repetitivos</label><input name="movimentos_repetitivos"></div>
+          <div class="field" style="grid-column:1/-1;">
+            <label class="label">Observações psicomotoras</label>
+            <textarea name="obs_psicomotora"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <!-- SOCIABILIDADE / SONO -->
+      <details>
+        <summary>6️⃣ Sociabilidade e Sono</summary>
+        <div class="sec grid cols-2">
+          <div class="field"><label class="label">Tem amigos?</label><input name="amigos"></div>
+          <div class="field"><label class="label">Prefere brincar</label><input name="preferencia_brincar"></div>
+          <div class="field"><label class="label">Sono (medo, pesadelos, insônia)</label><input name="sono"></div>
+          <div class="field"><label class="label">Dorme com quem?</label><input name="dorme_com"></div>
+        </div>
+      </details>
+
+      <!-- OBS FINAL -->
+      <details>
+        <summary>7️⃣ Observações Finais</summary>
+        <div class="sec">
+          <textarea name="observacoes"></textarea>
+        </div>
+      </details>
+
+      <div class="footer">
+        <button class="btn btn-primary" type="submit">Salvar Avaliação</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+/**
+ * Autocomplete pacientes:
+ * - /avaliacoes/api/pacientes?q=
+ * Espera items: {id, nome, prontuario, data_nascimento?}
+ */
+(function(){
+  const inpNome = document.getElementById("paciente_nome");
+  const dl      = document.getElementById("dlPacientes");
+  const hidId   = document.getElementById("paciente_id");
+  const hidPr   = document.getElementById("paciente_prontuario");
+
+  const showPr  = document.getElementById("prontuario_show");
+  const showId  = document.getElementById("idade_show");
+  const showNasc= document.getElementById("data_nascimento_show");
+
+  const form    = document.getElementById("formPsi");
+  if (!inpNome || !dl || !hidId || !hidPr || !form) return;
+
+  let lastItems = [];
+  let t = null;
+
+  function norm(s){ return (s||"").toString().trim().toLowerCase(); }
+
+  function calcIdade(iso){
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+    const [y,m,d] = iso.split("-").map(Number);
+    const nasc = new Date(y, m-1, d);
+    const hoje = new Date();
+    let idade = hoje.getFullYear() - nasc.getFullYear();
+    const mm = hoje.getMonth() - nasc.getMonth();
+    if (mm < 0 || (mm === 0 && hoje.getDate() < nasc.getDate())) idade--;
+    return String(Math.max(0, idade));
+  }
+
+  function clearBind(){
+    hidId.value = "";
+    hidPr.value = "";
+    if (showPr) showPr.value = "";
+    if (showId) showId.value = "";
+    if (showNasc) showNasc.value = "";
+  }
+
+  function renderDatalist(items){
+    dl.innerHTML = "";
+    items.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.nome;
+      opt.label = p.label || p.nome;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function fetchPacientes(q){
+    const r = await fetch(`/avaliacoes/api/pacientes?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    return j.items || [];
+  }
+
+  function bindItem(p){
+    hidId.value = p.id || "";
+    hidPr.value = p.prontuario || "";
+
+    if (showPr) showPr.value = p.prontuario || "";
+    if (showNasc) showNasc.value = p.data_nascimento || "";
+    if (showId) showId.value = p.data_nascimento ? calcIdade(p.data_nascimento) : "";
+  }
+
+  function tryBindByName(){
+    const val = norm(inpNome.value);
+    if (!val) return;
+    const hit = lastItems.find(p => norm(p.nome) === val);
+    if (hit) bindItem(hit);
+  }
+
+  inpNome.addEventListener("input", () => {
+    const q = (inpNome.value || "").trim();
+    clearBind();
+
+    if (q.length < 3){
+      dl.innerHTML = "";
+      lastItems = [];
+      return;
+    }
+
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try{
+        const items = await fetchPacientes(q);
+        lastItems = items;
+        renderDatalist(items);
+      }catch(e){
+        console.warn("autocomplete pacientes falhou:", e);
+      }
+    }, 250);
+  });
+
+  inpNome.addEventListener("change", tryBindByName);
+  inpNome.addEventListener("blur", tryBindByName);
+
+  form.addEventListener("submit", () => {
+    if (hidId.value) return;
+
+    tryBindByName();
+    if (hidId.value) return;
+
+    if (lastItems && lastItems.length){
+      bindItem(lastItems[0]);
+    }
+  });
+})();
+</script>
+{% endblock %}

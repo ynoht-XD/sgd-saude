@@ -1,0 +1,278 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('digitador.static', filename='css/apac.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="apac-container">
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="apac-flashes">
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="apac-head">
+    <div class="title-area">
+      <h2>Cadastro de APAC</h2>
+      <p class="muted">Autorização de Procedimentos de Alta Complexidade (SIA/SUS)</p>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnLimpar">Limpar</button>
+      <button class="btn" id="btnImprimir">Imprimir</button>
+    </div>
+  </div>
+
+  <form id="form-apac" method="POST" action="#">
+    <!-- URLs de API (lidas no JS) -->
+    <div id="apacApi"
+         data-url-sugestoes="{{ url_for('atendimentos.sugestoes_pacientes') }}">
+    </div>
+
+    <!-- ===== Dados da APAC ===== -->
+    <section class="card">
+      <div class="section-head">
+        <h3 class="section-title">Dados da APAC</h3>
+      </div>
+
+      <div class="grid four">
+        <div class="field">
+          <label>Procedimento <span class="req">*</span></label>
+          <select id="procedimento" name="procedimento" required>
+            <option value="">Selecione</option>
+            <option value="avaliacao_aud">Avaliação AUD</option>
+            <option value="aparelho_aud">Aparelho AUD</option>
+            <option value="cadeira_rodas">Cadeira de Rodas</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Número da APAC <span class="req">*</span></label>
+          <input type="text" id="numero_apac" name="numero_apac" required>
+        </div>
+        <div class="field">
+          <label>Data de Competência</label>
+          <input type="date" id="competencia_data" name="competencia_data">
+        </div>
+        <div class="field">
+          <label>Competência</label>
+          <input type="text" id="competencia" name="competencia" readonly>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>CNES</label>
+          <input type="text" id="cnes" name="cnes" value="6097367" readonly>
+        </div>
+        <div class="field">
+          <label>Data Inicial <span class="req">*</span></label>
+          <input type="date" id="data_inicial" name="data_inicial" required>
+        </div>
+        <div class="field">
+          <label>Data Final</label>
+          <input type="date" id="data_final" name="data_final" readonly>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="field">
+          <label>Tipo da APAC <span class="req">*</span></label>
+          <select id="tipo_apac" name="tipo_apac" required>
+            <option value="">Selecione</option>
+            <option value="1">1 - Inicial</option>
+            <option value="2">2 - Continuidade</option>
+            <option value="3">3 - Única</option>
+            <option value="4">4 - Encerramento</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Nacionalidade</label>
+          <input type="text" id="nacionalidade" name="nacionalidade" value="10" readonly>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Paciente ===== -->
+    <section class="card">
+      <div class="section-head">
+        <h3 class="section-title">Informações do Paciente</h3>
+      </div>
+
+      <div class="grid three">
+        <div class="field" style="position:relative">
+          <label>Nome do Paciente <span class="req">*</span></label>
+          <input type="text" id="nome_paciente" name="nome_paciente" placeholder="Digite o nome" required autocomplete="off">
+          <div id="sugestoes_paciente" class="sugg-box" role="listbox" aria-label="Sugestões de pacientes"></div>
+        </div>
+        <div class="field">
+          <label>Nascimento</label>
+          <input type="text" id="data_nascimento_visivel" readonly>
+          <input type="hidden" id="data_nascimento" name="data_nascimento">
+        </div>
+        <div class="field">
+          <label>Prontuário</label>
+          <input type="text" id="prontuario" name="prontuario" readonly>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>CNS</label>
+          <input type="text" id="cns" name="cns" readonly>
+        </div>
+        <div class="field">
+          <label>Nome da Mãe</label>
+          <input type="text" id="nome_mae" name="nome_mae" readonly>
+        </div>
+        <div class="field">
+          <label>Responsável</label>
+          <input type="text" id="responsavel" name="responsavel">
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>Sexo</label>
+          <input type="text" id="sexo" name="sexo" readonly>
+        </div>
+        <div class="field">
+          <label>Raça/Cor</label>
+          <input type="text" id="raca" name="raca" value="03 - Pardo" readonly>
+        </div>
+        <div class="field">
+          <label>Código Logradouro</label>
+          <input type="text" id="cod_logradouro" name="cod_logradouro" value="081" readonly>
+        </div>
+      </div>
+
+      <div class="grid four">
+        <div class="field">
+          <label>Endereço</label>
+          <input type="text" id="endereco" name="endereco" readonly>
+        </div>
+        <div class="field">
+          <label>Número</label>
+          <input type="text" id="numero" name="numero">
+        </div>
+        <div class="field">
+          <label>Bairro</label>
+          <input type="text" id="bairro" name="bairro" readonly>
+        </div>
+        <div class="field">
+          <label>CEP</label>
+          <input type="text" id="cep" name="cep" readonly>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Complementares ===== -->
+    <section class="card">
+      <div class="section-head">
+        <h3 class="section-title">Informações Complementares</h3>
+      </div>
+
+      <div class="grid four">
+        <div class="field">
+          <label>Código Procedimento</label>
+          <input type="text" id="codigo_procedimento" name="codigo_procedimento">
+        </div>
+        <div class="field">
+          <label>CBO Executante</label>
+          <input type="text" id="cbo_executante" name="cbo_executante">
+        </div>
+        <div class="field">
+          <label>CNS Executante</label>
+          <input type="text" id="cns_executante" name="cns_executante">
+        </div>
+        <div class="field">
+          <label>Quantidade</label>
+          <input type="number" id="quantidade" name="quantidade" min="1">
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>Serviço</label>
+          <input type="text" id="servico" name="servico">
+        </div>
+        <div class="field">
+          <label>Classificação</label>
+          <input type="text" id="classificacao" name="classificacao">
+        </div>
+        <div class="field">
+          <label>Motivo da Saída</label>
+          <input type="text" id="motivo_saida" name="motivo_saida" value="18">
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>Data de Alta</label>
+          <input type="date" id="data_alta" name="data_alta">
+        </div>
+        <div class="field">
+          <label>CID</label>
+          <input type="text" id="cid" name="cid">
+        </div>
+        <div class="field">
+          <label>Caráter do Atendimento</label>
+          <input type="text" id="carater_atendimento" name="carater_atendimento" value="01">
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>CNS Médico Solicitante</label>
+          <input type="text" id="cns_solicitante" name="cns_solicitante">
+        </div>
+        <div class="field">
+          <label>Nome Médico Solicitante</label>
+          <input type="text" id="nome_solicitante" name="nome_solicitante">
+        </div>
+        <div class="field">
+          <label>Data da Solicitação</label>
+          <input type="date" id="data_solicitacao" name="data_solicitacao" readonly>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>CNS Médico Autorizador</label>
+          <input type="text" id="cns_autorizador" name="cns_autorizador">
+        </div>
+        <div class="field">
+          <label>Nome Médico Autorizador</label>
+          <input type="text" id="nome_autorizador" name="nome_autorizador">
+        </div>
+        <div class="field">
+          <label>Data da Autorização</label>
+          <input type="date" id="data_autorizacao" name="data_autorizacao" readonly>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Código do Órgão Emissor</label>
+        <input type="text" id="orgao_emissor" name="orgao_emissor" value="M270670301">
+      </div>
+    </section>
+
+    <div class="save-bar">
+      <div class="panel">
+        <span class="muted" id="indicadorPaciente">Nenhum paciente selecionado</span>
+        <button type="submit" class="btn primary">💾 Salvar</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('digitador.static', filename='js/apac.js') }}" defer></script>
+{% endblock %}

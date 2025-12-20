@@ -1,0 +1,251 @@
+/* =========================
+   Export › APAC — Styles (Atualizado)
+   ========================= */
+
+:root{
+  --bg:#f7f8fa;
+  --card:#ffffff;
+  --border:#e5e7eb;
+  --text:#111827;
+  --muted:#6b7280;
+  --primary:#2563eb;
+  --primary-600:#1d4ed8;
+  --success:#10b981;
+  --danger:#ef4444;
+  --warning:#f59e0b;
+  --info:#0ea5e9;
+  --shadow:0 2px 10px rgba(0,0,0,.06);
+  --radius:12px;
+}
+
+/* Layout base da página */
+.apac-wrap{
+  max-width:1200px;
+  margin:24px auto;
+  padding:0 12px;
+}
+
+.apac-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+}
+
+.apac-head h2{
+  margin:0;
+  color:var(--text);
+}
+
+.muted{ color:var(--muted); }
+
+/* ---------- Botões ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  gap:8px;
+  border:1px solid var(--border);
+  background:#fff;
+  color:var(--text);
+  padding:8px 12px;
+  border-radius:10px;
+  cursor:pointer;
+  transition:transform .02s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.btn:hover{ box-shadow:var(--shadow); }
+.btn:active{ transform:translateY(1px); }
+.btn.primary{ background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn.primary:hover{ background:var(--primary-600); border-color:var(--primary-600); }
+.btn.success{ background:var(--success); color:#fff; border-color:var(--success); }
+.btn.gray{ background:#f3f4f6; }
+.btn.danger{ background:var(--danger); color:#fff; border-color:var(--danger); }
+
+/* Grupo de ações genérico */
+.actions{ display:flex; gap:10px; flex-wrap:wrap; }
+
+/* ---------- Card ---------- */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+.card.pad{ padding:16px; }
+
+/* ---------- Filtros (flex com larguras por item) ---------- */
+.apac-filters{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  align-items:end;
+  margin-bottom:16px;
+}
+
+/* largura padrão dos filhos */
+.apac-filters > *{ flex:0 0 180px; }
+
+/* larguras específicas */
+.apac-filters .f-name{           /* Nome (maior) */
+  flex:0 0 360px;
+  max-width:520px;
+}
+.apac-filters .f-competencia,   /* Competência (menor) */
+.apac-filters .f-cep{           /* CEP (igual) */
+  flex:0 0 140px;
+}
+.apac-filters .f-150{ flex:0 0 150px; }
+.apac-filters .f-200{ flex:0 0 200px; }
+.apac-filters .f-grow{ flex:1 1 280px; } /* expansível */
+
+/* inputs/selects dos filtros */
+.apac-filters input[type="text"],
+.apac-filters input[type="date"],
+.apac-filters select{
+  width:100%;
+  height:38px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:0 10px;
+  font-size:.95rem;
+  background:#fff;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.apac-filters input:focus,
+.apac-filters select:focus{
+  outline:none;
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+/* área de botões no fim do filtro */
+.apac-filters .actions{
+  flex:0 0 auto;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+/* ---------- Tabela ---------- */
+.apac-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+}
+.apac-table thead th{
+  position:sticky; top:0; z-index:1;
+  background:#f9fafb;
+  text-align:left;
+  font-weight:600;
+  color:#374151;
+  padding:10px 12px;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+.apac-table tbody td{
+  padding:10px 12px;
+  border-top:1px solid #f0f2f5;
+  vertical-align:middle;
+  color:#111827;
+}
+.apac-table tbody tr:hover{ background:#fafafa; }
+.apac-table .actions-col{ display:flex; gap:6px; flex-wrap:wrap; }
+
+/* ---------- Cores de status (linhas) ---------- */
+.vermelho-claro{ background-color:#ffefef !important; }   /* Em aberto */
+.laranja-claro{  background-color:#fff4e0 !important; }   /* Pago (genérico) */
+.azul-claro{     background-color:#e9f6ff !important; }   /* Pago + Na instituição */
+.verde-claro{    background-color:#eafaf0 !important; }   /* Pago + Entregue */
+
+/* Mantém contraste do hover nas linhas coloridas */
+.apac-table tbody tr.verde-claro:hover,
+.apac-table tbody tr.azul-claro:hover,
+.apac-table tbody tr.laranja-claro:hover,
+.apac-table tbody tr.vermelho-claro:hover{ filter:brightness(.98); }
+
+/* ---------- Badges ---------- */
+.badge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:2px 8px; border-radius:999px; font-size:.8rem; border:1px solid;
+}
+.badge.success{ color:#065f46; border-color:#d1fae5; background:#ecfdf5; }
+.badge.warn{    color:#92400e; border-color:#fde68a; background:#fffbeb; }
+.badge.info{    color:#075985; border-color:#bae6fd; background:#eff6ff; }
+.badge.danger{  color:#991b1b; border-color:#fecaca; background:#fef2f2; }
+
+/* ---------- Modal de Edição ---------- */
+#modal-edicao-apac{
+  position:fixed; inset:0; display:none;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,.35); z-index:1000;
+}
+#modal-edicao-apac .modal-card{
+  width:min(1100px,96vw);
+  max-height:90vh; overflow:auto;
+  background:#fff; border-radius:12px;
+  padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+}
+#modal-edicao-apac .modal-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:12px;
+}
+#modal-edicao-apac .modal-head h3{ margin:0; font-size:1.1rem; }
+.icon-btn{
+  border:none; background:#f3f4f6; width:32px; height:32px;
+  border-radius:8px; cursor:pointer; font-size:18px; line-height:1;
+}
+.icon-btn:hover{ background:#e5e7eb; }
+
+/* Grid & campos dentro do modal */
+.grid{ display:grid; gap:12px; }
+.two{ grid-template-columns:repeat(2,1fr); }
+.three{ grid-template-columns:repeat(3,1fr); }
+.four{ grid-template-columns:repeat(4,1fr); }
+
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field label{ font-size:.85rem; color:#374151; }
+.field input, .field select, .field textarea{
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.95rem;
+}
+.section-title{ margin:16px 0 6px; font-weight:600; color:#111827; }
+.modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+
+/* aliases de contêiner */
+.apac-page{ max-width:1200px; margin:24px auto; padding:0 12px; }
+
+/* botões “fantasma” e ações na linha */
+.btn.ghost{ background:transparent; border-color:var(--border); }
+.btn.ghost:hover{ background:#f9fafb; }
+
+.row-actions{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+
+
+
+/* ---------- Utilidades ---------- */
+.text-right{ text-align:right; }
+.text-center{ text-align:center; }
+.w-100{ width:100%; }
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 1024px){
+  .four{ grid-template-columns:repeat(2,1fr); }
+}
+
+@media (max-width: 720px){
+  .apac-filters > *{ flex:1 1 100%; }
+  .apac-filters .actions{ justify-content:stretch; }
+  .apac-filters .actions .btn{ width:100%; }
+
+  .apac-head{ flex-direction:column; align-items:flex-start; gap:8px; }
+  .three, .four{ grid-template-columns:1fr; }
+
+  .apac-table thead th, .apac-table tbody td{ white-space:nowrap; }
+  .apac-table{ overflow:auto; display:block; }
+}
+
+@media (max-width: 480px){
+  .btn{ width:100%; }
+}

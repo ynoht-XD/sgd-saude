@@ -1,0 +1,357 @@
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('auditivo.static', filename='css/exames.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="exa-wrap">
+  <div class="exa-head">
+    <div>
+      <h2>🎧 Exames Auditivos — Fonoaudiologia</h2>
+      <p class="muted">Audiometria tonal, logoaudiometria e imitanciometria com laudo.</p>
+    </div>
+    <div class="actions">
+      <button class="btn gray" id="btnLimpar">Limpar</button>
+      <button class="btn" id="btnImprimir">Imprimir</button>
+    </div>
+  </div>
+
+  <form id="formExame" class="card pad" method="POST" action="#">
+    <!-- Identificação -->
+    <section class="sec">
+      <div class="sec-head">
+        <h3 class="sec-title">Identificação do Paciente</h3>
+      </div>
+
+      <div class="grid three">
+        <div class="field" style="position:relative">
+          <label>Nome do Paciente <span class="req">*</span></label>
+          <input type="text" id="paciente_nome" name="paciente_nome" autocomplete="off" required placeholder="Digite para buscar...">
+          <div id="sugestoes_paciente" class="sugg" role="listbox" hidden></div>
+        </div>
+        <div class="field">
+          <label>Nascimento</label>
+          <input type="text" id="nascimento_visivel" readonly>
+          <input type="hidden" id="nascimento" name="nascimento">
+        </div>
+        <div class="field">
+          <label>Prontuário</label>
+          <input type="text" id="prontuario" name="prontuario" readonly>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>CNS</label>
+          <input type="text" id="cns" name="cns" readonly>
+        </div>
+        <div class="field">
+          <label>Sexo</label>
+          <input type="text" id="sexo" name="sexo" readonly>
+        </div>
+        <div class="field">
+          <label>Responsável (se menor)</label>
+          <input type="text" id="responsavel" name="responsavel">
+        </div>
+      </div>
+    </section>
+
+    <!-- Otoscopia (empilhado) -->
+    <section class="sec">
+      <div class="sec-head">
+        <h3 class="sec-title">Otoscopy</h3>
+      </div>
+
+      <!-- OD -->
+      <div class="card lite">
+        <div class="field">
+          <label>Orelha Direita (OD)</label>
+          <select name="otos_od" id="otos_od">
+            <option value="">Selecione</option>
+            <option>Normal</option>
+            <option>Tampão de cerúmen</option>
+            <option>Membrana íntegra</option>
+            <option>Perfuração</option>
+            <option>Hiperemia</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Observações OD</label>
+          <textarea name="otos_obs_od" id="otos_obs_od" rows="2"></textarea>
+        </div>
+      </div>
+
+      <!-- OE (abaixo) -->
+      <div class="card lite">
+        <div class="field">
+          <label>Orelha Esquerda (OE)</label>
+          <select name="otos_oe" id="otos_oe">
+            <option value="">Selecione</option>
+            <option>Normal</option>
+            <option>Tampão de cerúmen</option>
+            <option>Membrana íntegra</option>
+            <option>Perfuração</option>
+            <option>Hiperemia</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Observações OE</label>
+          <textarea name="otos_obs_oe" id="otos_obs_oe" rows="2"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audiometria Tonal (mantém grade OD/OE se couber; se quiser também empilhar, é só separar como acima) -->
+<!-- Audiometria Tonal (empilhado) -->
+<section class="sec">
+  <div class="sec-head">
+    <h3 class="sec-title">Audiometria Tonal Liminar (dB HL)</h3>
+  </div>
+
+  <!-- OD (acima) -->
+  <div class="card lite">
+    <div class="subhead">
+      <strong>Orelha Direita (OD)</strong>
+      <button type="button" class="btn xs ghost" id="btnCopiarOD">Copiar para OE</button>
+    </div>
+
+    <div class="freq-table">
+      <div class="freq-row head">
+        <div class="cell label"></div>
+        <div class="cell">250</div><div class="cell">500</div><div class="cell">1k</div>
+        <div class="cell">2k</div><div class="cell">3k</div><div class="cell">4k</div>
+        <div class="cell">6k</div><div class="cell">8k</div>
+      </div>
+
+      <div class="freq-row">
+        <div class="cell label">VA</div>
+        {% for f in [250,500,1000,2000,3000,4000,6000,8000] %}
+        <div class="cell">
+          <input class="va-od" name="va_od_{{f}}" type="number" step="5" min="-10" max="120" placeholder="—">
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="freq-row">
+        <div class="cell label">VO</div>
+        {% for f in [250,500,1000,2000,3000,4000] %}
+        <div class="cell">
+          <input class="vo-od" name="vo_od_{{f}}" type="number" step="5" min="-10" max="120" placeholder="—">
+        </div>
+        {% endfor %}
+        <div class="cell" aria-hidden="true"></div><div class="cell" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="grid three">
+      <div class="field">
+        <label>PTA (500–1k–2k)</label>
+        <input type="text" id="pta_od" name="pta_od" readonly>
+      </div>
+      <div class="field">
+        <label>Classificação</label>
+        <input type="text" id="class_od" name="class_od" readonly>
+      </div>
+      <div class="field">
+        <label>Mascaramento</label>
+        <select name="mask_od">
+          <option value="">Não</option>
+          <option>Sim — VA</option>
+          <option>Sim — VO</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- OE (abaixo) -->
+  <div class="card lite">
+    <div class="subhead"><strong>Orelha Esquerda (OE)</strong></div>
+
+    <div class="freq-table">
+      <div class="freq-row head">
+        <div class="cell label"></div>
+        <div class="cell">250</div><div class="cell">500</div><div class="cell">1k</div>
+        <div class="cell">2k</div><div class="cell">3k</div><div class="cell">4k</div>
+        <div class="cell">6k</div><div class="cell">8k</div>
+      </div>
+
+      <div class="freq-row">
+        <div class="cell label">VA</div>
+        {% for f in [250,500,1000,2000,3000,4000,6000,8000] %}
+        <div class="cell">
+          <input class="va-oe" name="va_oe_{{f}}" type="number" step="5" min="-10" max="120" placeholder="—">
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="freq-row">
+        <div class="cell label">VO</div>
+        {% for f in [250,500,1000,2000,3000,4000] %}
+        <div class="cell">
+          <input class="vo-oe" name="vo_oe_{{f}}" type="number" step="5" min="-10" max="120" placeholder="—">
+        </div>
+        {% endfor %}
+        <div class="cell" aria-hidden="true"></div><div class="cell" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div class="grid three">
+      <div class="field">
+        <label>PTA (500–1k–2k)</label>
+        <input type="text" id="pta_oe" name="pta_oe" readonly>
+      </div>
+      <div class="field">
+        <label>Classificação</label>
+        <input type="text" id="class_oe" name="class_oe" readonly>
+      </div>
+      <div class="field">
+        <label>Mascaramento</label>
+        <select name="mask_oe">
+          <option value="">Não</option>
+          <option>Sim — VA</option>
+          <option>Sim — VO</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- Logoaudiometria -->
+    <section class="sec">
+      <div class="sec-head">
+        <h3 class="sec-title">Logoaudiometria</h3>
+      </div>
+      <div class="grid four">
+        <div class="field"><label>SDT/Detecção (OD)</label><input type="number" step="5" name="sdt_od"></div>
+        <div class="field"><label>SDT/Detecção (OE)</label><input type="number" step="5" name="sdt_oe"></div>
+        <div class="field"><label>SRT/Reconhecimento (OD)</label><input type="number" step="5" name="srt_od"></div>
+        <div class="field"><label>SRT/Reconhecimento (OE)</label><input type="number" step="5" name="srt_oe"></div>
+        <div class="field"><label>SRI/Índice % (OD)</label><input type="number" step="1" min="0" max="100" name="sri_od"></div>
+        <div class="field"><label>SRI/Índice % (OE)</label><input type="number" step="1" min="0" max="100" name="sri_oe"></div>
+        <div class="field"><label>Nível Apresentação (dB) OD</label><input type="number" step="5" name="nivel_od"></div>
+        <div class="field"><label>Nível Apresentação (dB) OE</label><input type="number" step="5" name="nivel_oe"></div>
+      </div>
+    </section>
+
+    <!-- Imitanciometria (empilhado) -->
+    <section class="sec">
+      <div class="sec-head">
+        <h3 class="sec-title">Imitanciometria</h3>
+      </div>
+
+      <!-- Timpanometria — OD -->
+      <div class="card lite">
+        <div class="subhead"><strong>Timpanometria — OD</strong></div>
+        <div class="grid four">
+          <div class="field">
+            <label>Tipo</label>
+            <select name="timp_tipo_od">
+              <option></option><option>A</option><option>As</option><option>Ad</option><option>B</option><option>C</option>
+            </select>
+          </div>
+          <div class="field"><label>Pressão (daPa)</label><input type="number" name="timp_press_od"></div>
+          <div class="field"><label>Complacência (ml)</label><input type="number" step="0.1" name="timp_comp_od"></div>
+          <div class="field"><label>Volume (ml)</label><input type="number" step="0.1" name="timp_vol_od"></div>
+        </div>
+        <div class="subhead"><strong>Reflexos Estapedianos — OD</strong></div>
+        <div class="reflex-grid">
+          <div class="r-head"></div>
+          <div class="r-head">500</div><div class="r-head">1k</div><div class="r-head">2k</div><div class="r-head">4k</div>
+          <div class="r-rowlabel">Ipsi</div>
+          <div><input name="ref_ipsi_od_500"  type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_od_1k"   type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_od_2k"   type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_od_4k"   type="text" placeholder="—"></div>
+          <div class="r-rowlabel">Contra</div>
+          <div><input name="ref_contra_od_500" type="text" placeholder="—"></div>
+          <div><input name="ref_contra_od_1k"  type="text" placeholder="—"></div>
+          <div><input name="ref_contra_od_2k"  type="text" placeholder="—"></div>
+          <div><input name="ref_contra_od_4k"  type="text" placeholder="—"></div>
+        </div>
+      </div>
+
+      <!-- Timpanometria — OE (abaixo) -->
+      <div class="card lite">
+        <div class="subhead"><strong>Timpanometria — OE</strong></div>
+        <div class="grid four">
+          <div class="field">
+            <label>Tipo</label>
+            <select name="timp_tipo_oe">
+              <option></option><option>A</option><option>As</option><option>Ad</option><option>B</option><option>C</option>
+            </select>
+          </div>
+          <div class="field"><label>Pressão (daPa)</label><input type="number" name="timp_press_oe"></div>
+          <div class="field"><label>Complacência (ml)</label><input type="number" step="0.1" name="timp_comp_oe"></div>
+          <div class="field"><label>Volume (ml)</label><input type="number" step="0.1" name="timp_vol_oe"></div>
+        </div>
+        <div class="subhead"><strong>Reflexos Estapedianos — OE</strong></div>
+        <div class="reflex-grid">
+          <div class="r-head"></div>
+          <div class="r-head">500</div><div class="r-head">1k</div><div class="r-head">2k</div><div class="r-head">4k</div>
+          <div class="r-rowlabel">Ipsi</div>
+          <div><input name="ref_ipsi_oe_500"  type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_oe_1k"   type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_oe_2k"   type="text" placeholder="—"></div>
+          <div><input name="ref_ipsi_oe_4k"   type="text" placeholder="—"></div>
+          <div class="r-rowlabel">Contra</div>
+          <div><input name="ref_contra_oe_500" type="text" placeholder="—"></div>
+          <div><input name="ref_contra_oe_1k"  type="text" placeholder="—"></div>
+          <div><input name="ref_contra_oe_2k"  type="text" placeholder="—"></div>
+          <div><input name="ref_contra_oe_4k"  type="text" placeholder="—"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Conclusão -->
+    <section class="sec">
+      <div class="sec-head">
+        <h3 class="sec-title">Impressão Diagnóstica / Conclusão</h3>
+      </div>
+      <div class="grid two">
+        <div class="field">
+          <label>Resumo</label>
+          <textarea name="conclusao" rows="4" placeholder="Ex.: Audiometria compatível com perda auditiva neurossensorial bilateral de grau leve a moderado, configuração descendente..."></textarea>
+        </div>
+        <div class="field">
+          <label>Conduta/Encaminhamentos</label>
+          <textarea name="conduta" rows="4" placeholder="Ex.: Encaminhar para otorrinolaringologia; Avaliação de AASI; Reavaliação em 6 meses..."></textarea>
+        </div>
+      </div>
+
+      <div class="grid three">
+        <div class="field">
+          <label>Fonoaudiólogo(a)</label>
+          <input type="text" name="fono_nome" placeholder="Nome completo">
+        </div>
+        <div class="field">
+          <label>CRFa</label>
+          <input type="text" name="crfa" placeholder="UF-xxxxx">
+        </div>
+        <div class="field">
+          <label>Data do Exame</label>
+          <input type="date" name="data_exame">
+        </div>
+      </div>
+    </section>
+
+    <!-- Barra de salvar -->
+    <div class="savebar">
+      <button type="submit" class="btn primary">💾 Salvar Exame</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script>
+    window.SGD_AUDITIVO = {
+      urlBuscaPacientes: "/api/consulta_pacientes"
+    };
+  </script>
+  <script src="{{ url_for('auditivo.static', filename='js/exames.js') }}" defer></script>
+{% endblock %}

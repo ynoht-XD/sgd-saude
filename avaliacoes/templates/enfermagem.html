@@ -1,0 +1,374 @@
+{# sgd/avaliacoes/templates/enfermagem.html #}
+{% extends "layout.html" %}
+
+{% block title %}Avaliação de Enfermagem · Avaliações{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-av{
+    max-width:min(1100px,96vw);
+    margin:18px auto 40px;
+    padding:0 12px 28px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+
+  .head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    gap:12px;flex-wrap:wrap;margin:10px 0 14px;
+  }
+  .head h2{margin:0;font-size:22px;font-weight:950;letter-spacing:.2px}
+  .head p{margin:4px 0 0;color:#64748b;font-size:.95rem}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .btn{
+    appearance:none;border:0;cursor:pointer;
+    padding:10px 14px;border-radius:12px;
+    font-weight:900;font-size:.95rem;
+    text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+    transition:transform .08s ease, filter .15s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{background:#1e3a8a;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#0f172a}
+
+  .card{
+    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    box-shadow:0 10px 30px rgba(2,6,23,.06);
+    overflow:hidden;
+  }
+  form{padding:14px}
+
+  .grid{display:grid;gap:12px}
+  @media(min-width:900px){
+    .grid.cols-2{grid-template-columns:1fr 1fr}
+    .grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+  }
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-weight:900;font-size:.9rem;color:#0f172a}
+  .hint{font-size:.82rem;color:#64748b;margin-top:-4px}
+  input[type="text"], input[type="date"], input[type="tel"], textarea{
+    width:100%;
+    border:1px solid #e5e7eb;border-radius:12px;
+    padding:10px 12px;font-size:.95rem;outline:none;background:#fff;
+  }
+  textarea{min-height:110px;resize:vertical}
+
+  input:focus, textarea:focus{
+    border-color:#93c5fd;
+    box-shadow:0 0 0 4px rgba(59,130,246,.12);
+  }
+
+  details.sec{
+    border:1px solid #e5e7eb;border-radius:14px;background:#fff;overflow:hidden;
+  }
+  details.sec + details.sec{margin-top:10px}
+  summary.st{
+    list-style:none;cursor:pointer;user-select:none;
+    padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    font-weight:950;background:linear-gradient(180deg,#fff,#f8fafc);
+  }
+  summary.st::-webkit-details-marker{display:none}
+  .chev{
+    width:34px;height:34px;border-radius:10px;background:#eef2ff;
+    display:grid;place-items:center;font-weight:950;color:#1e3a8a;
+    transform:rotate(0deg);
+  }
+  details[open] summary .chev{transform:rotate(180deg)}
+  .sec-body{padding:12px;border-top:1px solid #eef2f7}
+
+  .footer{
+    display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;
+    padding-top:12px;margin-top:14px;border-top:1px dashed #e5e7eb;
+  }
+
+  @media (prefers-color-scheme: dark){
+    .page-av{color:#e5e7eb}
+    .card, details.sec{background:#0b1220;border-color:#1f2937;box-shadow:none}
+    summary.st{background:linear-gradient(180deg,#0b1220,#0f172a)}
+    .label{color:#e5e7eb}
+    .hint{color:#94a3b8}
+    input[type="text"], input[type="date"], input[type="tel"], textarea{
+      background:#0b1220;border-color:#243145;color:#e5e7eb;
+    }
+    .btn-ghost{background:#111827;color:#e5e7eb}
+    .chev{background:#111b33;color:#93c5fd}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-av">
+
+  <div class="head">
+    <div>
+      <h2>💉 Avaliação de Enfermagem</h2>
+      <p>Identificação do usuário e situação de saúde (HDA, vacinas, medicações e sinais vitais).</p>
+    </div>
+    <div class="actions">
+      <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Voltar</a>
+      <button class="btn btn-primary" type="submit" form="formEnfermagem">Salvar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="formEnfermagem" method="POST" action="{{ url_for('avaliacoes.nova') }}">
+      <input type="hidden" name="tipo" value="avaliacao_enfermagem">
+
+      <!-- ✅ CAMPOS OBRIGATÓRIOS PRO BACKEND (igual Anamnese) -->
+      <input type="hidden" name="paciente_id" id="paciente_id">
+      <input type="hidden" name="paciente_prontuario" id="paciente_prontuario">
+
+      <!-- Campos fixos do backend -->
+      <div class="grid cols-3">
+        <div class="field">
+          <label class="label" for="paciente_nome">Nome</label>
+          <input
+            id="paciente_nome"
+            name="paciente_nome"
+            type="text"
+            placeholder="Digite ao menos 3 letras…"
+            required
+            list="dlPacientes"
+            autocomplete="off"
+          >
+          <datalist id="dlPacientes"></datalist>
+          <div class="hint">Dica: escolha um nome da lista pra preencher ID e prontuário automaticamente.</div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="paciente_cpf">CPF (opcional)</label>
+          <input id="paciente_cpf" name="paciente_cpf" type="text" inputmode="numeric" placeholder="Somente números, se quiser">
+          <div class="hint">Se não tiver CPF, pode salvar mesmo assim.</div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="cidade_data">Cidade / Data</label>
+          <input id="cidade_data" name="cidade_data" type="text" placeholder="Ex.: Maceió, 19/12/2025">
+        </div>
+      </div>
+
+      <!-- ============================
+           IDENTIFICAÇÃO
+           ============================ -->
+      <details class="sec" open>
+        <summary class="st">
+          Identificação do Usuário
+          <span class="chev">⌄</span>
+        </summary>
+
+        <div class="sec-body">
+          <div class="grid cols-3">
+            <div class="field">
+              <label class="label" for="numero_prontuario">Número do Prontuário</label>
+              <input id="numero_prontuario" name="numero_prontuario" type="text" placeholder="Ex.: 6900">
+            </div>
+
+            <div class="field">
+              <label class="label" for="data_nascimento">Data de Nascimento</label>
+              <input id="data_nascimento" name="data_nascimento" type="date">
+            </div>
+
+            <div class="field">
+              <label class="label" for="idade">Idade</label>
+              <input id="idade" name="idade" type="text" inputmode="numeric" placeholder="Ex.: 43">
+            </div>
+
+            <div class="field">
+              <label class="label" for="cns">CNS</label>
+              <input id="cns" name="cns" type="text" inputmode="numeric" placeholder="Cartão Nacional de Saúde">
+            </div>
+
+            <div class="field">
+              <label class="label" for="nome_mae">Nome da Mãe</label>
+              <input id="nome_mae" name="nome_mae" type="text" placeholder="Nome completo">
+            </div>
+
+            <div class="field">
+              <label class="label" for="responsavel">Responsável</label>
+              <input id="responsavel" name="responsavel" type="text" placeholder="Responsável pelas informações / pelo usuário">
+            </div>
+
+            <div class="field">
+              <label class="label" for="celular">Celular</label>
+              <input id="celular" name="celular" type="tel" placeholder="(DDD) número">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- ============================
+           SITUAÇÃO DE SAÚDE
+           ============================ -->
+      <details class="sec">
+        <summary class="st">
+          Situação de Saúde
+          <span class="chev">⌄</span>
+        </summary>
+
+        <div class="sec-body">
+          <div class="grid cols-2">
+            <div class="field">
+              <label class="label" for="patologia_clinica">Patologia Clínica</label>
+              <input id="patologia_clinica" name="patologia_clinica" type="text" placeholder="Descreva a patologia clínica">
+            </div>
+
+            <div class="field">
+              <label class="label" for="doencas_existentes">Doenças Existentes</label>
+              <input id="doencas_existentes" name="doencas_existentes" type="text" placeholder="Ex.: HAS, DM, asma...">
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="hda">História da Doença Atual (HDA)</label>
+              <textarea id="hda" name="hda" placeholder="Descreva a história da doença atual..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="medicacoes">Medicações</label>
+              <textarea id="medicacoes" name="medicacoes" placeholder="Liste as medicações em uso, doses e horários (se souber)..."></textarea>
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="vacinas">Vacinas</label>
+              <textarea id="vacinas" name="vacinas" placeholder="Situação vacinal / vacinas recebidas / pendências..."></textarea>
+            </div>
+
+            <div class="field">
+              <label class="label" for="pressao_arterial">Pressão Arterial</label>
+              <input id="pressao_arterial" name="pressao_arterial" type="text" placeholder="Ex.: 120/80">
+            </div>
+
+            <div class="field">
+              <label class="label" for="peso">Peso</label>
+              <input id="peso" name="peso" type="text" inputmode="decimal" placeholder="Ex.: 68 kg">
+            </div>
+
+            <div class="field">
+              <label class="label" for="altura">Altura</label>
+              <input id="altura" name="altura" type="text" inputmode="decimal" placeholder="Ex.: 1,72 m">
+            </div>
+
+            <div class="field" style="grid-column:1 / -1;">
+              <label class="label" for="obs">OBS.</label>
+              <textarea id="obs" name="obs" placeholder="Observações..."></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div class="footer">
+        <a class="btn btn-ghost" href="{{ url_for('avaliacoes.index') }}">Cancelar</a>
+        <button class="btn btn-primary" type="submit">Salvar Avaliação de Enfermagem</button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+/**
+ * ✅ Autocomplete leve (sem libs)
+ * - Busca em /avaliacoes/api/pacientes?q=...
+ * - Preenche hidden: paciente_id e paciente_prontuario
+ *
+ * Se você quiser depois trocar por Tagify/Select2, dá, mas isso aqui já resolve 100%.
+ */
+(function(){
+  const inpNome = document.getElementById("paciente_nome");
+  const hidId   = document.getElementById("paciente_id");
+  const hidPr   = document.getElementById("paciente_prontuario");
+  const dl      = document.getElementById("dlPacientes");
+  const form    = document.getElementById("formEnfermagem");
+
+  if (!inpNome || !dl || !hidId || !hidPr) return;
+
+  let lastItems = [];
+  let t = null;
+
+  function clearHidden(){
+    hidId.value = "";
+    hidPr.value = "";
+  }
+
+  function renderDatalist(items){
+    dl.innerHTML = "";
+    items.forEach(p => {
+      const opt = document.createElement("option");
+      // value precisa ser o que aparece no input quando seleciona
+      opt.value = p.nome;
+      // label não aparece no datalist em todo browser, mas ok
+      opt.label = p.label || p.nome;
+      dl.appendChild(opt);
+    });
+  }
+
+  async function fetchPacientes(q){
+    const r = await fetch(`/avaliacoes/api/pacientes?q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    return j.items || [];
+  }
+
+  inpNome.addEventListener("input", () => {
+    const q = (inpNome.value || "").trim();
+
+    // Se mudou texto manualmente, zera vínculo
+    clearHidden();
+
+    if (q.length < 3){
+      dl.innerHTML = "";
+      lastItems = [];
+      return;
+    }
+
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try{
+        const items = await fetchPacientes(q);
+        lastItems = items;
+        renderDatalist(items);
+      }catch(e){
+        console.warn("autocomplete pacientes falhou:", e);
+      }
+    }, 250);
+  });
+
+  // Quando o usuário escolhe um item do datalist (blur/change), tentamos casar
+  function tryBindSelected(){
+    const val = (inpNome.value || "").trim().toLowerCase();
+    if (!val) return;
+
+    const hit = lastItems.find(p => (p.nome || "").trim().toLowerCase() === val);
+    if (hit){
+      hidId.value = hit.id || "";
+      hidPr.value = hit.prontuario || "";
+    }
+  }
+
+  inpNome.addEventListener("change", tryBindSelected);
+  inpNome.addEventListener("blur", tryBindSelected);
+
+  // Antes de enviar: se o cara digitou, mas não “selecionou”, tenta vincular pelo primeiro resultado
+  form.addEventListener("submit", () => {
+    if (hidId.value) return;
+
+    const val = (inpNome.value || "").trim().toLowerCase();
+    if (!val) return;
+
+    // tenta casar pelo nome exato primeiro
+    const hit = lastItems.find(p => (p.nome || "").trim().toLowerCase() === val);
+    if (hit){
+      hidId.value = hit.id || "";
+      hidPr.value = hit.prontuario || "";
+      return;
+    }
+
+    // fallback: se tiver algum resultado, usa o primeiro
+    if (lastItems && lastItems.length){
+      hidId.value = lastItems[0].id || "";
+      hidPr.value = lastItems[0].prontuario || "";
+    }
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,2016 @@
+agendamentos futuro
+
+# agenda/routes.py
+from datetime import datetime, timedelta
+import uuid
+import sqlite3
+import pathlib
+from typing import Optional, Set, List, Dict, Any
+
+from flask import render_template, request, jsonify, abort, session
+from . import agenda_bp
+from db import conectar_db
+
+# (Opcional) Flask-Login — mantemos compatibilidade mesmo sem estar instalado
+try:
+    from flask_login import current_user
+except Exception:  # pragma: no cover
+    current_user = None
+
+# =============================================================================
+# Bootstrap do schema (idempotente)
+# =============================================================================
+
+DB = pathlib.Path("data_base/sgd_db.db")
+
+sql_bootstrap = """
+-- Tabelas mínimas (idempotentes)
+CREATE TABLE IF NOT EXISTS pacientes (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agendamentos (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  paciente     TEXT NOT NULL,
+  profissional TEXT NOT NULL,
+  inicio       TEXT NOT NULL,  -- 'YYYY-MM-DD HH:MM:SS'
+  fim          TEXT NOT NULL,  -- 'YYYY-MM-DD HH:MM:SS'
+  observacao   TEXT,
+  status       TEXT DEFAULT 'ativo',
+  recorrente   INTEGER DEFAULT 0,  -- 0/1 (materializados ou primeira de uma série)
+  serie_uid    TEXT               -- UUID da série quando recorrente
+);
+
+-- Índices úteis
+CREATE INDEX IF NOT EXISTS idx_agend_inicio     ON agendamentos (inicio);
+CREATE INDEX IF NOT EXISTS idx_agend_prof_inic  ON agendamentos (profissional, inicio);
+"""
+
+def ensure_profissional_cpf(conn: sqlite3.Connection):
+    """Adiciona coluna profissional_cpf se não existir + índice + backfill opcional."""
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(agendamentos);")
+    cols = {row[1] for row in cur.fetchall()}  # row[1] = name
+
+    if "profissional_cpf" not in cols:
+        cur.execute("ALTER TABLE agendamentos ADD COLUMN profissional_cpf TEXT;")
+        conn.commit()
+
+    # Índice (idempotente)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_agend_profcpf_inicio
+        ON agendamentos (profissional_cpf, inicio);
+    """)
+
+    # Backfill (opcional) a partir de usuarios.nome → usuarios.cpf
+    try:
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='usuarios';")
+        if cur.fetchone():
+            cur.executescript("""
+                UPDATE agendamentos
+                   SET profissional_cpf = (
+                     SELECT u.cpf FROM usuarios u
+                      WHERE TRIM(UPPER(u.nome)) = TRIM(UPPER(agendamentos.profissional))
+                        AND TRIM(COALESCE(u.cpf, '')) <> ''
+                     LIMIT 1
+                   )
+                 WHERE (profissional_cpf IS NULL OR TRIM(profissional_cpf) = '');
+            """)
+    except Exception:
+        pass
+    conn.commit()
+
+def ensure_dow_columns(conn: sqlite3.Connection):
+    """
+    Garante a coluna dow_dom (0=Dom..6=Sáb) em agendamentos + índice + backfill.
+    """
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(agendamentos);")
+    cols = {row[1] for row in cur.fetchall()}
+
+    if "dow_dom" not in cols:
+        cur.execute("ALTER TABLE agendamentos ADD COLUMN dow_dom INTEGER;")
+        # backfill a partir de 'inicio' (ISO 'YYYY-MM-DD HH:MM:SS')
+        cur.execute("""
+            UPDATE agendamentos
+               SET dow_dom = CAST(strftime('%w', inicio) AS INTEGER)
+             WHERE inicio IS NOT NULL AND TRIM(inicio) <> '';
+        """)
+        conn.commit()
+
+    # índice
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_agend_dow_inicio ON agendamentos (dow_dom, inicio);")
+    conn.commit()
+
+def ensure_recurring_table(conn: sqlite3.Connection):
+    """
+    Garante tabela de regras recorrentes (não materializa ocorrências).
+    dow_dom: 0=Dom..6=Sáb | hora_inicio: 'HH:MM' | duracao_min: inteiro
+    dt_inicio / dt_fim: datas 'YYYY-MM-DD' (dt_fim NULL = indefinido)
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS agendamentos_recorrentes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            paciente         TEXT NOT NULL,
+            profissional     TEXT NOT NULL,
+            profissional_cpf TEXT,
+            dow_dom          INTEGER NOT NULL,     -- 0..6
+            hora_inicio      TEXT NOT NULL,        -- 'HH:MM'
+            duracao_min      INTEGER NOT NULL,     -- minutos
+            observacao       TEXT,
+            status           TEXT DEFAULT 'ativo', -- 'ativo' | 'inativo'
+            dt_inicio        TEXT NOT NULL,        -- 'YYYY-MM-DD'
+            dt_fim           TEXT                  -- 'YYYY-MM-DD' (NULL = indefinido)
+        );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ar_profcpf_dow ON agendamentos_recorrentes (profissional_cpf, dow_dom);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ar_intervalo ON agendamentos_recorrentes (dt_inicio, dt_fim);")
+    conn.commit()
+
+# Executa bootstrap
+con = sqlite3.connect(DB)
+try:
+    con.executescript(sql_bootstrap)
+    ensure_profissional_cpf(con)
+    ensure_dow_columns(con)
+    ensure_recurring_table(con)   # << NOVO
+finally:
+    con.commit()
+    con.close()
+
+print("✅ Banco OK (tabelas básicas + profissional_cpf + dow_dom + recorrentes garantidos).")
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+DOW_NOMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+
+def _row_to_dict(row):
+    """
+    Converte linha do SQLite para dict.
+    Suporta sqlite3.Row (com .keys()) ou tuple na ordem do SELECT:
+    SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid, [profissional_cpf], [dow_dom]
+    """
+    if hasattr(row, "keys"):
+        d = dict(row)
+    else:
+        # fallback por posição (mantém compat, mas prefira row_factory=Row)
+        base = ["id","paciente","profissional","inicio","fim","observacao","status","recorrente","serie_uid"]
+        d = {k: (row[i] if i < len(row) else None) for i, k in enumerate(base)}
+        if len(row) > 9: d["profissional_cpf"] = row[9]
+        if len(row) > 10: d["dow_dom"] = row[10]
+    # normalizações
+    if "recorrente" in d:
+        d["recorrente"] = bool(d["recorrente"])
+    # Deriva dia_semana (string) se dow_dom presente
+    if "dow_dom" in d and d["dow_dom"] is not None:
+        try:
+            d["dia_semana"] = DOW_NOMES[int(d["dow_dom"])]
+        except Exception:
+            d["dia_semana"] = None
+    return d
+
+def _parse_iso_dt(s: str) -> datetime:
+    """
+    Aceita 'YYYY-MM-DDTHH:MM', 'YYYY-MM-DD HH:MM' ou com ':SS' também.
+    """
+    s = (s or "").strip()
+    if "T" in s:
+        s = s.replace("T", " ")
+    if len(s) == 16:
+        s += ":00"
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+def _fmt_iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+def _yyyy_mm_dd(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d")
+
+def _parse_slot_iso(s: str) -> datetime:
+    """Aceita 'YYYY-MM-DDTHH:MM' ou 'YYYY-MM-DD HH:MM' e retorna datetime."""
+    if "T" in s:
+        s = s.replace("T", " ")
+    if len(s) == 16:
+        s += ":00"
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+def _safe_current_user_name():
+    """
+    Tenta obter o nome do usuário logado:
+    1) Flask-Login (atributos comuns)
+    2) session[...] (se você salvar)
+    3) ?debug_user=Fulano (dev)
+    """
+    # Flask-Login
+    try:
+        if current_user and getattr(current_user, "is_authenticated", False):
+            for attr in ("nome", "name", "full_name", "username", "email"):
+                val = getattr(current_user, attr, None)
+                if val:
+                    return str(val).strip()
+    except Exception:
+        pass
+
+    # Sessão
+    for key in ("nome", "name", "usuario", "user_name", "email"):
+        val = session.get(key)
+        if val:
+            return str(val).strip()
+
+    # Dev
+    val = request.args.get("debug_user")
+    if val:
+        return str(val).strip()
+
+    return None
+
+def _row_as_dict_list(rows, keys=("nome",)):
+    """Converte fetchall em lista de dicionários, tolerando Row/tuple."""
+    out = []
+    for r in rows:
+        try:
+            d = {k: r[k] for k in keys}
+        except Exception:
+            d = {k: r[i] if i < len(r) else None for i, k in enumerate(keys)}
+        out.append(d)
+    return out
+
+def _usuario_by_cpf(conn, cpf: str):
+    cur = conn.cursor()
+    cur.execute("SELECT nome, cpf FROM usuarios WHERE TRIM(cpf)=TRIM(?) LIMIT 1;", (cpf,))
+    r = cur.fetchone()
+    if not r:
+        return None
+    try:
+        return {"nome": r["nome"], "cpf": r["cpf"]}
+    except Exception:
+        return {"nome": r[0], "cpf": r[1]}
+
+def _has_column(conn, table: str, column: str) -> bool:
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table});")
+    return column in {row[1] for row in cur.fetchall()}
+
+# ===== Helpers de recorrência leve (regras projetadas) =======================
+
+def _iter_days(start_dt: datetime, end_dt: datetime):
+    """Gera dias [start_dt, end_dt) passo 1 dia."""
+    cur = datetime(year=start_dt.year, month=start_dt.month, day=start_dt.day)
+    limite = datetime(year=end_dt.year, month=end_dt.month, day=end_dt.day)
+    while cur < limite:
+        yield cur
+        cur += timedelta(days=1)
+
+def _at_time(day: datetime, hhmm: str) -> datetime:
+    """Combina data day com 'HH:MM' para datetime."""
+    hh, mm = [int(x) for x in hhmm.split(":")]
+    return day.replace(hour=hh, minute=mm, second=0, microsecond=0)
+
+def _project_recurring_rows(
+    conn,
+    start_dt: datetime,
+    end_dt: datetime,
+    prof_nome: Optional[str],
+    prof_cpf: Optional[str],
+    dow_filter: Optional[Set[int]]
+) -> List[Dict[str, Any]]:
+    """
+    Busca regras em agendamentos_recorrentes e projeta para o intervalo dado.
+    Retorna lista de dicts no mesmo formato de agendamentos normais.
+    """
+    cur = conn.cursor()
+    params = []
+    sql = """
+        SELECT id, paciente, profissional, profissional_cpf,
+               dow_dom, hora_inicio, duracao_min, observacao, status,
+               dt_inicio, dt_fim
+          FROM agendamentos_recorrentes
+         WHERE status = 'ativo'
+           AND date(dt_inicio) <= date(?)
+           AND (dt_fim IS NULL OR date(dt_fim) >= date(?))
+    """
+    # dt_inicio <= (end-1)  e (dt_fim >= start)  → há interseção com a janela
+    params.extend([_yyyy_mm_dd(end_dt - timedelta(days=1)), _yyyy_mm_dd(start_dt)])
+
+    if prof_cpf:
+        sql += " AND TRIM(COALESCE(profissional_cpf,'')) = TRIM(?)"
+        params.append(prof_cpf)
+    elif prof_nome:
+        sql += " AND TRIM(UPPER(profissional)) = TRIM(UPPER(?))"
+        params.append(prof_nome)
+
+    cur.execute(sql, params)
+    rules = cur.fetchall()
+
+    out: List[Dict[str, Any]] = []
+    for r in rules:
+        # leitura tolerante a Row/tuple
+        try:
+            rid, paciente, prof, pc, dow, hhmm, dur, obs, st, dti, dtf = (
+                r["id"], r["paciente"], r["profissional"], r["profissional_cpf"],
+                int(r["dow_dom"]), r["hora_inicio"], int(r["duracao_min"]),
+                r["observacao"], r["status"], r["dt_inicio"], r["dt_fim"]
+            )
+        except Exception:
+            (rid, paciente, prof, pc, dow, hhmm, dur, obs, st, dti, dtf) = r
+            dow = int(dow); dur = int(dur)
+
+        # filtro dow (se solicitado)
+        if dow_filter is not None and dow not in dow_filter:
+            continue
+
+        # Interseção efetiva com janela
+        ini_lim = max(start_dt, datetime.strptime(dti, "%Y-%m-%d"))
+        fim_lim = end_dt
+        if dtf:
+            fim_lim = min(fim_lim, datetime.strptime(dtf, "%Y-%m-%d") + timedelta(days=1))
+
+        for day in _iter_days(ini_lim, fim_lim):
+            dow_dom = ((day.weekday() + 1) % 7)
+            if dow_dom != dow:
+                continue
+            ini = _at_time(day, hhmm)
+            fim = ini + timedelta(minutes=dur)
+            if not (start_dt <= ini < end_dt):
+                continue
+
+            out.append({
+                "id": f"R{rid}-{ini.strftime('%Y%m%d%H%M')}",  # id sintético p/ UI
+                "paciente": paciente,
+                "profissional": prof,
+                "profissional_cpf": pc,
+                "inicio": _fmt_iso(ini),
+                "fim": _fmt_iso(fim),
+                "observacao": obs,
+                "status": st,
+                "recorrente": True,
+                "serie_uid": f"R{rid}",
+                "dow_dom": dow,
+                "dia_semana": DOW_NOMES[dow],
+                "_virtual": True,
+            })
+    return out
+
+
+# =============================================================================
+# APIs auxiliares
+# =============================================================================
+
+@agenda_bp.get("/api/profissionais")
+def api_profissionais():
+    """
+    Retorna profissionais para selects. Prioriza usuarios com cpf válido.
+    - Filtra por roles comuns (PROFISSIONAL, MÉDICO, ENFERMEIRO, FISIOTERAPEUTA, TERAPEUTA, PSICÓLOGO...)
+    - Se vier vazio, faz fallback para todos com cpf.
+    - Se ainda vazio, fallback em DISTINCT do que existir na agenda.
+    """
+    ROLES_OK = (
+        "PROFISSIONAL","MEDICO","MÉDICO","ENFERMEIRO","FISIOTERAPEUTA",
+        "TERAPEUTA","PSICOLOGO","PSICÓLOGO","FONOAUDIOLOGO","FONOAUDIÓLOGO",
+        "ASSISTENTE SOCIAL","NUTRICIONISTA","ODONTOLOGO","ODONTÓLOGO"
+    )
+
+    try:
+        with conectar_db() as conn:
+            cur = conn.cursor()
+
+            # 1) Preferência: roles conhecidos + ativos + cpf válido
+            cur.execute(f"""
+                SELECT nome, cpf
+                  FROM usuarios
+                 WHERE TRIM(COALESCE(cpf,'')) <> ''
+                   AND UPPER(COALESCE(role,'')) IN ({",".join("?"*len(ROLES_OK))})
+                   AND COALESCE(is_active,1)=1
+                 ORDER BY nome;
+            """, tuple(ROLES_OK))
+            rows = cur.fetchall()
+
+            # 2) Fallback: todos com cpf válido e ativos
+            if not rows:
+                cur.execute("""
+                    SELECT nome, cpf
+                      FROM usuarios
+                     WHERE TRIM(COALESCE(cpf,'')) <> ''
+                       AND COALESCE(is_active,1)=1
+                     ORDER BY nome;
+                """)
+                rows = cur.fetchall()
+
+            # 3) Fallback final: extrair do que existe na agenda
+            if not rows:
+                cur.execute("""
+                    SELECT DISTINCT profissional AS nome, profissional_cpf AS cpf
+                      FROM agendamentos
+                     WHERE TRIM(COALESCE(profissional_cpf,'')) <> ''
+                     ORDER BY nome;
+                """)
+                rows = cur.fetchall()
+
+            def _row(r):
+                try:
+                    return {"nome": r["nome"], "cpf": r["cpf"]}
+                except Exception:
+                    return {"nome": r[0], "cpf": r[1]}
+
+            return jsonify([_row(r) for r in rows])
+
+    except Exception as e:
+        return jsonify({"error": "Falha ao listar profissionais", "detail": str(e)}), 500
+
+
+# =============================================================================
+# Página de agenda (UI)
+# =============================================================================
+
+@agenda_bp.route("/")
+def visualizar_agenda():
+    pacientes = []
+    profissionais = []
+    meunome = _safe_current_user_name()
+    current_user_cpf = None  # tente identificar o cpf do usuário logado (se for profissional)
+
+    with conectar_db() as conn:
+        cur = conn.cursor()
+
+        # Pacientes
+        try:
+            cur.execute("SELECT nome FROM pacientes ORDER BY nome;")
+            pacientes = _row_as_dict_list(cur.fetchall(), keys=("nome",))
+        except Exception:
+            pacientes = []
+
+        # Profissionais (nome + cpf) vindos de `usuarios`
+        try:
+            cur.execute("""
+                SELECT nome, cpf
+                  FROM usuarios
+                 WHERE TRIM(COALESCE(cpf,'')) <> ''
+                   AND COALESCE(is_active,1)=1
+                 ORDER BY nome;
+            """)
+            profissionais = _row_as_dict_list(cur.fetchall(), keys=("nome", "cpf"))
+        except Exception:
+            profissionais = []
+
+        # Tenta mapear o usuário logado para um cpf de profissional
+        try:
+            if meunome:
+                # por nome
+                cur.execute("""
+                    SELECT cpf
+                      FROM usuarios
+                     WHERE COALESCE(is_active,1)=1
+                       AND TRIM(UPPER(nome)) = TRIM(UPPER(?))
+                       AND TRIM(COALESCE(cpf,'')) <> ''
+                     LIMIT 1;
+                """, (meunome,))
+                r = cur.fetchone()
+                if r:
+                    current_user_cpf = r[0] if not hasattr(r, "__getitem__") else (r["cpf"] if "cpf" in r.keys() else r[0])
+                # por email (se meunome tiver @)
+                if not current_user_cpf and "@" in meunome:
+                    cur.execute("""
+                        SELECT cpf
+                          FROM usuarios
+                         WHERE COALESCE(is_active,1)=1
+                           AND TRIM(UPPER(email)) = TRIM(UPPER(?))
+                           AND TRIM(COALESCE(cpf,'')) <> ''
+                         LIMIT 1;
+                    """, (meunome,))
+                    r = cur.fetchone()
+                    if r:
+                        current_user_cpf = r[0] if not hasattr(r, "__getitem__") else (r["cpf"] if "cpf" in r.keys() else r[0])
+        except Exception:
+            current_user_cpf = None
+
+    return render_template(
+        "agenda.html",
+        pacientes=pacientes,                 # [{nome}]
+        profissionais=profissionais,         # [{nome, cpf}]
+        current_user_name=meunome,           # para UI "Meus horários"
+        current_user_cpf=current_user_cpf    # para pré-selecionar filtro/ select por CPF
+    )
+
+
+# =============================================================================
+# APIs principais
+# =============================================================================
+
+@agenda_bp.get("/api/agendamentos")
+def api_listar_agendamentos():
+    """
+    Lista agendamentos dentro de um intervalo [start, end) (YYYY-MM-DD).
+    Filtros:
+      - profissional_cpf (preferencial) ou profissional (nome)
+      - dow: lista de inteiros 0..6 (ex: dow=1,3,5) se coluna dow_dom existir
+    Retorno inclui:
+      - Agendamentos "fixos" (materializados)
+      - Projeções de regras recorrentes (virtuais), marcadas com "_virtual": True
+    """
+    try:
+        start = request.args.get("start")
+        end = request.args.get("end")
+        profissional = (request.args.get("profissional") or "").strip()    # compat: nome
+        profissional_cpf = (request.args.get("profissional_cpf") or "").strip()
+        dow_param = (request.args.get("dow") or "").strip()  # ex: "1" ou "1,3,5"
+
+        if not start or not end:
+            return jsonify({"error": "Parâmetros 'start' e 'end' são obrigatórios (YYYY-MM-DD)."}), 400
+
+        start_dt = datetime.strptime(start, "%Y-%m-%d")
+        end_dt = datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)
+
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(agendamentos);")
+            cols = {row[1] for row in cur.fetchall()}
+            has_dow = "dow_dom" in cols
+
+            sel_cols = ["id","paciente","profissional","inicio","fim","observacao","status","recorrente","serie_uid","profissional_cpf"]
+            if has_dow: sel_cols.append("dow_dom")
+
+            sql = f"""
+                SELECT {", ".join(sel_cols)}
+                  FROM agendamentos
+                 WHERE inicio >= ? AND inicio < ?
+            """
+            params = [_fmt_iso(start_dt), _fmt_iso(end_dt)]
+
+            if profissional_cpf:
+                sql += " AND profissional_cpf = ?"
+                params.append(profissional_cpf)
+            elif profissional:
+                sql += " AND profissional = ?"
+                params.append(profissional)
+
+            # Filtro por dow em agendamentos materializados
+            dows_list: List[int] = []
+            if has_dow and dow_param:
+                try:
+                    dows_list = [int(x) for x in dow_param.split(",") if x.strip().isdigit()]
+                    if dows_list:
+                        placeholders = ",".join("?" for _ in dows_list)
+                        sql += f" AND dow_dom IN ({placeholders})"
+                        params.extend(dows_list)
+                except Exception:
+                    dows_list = []
+
+            sql += " ORDER BY inicio ASC;"
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+            out = []
+            for r in rows:
+                d = _row_to_dict(r)
+                if "profissional_cpf" not in d:
+                    try: d["profissional_cpf"] = r["profissional_cpf"]
+                    except Exception: d["profissional_cpf"] = None
+                out.append(d)
+
+            # ===== Projeção de recorrentes leves (regras) =====
+            dow_filter = set(dows_list) if dows_list else None
+            virt = _project_recurring_rows(
+                conn,
+                start_dt,
+                end_dt,
+                profissional if not profissional_cpf else None,
+                profissional_cpf or None,
+                dow_filter
+            )
+            out.extend(virt)
+
+            # Ordena tudo por inicio (já que veio de duas fontes)
+            out.sort(key=lambda x: x.get("inicio") or "")
+
+            return jsonify(out)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Falha ao listar agendamentos", "detail": str(e)}), 500
+
+
+@agenda_bp.post("/api/agendamentos")
+def api_criar_agendamento():
+    """
+    Cria agendamento único, recorrente materializado (semanal) ou recorrente leve (regra).
+    Campos (JSON):
+      - paciente (str, obrigatório)
+      - profissional_cpf (str)  ← preferencial
+      - profissional (str)      ← compat, se não houver CPF
+      - inicio (YYYY-MM-DDTHH:MM ou 'YYYY-MM-DD HH:MM', obrigatório)
+      - duracao_min (int, default 30)
+      - tipo: 'unico' (default) | 'recorrente' | 'recorrente_indefinido'
+      - quantidadeSessoes (int, obrigatório se tipo='recorrente' e não for pacienteRecorrente)
+      - pacienteRecorrente (bool) → no tipo 'recorrente', cria só a primeira e marca série
+      - dt_fim (str|None) → opcional no 'recorrente_indefinido' (vigência)
+      - observacao (str|None)
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        paciente = (data.get("paciente") or "").strip()
+        prof_cpf = (data.get("profissional_cpf") or "").strip()     # preferido
+        prof_nome_raw = (data.get("profissional") or "").strip()    # compat
+        inicio_raw = (data.get("inicio") or "").strip()
+        duracao = int(data.get("duracao_min") or 30)
+        tipo = (data.get("tipo") or "unico").lower()
+        qtd = data.get("quantidadeSessoes")
+        paciente_rec = bool(data.get("pacienteRecorrente") or False)
+        obs = data.get("observacao") or None
+
+        if not paciente or not inicio_raw:
+            return jsonify({"error": "Campos obrigatórios: paciente, inicio."}), 400
+
+        try:
+            inicio_dt = _parse_iso_dt(inicio_raw)
+        except ValueError:
+            return jsonify({"error": "Formato de 'inicio' inválido."}), 400
+
+        fim_dt = inicio_dt + timedelta(minutes=duracao)
+        # calcula DOW (0=Dom..6=Sáb)
+        dow_dom_val = ((inicio_dt.weekday() + 1) % 7)
+
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            # resolve profissional
+            prof_nome = None
+            if prof_cpf:
+                u = _usuario_by_cpf(conn, prof_cpf)
+                if not u:
+                    return jsonify({"error":"Profissional (CPF) não encontrado ou inativo."}), 400
+                prof_nome = u["nome"]
+            else:
+                if not prof_nome_raw:
+                    return jsonify({"error":"Informe profissional_cpf ou profissional (nome)."}), 400
+                prof_nome = prof_nome_raw
+                prof_cpf = None
+
+            has_dow = _has_column(conn, "agendamentos", "dow_dom")
+
+            # -----------------------------------------
+            # NOVO: tipo recorrente_indefinido (guarda regra)
+            # -----------------------------------------
+            if tipo == "recorrente_indefinido":
+                hora_inicio = inicio_dt.strftime("%H:%M")
+                dur = int(duracao)
+                dt_inicio = _yyyy_mm_dd(inicio_dt)
+                dt_fim = (data.get("dt_fim") or None)
+                # valida dt_fim se vier
+                if dt_fim:
+                    try:
+                        datetime.strptime(dt_fim, "%Y-%m-%d")
+                    except Exception:
+                        return jsonify({"error": "dt_fim inválido (use YYYY-MM-DD)"}), 400
+
+                cur.execute("""
+                    INSERT INTO agendamentos_recorrentes
+                        (paciente, profissional, profissional_cpf, dow_dom, hora_inicio, duracao_min, observacao, status, dt_inicio, dt_fim)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'ativo', ?, ?);
+                """, (paciente, prof_nome, prof_cpf, dow_dom_val, hora_inicio, dur, obs, dt_inicio, dt_fim))
+                conn.commit()
+                rid = cur.lastrowid
+                return jsonify({
+                    "ok": True,
+                    "regra": {
+                        "id": rid,
+                        "paciente": paciente,
+                        "profissional": prof_nome,
+                        "profissional_cpf": prof_cpf,
+                        "dow_dom": dow_dom_val,
+                        "dia_semana": DOW_NOMES[dow_dom_val],
+                        "hora_inicio": hora_inicio,
+                        "duracao_min": dur,
+                        "dt_inicio": dt_inicio,
+                        "dt_fim": dt_fim
+                    }
+                }), 201
+
+            # -----------------------------------------
+            # tipo 'unico' (materializado)
+            # -----------------------------------------
+            if tipo == "unico":
+                if has_dow:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid, dow_dom)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 0, NULL, ?);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(inicio_dt), _fmt_iso(fim_dt), obs, dow_dom_val),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 0, NULL);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(inicio_dt), _fmt_iso(fim_dt), obs),
+                    )
+                conn.commit()
+                cur.execute(f"""SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid,
+                                       profissional_cpf{', dow_dom' if has_dow else ''}
+                                 FROM agendamentos WHERE id = last_insert_rowid();""")
+                r = cur.fetchone()
+                return jsonify({"ok": True, "criados": [_row_to_dict(r)]}), 201
+
+            # -----------------------------------------
+            # tipo 'recorrente' (materializado semanal)
+            # -----------------------------------------
+            serie = str(uuid.uuid4())
+            if paciente_rec:
+                if has_dow:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid, dow_dom)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 1, ?, ?);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(inicio_dt), _fmt_iso(fim_dt), obs, serie, dow_dom_val),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 1, ?);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(inicio_dt), _fmt_iso(fim_dt), obs, serie),
+                    )
+                conn.commit()
+                cur.execute(f"""SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid,
+                                       profissional_cpf{', dow_dom' if has_dow else ''}
+                                 FROM agendamentos WHERE id = last_insert_rowid();""")
+                d = cur.fetchone()
+                return jsonify({"ok": True, "serie_uid": serie, "criados": [_row_to_dict(d)]}), 201
+
+            # recorrente com quantidade definida (semanal)
+            try:
+                qtd = int(qtd); assert qtd >= 1
+            except Exception:
+                return jsonify({"error": "Informe 'quantidadeSessoes' >= 1 para recorrência."}), 400
+
+            base = inicio_dt
+            for i in range(qtd):
+                ini_i = base + timedelta(weeks=i)
+                fim_i = ini_i + timedelta(minutes=duracao)
+                dow_i = ((ini_i.weekday() + 1) % 7)
+                if has_dow:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid, dow_dom)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 1, ?, ?);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(ini_i), _fmt_iso(fim_i), obs, serie, dow_i),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO agendamentos
+                           (paciente, profissional, profissional_cpf, inicio, fim, observacao, status, recorrente, serie_uid)
+                         VALUES (?, ?, ?, ?, ?, ?, 'ativo', 1, ?);""",
+                        (paciente, prof_nome, prof_cpf, _fmt_iso(ini_i), _fmt_iso(fim_i), obs, serie),
+                    )
+            conn.commit()
+
+            cur.execute(f"""SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid,
+                                   profissional_cpf{', dow_dom' if has_dow else ''}
+                             FROM agendamentos
+                            WHERE serie_uid = ?
+                         ORDER BY inicio ASC;""", (serie,))
+            rows = cur.fetchall()
+            out = [_row_to_dict(r) for r in rows]
+            return jsonify({"ok": True, "serie_uid": serie, "criados": out}), 201
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Falha ao criar agendamento", "detail": str(e)}), 500
+
+
+@agenda_bp.put("/api/agendamentos/<int:ag_id>")
+def api_editar_agendamento(ag_id: int):
+    """
+    Edita campos do agendamento. Se mudar 'inicio' ou 'duracao_min', recalcula 'fim' e 'dow_dom' (se existir).
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+
+        campos, valores = [], []
+
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM agendamentos WHERE id = ?;", (ag_id,))
+            row = cur.fetchone()
+            if not row:
+                abort(404)
+
+            # troca profissional por CPF (preferível)
+            prof_cpf = (data.get("profissional_cpf") or "").strip()
+            if prof_cpf:
+                u = _usuario_by_cpf(conn, prof_cpf)
+                if not u:
+                    return jsonify({"error":"Profissional (CPF) não encontrado."}), 400
+                campos += ["profissional = ?", "profissional_cpf = ?"]
+                valores += [u["nome"], u["cpf"]]
+            elif "profissional" in data and data["profissional"]:
+                campos.append("profissional = ?"); valores.append(data["profissional"].strip())
+
+            if "paciente" in data and data["paciente"]:
+                campos.append("paciente = ?"); valores.append(data["paciente"].strip())
+            if "observacao" in data:
+                campos.append("observacao = ?"); valores.append((data["observacao"] or None))
+            if "status" in data and data["status"]:
+                campos.append("status = ?"); valores.append(data["status"])
+
+            # horário
+            new_inicio = None
+            if "inicio" in data and data["inicio"]:
+                try:
+                    new_inicio = _parse_iso_dt(data["inicio"].strip())
+                except ValueError:
+                    return jsonify({"error": "Formato de 'inicio' inválido."}), 400
+
+            duracao_min = data.get("duracao_min")
+            if new_inicio or duracao_min:
+                # valores atuais
+                try:
+                    atual_inicio = _parse_iso_dt(row["inicio"])
+                    atual_fim = _parse_iso_dt(row["fim"])
+                except Exception:
+                    a_ini = row[3]; a_fim = row[4]
+                    atual_inicio = _parse_iso_dt(a_ini)
+                    atual_fim = _parse_iso_dt(a_fim)
+
+                if not new_inicio:
+                    new_inicio = atual_inicio
+                dur = int(duracao_min) if duracao_min else int((atual_fim - atual_inicio).total_seconds() // 60)
+                new_fim = new_inicio + timedelta(minutes=dur)
+                campos += ["inicio = ?", "fim = ?"]
+                valores += [_fmt_iso(new_inicio), _fmt_iso(new_fim)]
+
+                # atualiza dow_dom se a coluna existir
+                if _has_column(conn, "agendamentos", "dow_dom"):
+                    dow_dom = ((new_inicio.weekday() + 1) % 7)
+                    campos.append("dow_dom = ?"); valores.append(dow_dom)
+
+            if not campos:
+                return jsonify({"ok": True, "msg": "Nada para atualizar."})
+
+            sql = f"UPDATE agendamentos SET {', '.join(campos)} WHERE id = ?;"
+            valores.append(ag_id)
+            cur.execute(sql, valores)
+            conn.commit()
+
+            has_dow = _has_column(conn, "agendamentos", "dow_dom")
+            cur.execute(f"""SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid,
+                                   profissional_cpf{', dow_dom' if has_dow else ''}
+                             FROM agendamentos WHERE id = ?;""", (ag_id,))
+            r = cur.fetchone()
+            return jsonify(_row_to_dict(r))
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Falha ao editar agendamento", "detail": str(e)}), 500
+
+
+@agenda_bp.delete("/api/agendamentos/<int:ag_id>")
+def api_excluir_agendamento(ag_id: int):
+    try:
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM agendamentos WHERE id = ?;", (ag_id,))
+            conn.commit()
+        return jsonify({"ok": True, "deleted_id": ag_id})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Falha ao excluir agendamento", "detail": str(e)}), 500
+
+
+@agenda_bp.delete("/api/series/<serie_uid>")
+def api_excluir_serie(serie_uid: str):
+    """Exclui todos os agendamentos de uma série recorrente (materializados)."""
+    try:
+        if not serie_uid or len(serie_uid) < 8:
+            return jsonify({"error": "serie_uid inválido."}), 400
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM agendamentos WHERE serie_uid = ?;", (serie_uid,))
+            conn.commit()
+        return jsonify({"ok": True, "deleted_serie": serie_uid})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": "Falha ao excluir série", "detail": str(e)}), 500
+
+
+@agenda_bp.get("/api/agendamentos_slot")
+def api_agendamentos_slot():
+    """
+    Lista agendamentos entre [slot, slot+30min), com filtro de profissional por CPF (preferencial) ou nome.
+    Inclui também ocorrências VIRTUAIS das regras recorrentes (projetadas) naquele slot.
+    """
+    slot_raw = (request.args.get("slot") or "").strip()
+    prof = (request.args.get("profissional") or "").strip()          # compat nome
+    prof_cpf = (request.args.get("profissional_cpf") or "").strip()  # novo
+
+    if not slot_raw:
+        return jsonify({"error": "Parâmetro 'slot' é obrigatório (YYYY-MM-DDTHH:MM)."}), 400
+
+    try:
+        slot_dt = _parse_slot_iso(slot_raw)
+    except Exception:
+        return jsonify({"error": "Formato inválido para 'slot'."}), 400
+
+    next_dt = slot_dt + timedelta(minutes=30)
+    params = [slot_dt.strftime("%Y-%m-%d %H:%M:%S"), next_dt.strftime("%Y-%m-%d %H:%M:%S")]
+    sql = """
+        SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid,
+               profissional_cpf, dow_dom
+          FROM agendamentos
+         WHERE inicio >= ? AND inicio < ?
+    """
+    if prof_cpf:
+        sql += " AND profissional_cpf = ?"
+        params.append(prof_cpf)
+    elif prof and prof.upper() != "TODOS":
+        sql += " AND profissional = ?"
+        params.append(prof)
+
+    sql += " ORDER BY profissional ASC, inicio ASC;"
+
+    items: List[Dict[str, Any]] = []
+    with conectar_db() as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        items.extend(_row_to_dict(r) for r in rows)
+
+        # Projetar regras do período [slot, slot+30)
+        virt = _project_recurring_rows(conn, slot_dt, next_dt, prof if not prof_cpf else None, prof_cpf or None, None)
+        items.extend(virt)
+
+    # ordena por profissional, inicio
+    items.sort(key=lambda d: ((d.get("profissional") or ""), (d.get("inicio") or "")))
+    return jsonify(items)
+
+
+@agenda_bp.get("/api/minha_semana")
+def api_minha_semana():
+    """
+    Retorna agendamentos (seg..dom) do usuário logado (por nome).
+    Parâmetros:
+      &ref=YYYY-MM-DD (opcional; default hoje)
+    """
+    meunome = _safe_current_user_name()
+    if not meunome:
+        return jsonify({"error": "Sem usuário logado."}), 401
+
+    ref_raw = request.args.get("ref")
+    if ref_raw:
+        try:
+            ref = datetime.strptime(ref_raw, "%Y-%m-%d")
+        except Exception:
+            ref = datetime.now()
+    else:
+        ref = datetime.now()
+
+    weekday = ref.weekday()  # 0=segunda
+    seg = ref - timedelta(days=weekday)
+    dom = seg + timedelta(days=7)  # exclusivo
+
+    with conectar_db() as conn:
+        cur = conn.cursor()
+        has_dow = _has_column(conn, "agendamentos", "dow_dom")
+        cur.execute(f"""
+            SELECT id, paciente, profissional, inicio, fim, observacao, status, recorrente, serie_uid
+                   {', dow_dom' if has_dow else ''}
+              FROM agendamentos
+             WHERE profissional = ?
+               AND inicio >= ?
+               AND inicio < ?
+             ORDER BY inicio ASC;
+        """, (meunome, _fmt_iso(seg.replace(hour=0, minute=0, second=0)),
+              _fmt_iso(dom.replace(hour=0, minute=0, second=0))))
+        rows = cur.fetchall()
+        items = [_row_to_dict(r) for r in rows]
+
+        # Também projeta recorrentes leves do profissional
+        virt = _project_recurring_rows(conn, seg, dom, meunome, None, None)
+        items.extend(virt)
+
+    # ordena
+    items.sort(key=lambda x: x.get("inicio") or "")
+    return jsonify({
+        "profissional": meunome,
+        "semana_inicio": _yyyy_mm_dd(seg),
+        "semana_fim_exclusivo": _yyyy_mm_dd(dom),
+        "items": items
+    })
+
+
+# =============================================================================
+# APIs para gerenciar regras recorrentes (opcionais)
+# =============================================================================
+
+@agenda_bp.get("/api/recorrentes")
+def api_listar_recorrentes():
+    with conectar_db() as conn:
+        cur = conn.cursor()
+        cur.execute("""SELECT id, paciente, profissional, profissional_cpf, dow_dom, hora_inicio, duracao_min,
+                              observacao, status, dt_inicio, dt_fim
+                       FROM agendamentos_recorrentes
+                       ORDER BY profissional, dow_dom, hora_inicio;""")
+        rows = cur.fetchall()
+        out = []
+        for r in rows:
+            try:
+                d = dict(r)
+            except Exception:
+                (id_, pac, prof, pc, dow, hhmm, dur, obs, st, dti, dtf) = r
+                d = {"id":id_, "paciente":pac, "profissional":prof, "profissional_cpf":pc, "dow_dom":dow,
+                     "hora_inicio":hhmm, "duracao_min":dur, "observacao":obs, "status":st, "dt_inicio":dti, "dt_fim":dtf}
+            d["dia_semana"] = DOW_NOMES[int(d["dow_dom"])]
+            out.append(d)
+    return jsonify(out)
+
+@agenda_bp.delete("/api/recorrentes/<int:rid>")
+def api_excluir_regra(rid: int):
+    with conectar_db() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM agendamentos_recorrentes WHERE id = ?;", (rid,))
+        conn.commit()
+    return jsonify({"ok": True, "deleted_regra": rid})
+
+
+
+templeste html
+
+{% extends "layout.html" %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('agenda.static', filename='css/agenda.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="page-agenda">
+
+  <!-- Toolbar -->
+<header class="agenda-header">
+  <label>
+    <span>Semana de</span>
+    <input id="ag-data" type="date">
+  </label>
+
+  <label>
+    <span>Profissional</span>
+    <select id="ag-prof">
+      <option value="TODOS">Todos</option>
+      {% for p in profissionais %}
+        <option>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <!-- Toggle simples: ON filtra pelo usuário; OFF mostra todos -->
+  <label class="switch-inline" data-meu-nome="{{ current_user_name or '' }}">
+    <input type="checkbox" id="meus-only" aria-label="Filtrar meus horários"
+          {% if not current_user_name %}disabled{% endif %}>
+    <span class="switch-slider" aria-hidden="true"></span>
+    <span class="switch-label">Meus horários</span>
+  </label>
+
+  <button id="btn-hoje" class="btn sec">Hoje</button>
+  <button id="btn-prev" class="btn icon">‹</button>
+  <button id="btn-next" class="btn icon">›</button>
+  <button id="btn-novo" class="btn pri">+ Novo</button>
+</header>
+
+
+  <!-- Grade -->
+  <section class="agenda-container">
+    <div class="ag-head" id="ag-head"></div>
+    <div class="ag-grid" id="ag-grid"></div>
+  </section>
+
+</main>
+
+{% include "agenda/_modal_slot.html" %}
+{% include "agenda/_modal_agendamento.html" %}
+
+<datalist id="listaPacientes">
+  {% for paciente in pacientes %}
+    <option value="{{ paciente.nome }}">
+  {% endfor %}
+</datalist>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('agenda.static', filename='js/agenda.js') }}"></script>
+{% endblock %}
+
+js java scripts
+
+// agenda/static/js/agenda.js
+// =======================================================
+// Agenda (SQLite) — Front integrado ao backend
+// Rotas usadas (Blueprint 'agenda'):
+//   GET    /agenda/api/agendamentos?start=YYYY-MM-DD&end=YYYY-MM-DD[&profissional=...]
+//   GET    /agenda/api/agendamentos_slot?slot=YYYY-MM-DDTHH:MM[&profissional=...]
+//   GET    /agenda/api/minha_semana (opcional; usamos só para detectar nome do user via HTML)
+//   POST   /agenda/api/agendamentos
+//   PUT    /agenda/api/agendamentos/:id
+//   DELETE /agenda/api/agendamentos/:id
+//   DELETE /agenda/api/series/:serie_uid
+// =======================================================
+
+(function () {
+  // ---------- Helpers ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const pad = (n) => (n < 10 ? "0" + n : "" + n);
+
+  const H_INI = 7;   // 07:00
+  const H_FIM = 22;  // 22:00
+
+  const ISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  const fmtBR = (date) =>
+    date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const fmtWeekday = (date) =>
+    date.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+
+  const startOfWeek = (ref) => {
+    const d = new Date(ref);
+    const wd = (d.getDay() + 6) % 7; // 0 = segunda
+    d.setDate(d.getDate() - wd);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  // ---------- DOM ----------
+  const elDate = $("#ag-data");      // toolbar (Semana de)
+  const elProf = $("#ag-prof");
+  const elHead = $("#ag-head");
+  const elGrid = $("#ag-grid");
+  const btnHoje = $("#btn-hoje");
+  const btnPrev = $("#btn-prev");
+  const btnNext = $("#btn-next");
+  const btnNovo = $("#btn-novo");
+  const btnMeus = $("#btn-meus"); // opcional
+  const meuNome = btnMeus?.dataset?.meuNome || "";
+
+  // Modal de SLOT (lista do horário) — usamos #dlg-list para a lista
+  const dlgSlot   = $("#dlg-slot");
+  const dlgTitle  = $("#dlg-title");
+  const dlgListBox = $("#dlg-list"); // NÃO apagar o quick-add (#qa)
+  if (dlgSlot) {
+    $$("#dlg-slot [data-close]").forEach((b) => b.addEventListener("click", () => dlgSlot.close()));
+  }
+
+  // Modal de CRIAR/EDITAR (partial _modal_agendamento.html)
+  const dlgAg = $("#dlg-ag");
+  const agForm = $("#ag-form");
+  const agTitle = $("#ag-title");
+  // Campos
+  const fId = $("#ag-id");
+  const fPaciente = $("#ag-paciente");
+  const fProf = $("#ag-profissional");
+  const fObserv = $("#ag-observacao");
+  const btnSalvar = $("#ag-salvar");
+  const btnSalvarEd = $("#ag-salvar-edicao");
+  const btnExcluir = $("#ag-excluir");
+  const btnFecharAg = $("#ag-fechar");
+  if (btnFecharAg) btnFecharAg.addEventListener("click", () => dlgAg.close());
+
+  // Campos de DIA/HORA *dentro do modal* (evita conflito com a toolbar #ag-data)
+  const fDia  = dlgAg ? dlgAg.querySelector('#ag-data') : null;   // (ideal renomear no HTML para #ag-dia)
+  const fHora = dlgAg ? dlgAg.querySelector('#ag-hora') : null;
+
+  // Radios do tipo (name="ag-tipo" => unico|recorrente|indefinido)
+  const fTipoRadios = dlgAg ? Array.from(dlgAg.querySelectorAll('input[name="ag-tipo"]')) : [];
+  // Qtd sessões (apenas se tipo = recorrente)
+  const fQtdSessoes = dlgAg ? dlgAg.querySelector('#ag-qtd-sessoes') : null;
+
+  // ---------- Estado ----------
+  let viewDate = new Date(); // data de referência para render da semana
+  let fetched = [];          // cache de agendamentos buscados na semana
+  const eventosById = new Map();
+
+  // ---------- Sanitiza diálogos ao exibir/voltar ----------
+  function closeAllDialogsOnShow() {
+    const ids = ["dlg-slot", "dlg-ag"];
+    ids.forEach((id) => {
+      const d = document.getElementById(id);
+      if (!d) return;
+      d.removeAttribute("open");
+      try { d.close(); } catch (_) {}
+    });
+  }
+  document.addEventListener("DOMContentLoaded", closeAllDialogsOnShow);
+  window.addEventListener("pageshow", closeAllDialogsOnShow);
+
+  // ---------- Init ----------
+  function init() {
+    elDate.value = ISODate(viewDate);
+    bindUI();
+    renderWeek();
+    loadWeek();
+  }
+
+  // ---------- Bind UI ----------
+  function bindUI() {
+    btnHoje?.addEventListener("click", () => {
+      viewDate = new Date();
+      elDate.value = ISODate(viewDate);
+      renderWeek();
+      loadWeek();
+    });
+    btnPrev?.addEventListener("click", () => {
+      viewDate.setDate(viewDate.getDate() - 7);
+      elDate.value = ISODate(viewDate);
+      renderWeek();
+      loadWeek();
+    });
+    btnNext?.addEventListener("click", () => {
+      viewDate.setDate(viewDate.getDate() + 7);
+      elDate.value = ISODate(viewDate);
+      renderWeek();
+      loadWeek();
+    });
+
+    elDate?.addEventListener("change", () => {
+      // Ancoramos no meio‑dia para evitar edge TZ
+      viewDate = new Date(elDate.value + "T12:00:00");
+      renderWeek();
+      loadWeek();
+    });
+
+    elProf?.addEventListener("change", () => {
+      renderGrid(); // usa cache
+    });
+
+    btnMeus?.addEventListener("click", () => {
+      if (meuNome) {
+        elProf.value = meuNome;
+        renderGrid();
+      }
+    });
+
+    btnNovo?.addEventListener("click", () => {
+      openNewDialog();
+    });
+
+    // submit/crud
+    btnSalvar?.addEventListener("click", onCreate);
+    btnSalvarEd?.addEventListener("click", onUpdate);
+    btnExcluir?.addEventListener("click", onDelete);
+  }
+
+  // ---------- Backend ----------
+  async function fetchWeek() {
+    const seg = startOfWeek(viewDate);
+    const dom = new Date(seg);
+    dom.setDate(seg.getDate() + 7);
+
+    const start = ISODate(seg);
+    const end = ISODate(dom);
+
+    const qs = new URLSearchParams({ start, end });
+    const prof = elProf.value;
+    if (prof && prof !== "TODOS") qs.set("profissional", prof);
+
+    const url = `/agenda/api/agendamentos?${qs.toString()}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      console.error("Falha ao carregar agenda:", await r.text());
+      alert("Não foi possível carregar a agenda.");
+      return [];
+    }
+    const data = await r.json();
+    eventosById.clear();
+    data.forEach((ev) => eventosById.set(ev.id, ev));
+    return data;
+  }
+
+  async function fetchSlot(slotYYYYMMDDTHHMM, profOrTodos) {
+    const qs = new URLSearchParams({ slot: slotYYYYMMDDTHHMM });
+    if (profOrTodos && profOrTodos !== "TODOS") qs.set("profissional", profOrTodos);
+    const r = await fetch(`/agenda/api/agendamentos_slot?${qs.toString()}`);
+    if (!r.ok) return [];
+    return r.json();
+  }
+
+  async function apiCreate(payload) {
+    const r = await fetch(`/agenda/api/agendamentos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || "Erro ao criar agendamento");
+    return data;
+  }
+  async function apiUpdate(id, payload) {
+    const r = await fetch(`/agenda/api/agendamentos/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || "Erro ao editar agendamento");
+    return data;
+  }
+  async function apiDelete(id) {
+    const r = await fetch(`/agenda/api/agendamentos/${id}`, { method: "DELETE" });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || "Erro ao excluir agendamento");
+    return data;
+  }
+  async function apiDeleteSerie(serieUid) {
+    const r = await fetch(`/agenda/api/series/${encodeURIComponent(serieUid)}`, { method: "DELETE" });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || "Erro ao excluir série");
+    return data;
+  }
+
+  // ---------- Render Week skeleton ----------
+  function renderWeek() {
+    const seg = startOfWeek(viewDate);
+
+    // Cabeçalho (1ª coluna = "Horário")
+    elHead.innerHTML = "";
+    const headFrag = document.createDocumentFragment();
+
+    const colHours = document.createElement("div");
+    colHours.className = "ag-col";
+    colHours.innerHTML = `<strong>Horário</strong><span>30 min</span>`;
+    headFrag.appendChild(colHours);
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(seg);
+      d.setDate(seg.getDate() + i);
+      const col = document.createElement("div");
+      col.className = "ag-col";
+      col.dataset.date = ISODate(d);
+      col.innerHTML = `<strong>${fmtWeekday(d).toUpperCase()}</strong><span>${fmtBR(d)}</span>`;
+      headFrag.appendChild(col);
+    }
+    elHead.appendChild(headFrag);
+
+    // --------- GRADE (gera UMA ag-hour por linha + 7 ag-cell) ---------
+    elGrid.innerHTML = "";
+
+    for (let h = H_INI; h < H_FIM; h++) {
+      for (let m of [0, 30]) {
+        const horaStr = `${pad(h)}:${pad(m)}`;
+
+        // 1) coluna de horário (esquerda) — UM item por linha
+        const hourCell = document.createElement("div");
+        hourCell.className = "ag-hour";
+        hourCell.textContent = horaStr;
+        elGrid.appendChild(hourCell);
+
+        // 2) 7 células de dia para esse horário
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(seg);
+          d.setDate(seg.getDate() + i);
+          const diaISO = ISODate(d);
+
+          const cell = document.createElement("div");
+          cell.className = "ag-cell";
+          cell.dataset.slot = `${diaISO} ${horaStr}:00`;
+          cell.innerHTML = `<div class="stack"></div>`;
+          cell.addEventListener("click", onCellClick);
+
+          elGrid.appendChild(cell);
+        }
+      }
+    }
+  }
+
+  // ---------- Load + paint ----------
+  async function loadWeek() {
+    fetched = await fetchWeek();
+    renderGrid();
+  }
+
+  function renderGrid() {
+    // limpa
+    $$(".ag-cell .stack").forEach((s) => (s.innerHTML = ""));
+
+    const todos = elProf.value === "TODOS";
+
+    // Agrupa por slot "YYYY-MM-DD HH:MM"
+    const mapBySlot = new Map();
+    for (const it of fetched) {
+      const slot = (it.inicio || "").slice(0, 16).replace("T", " ");
+      if (!mapBySlot.has(slot)) mapBySlot.set(slot, []);
+      mapBySlot.get(slot).push(it);
+    }
+
+    // preenche células
+    $$(".ag-cell").forEach((cell) => {
+      const slot = cell.dataset.slot.slice(0, 16);
+      const items = mapBySlot.get(slot) || [];
+      if (!items.length) return;
+
+      const stack = $(".stack", cell);
+
+      if (todos) {
+        const b = document.createElement("span");
+        b.className = "badge secondary";
+        b.textContent = `${items.length} agend.`;
+        stack.appendChild(b);
+      } else {
+        const show = Math.min(2, items.length);
+        for (let i = 0; i < show; i++) {
+          const it = items[i];
+          const b = document.createElement("span");
+          b.className = "badge";
+          const nome = it.paciente || "Paciente";
+          b.title = `${nome} • ${it.profissional || ""}`;
+          b.textContent = nome;
+          stack.appendChild(b);
+        }
+        if (items.length > 2) {
+          const more = document.createElement("span");
+          more.className = "badge overflow";
+          more.textContent = `+${items.length - 2}`;
+          stack.appendChild(more);
+        }
+      }
+    });
+  }
+
+  // ---------- Slot modal ----------
+  async function onCellClick() {
+    const slot = this.dataset.slot.slice(0, 16).replace(" ", "T"); // YYYY-MM-DDTHH:MM
+    const prof = elProf.value || "TODOS";
+
+    const list = await fetchSlot(slot, prof);
+
+    if (!dlgSlot) {
+      openNewDialogFromSlot(slot);
+      return;
+    }
+
+    dlgTitle.textContent = `Horário ${slot.replace("T", " ")} · ${prof === "TODOS" ? "Todos os profissionais" : prof}`;
+
+    // limpa SOMENTE a área da lista
+    if (dlgListBox) dlgListBox.innerHTML = "";
+
+    if (!list.length) {
+      if (dlgListBox) dlgListBox.innerHTML = `<p class="muted">Sem agendamentos neste horário.</p>`;
+    } else {
+      for (const it of list) {
+        const el = document.createElement("div");
+        el.className = "ag-item";
+        el.innerHTML = `
+          <div class="left">
+            <strong>${it.paciente || "Paciente"}</strong>
+            <small>${it.profissional || ""}</small>
+            ${it.observacao ? `<small>${it.observacao}</small>` : ""}
+          </div>
+          <div class="right">
+            <div>${(it.inicio || "").slice(11,16)}–${(it.fim || "").slice(11,16)}</div>
+            <div class="muted">${it.status || ""}</div>
+            <div>
+              <button class="btn sec btn-editar" data-id="${it.id}">Editar</button>
+            </div>
+          </div>
+        `;
+        dlgListBox?.appendChild(el);
+      }
+
+      // bind de editar (somente dentro da lista)
+      $$(".btn-editar", dlgListBox).forEach((b) =>
+        b.addEventListener("click", (ev) => {
+          const id = parseInt(ev.currentTarget.dataset.id, 10);
+          const item = eventosById.get(id) || list.find((x) => x.id === id);
+          dlgSlot.close();
+          if (item) openEditDialog(item);
+        })
+      );
+    }
+
+    // evita reabrir por cima se já estiver aberto
+    if (dlgSlot.open) dlgSlot.close();
+    dlgSlot.showModal();
+  }
+
+  // ---------- Tipo + Slot helpers ----------
+  function getAgTipo() {
+    const r = fTipoRadios.find((x) => x.checked);
+    return r ? r.value : "unico"; // 'unico' | 'recorrente' | 'indefinido'
+  }
+
+  function buildSlotFromModalOrDefault() {
+    // Preferir Dia/Hora do modal se existirem
+    const dia = (fDia?.value || "").trim(); // 'YYYY-MM-DD'
+    const hora = (fHora?.value || "").trim(); // 'HH:MM'
+    if (dia && hora) return `${dia}T${hora}`;
+
+    // Caso venha de célula (já definido em dlgAg.dataset.slot)
+    const slotAttr = dlgAg?.getAttribute("data-slot"); // 'YYYY-MM-DDTHH:MM'
+    if (slotAttr) return slotAttr;
+
+    // Fallback: segunda da semana às 09:00
+    const seg = startOfWeek(viewDate);
+    return `${ISODate(seg)}T09:00`;
+  }
+
+  // ---------- Create / Edit dialogs ----------
+  function openNewDialog() {
+    if (!dlgAg) return;
+    agTitle.textContent = "Novo Agendamento";
+    agForm?.reset?.();
+
+    fId.value = "";
+
+    // tipo default = unico
+    if (fTipoRadios.length) fTipoRadios.forEach((r) => (r.checked = r.value === "unico"));
+    if (fQtdSessoes) fQtdSessoes.value = "";
+    if (fObserv) fObserv.value = "";
+
+    // limpa dia/hora
+    if (fDia) fDia.value = "";
+    if (fHora) fHora.value = "";
+
+    btnSalvar?.classList.remove("hidden");
+    btnSalvarEd?.classList.add("hidden");
+    btnExcluir?.classList.add("hidden");
+
+    dlgAg.removeAttribute("data-slot");
+    dlgAg.showModal();
+  }
+
+  function openNewDialogFromSlot(slotYYYYMMDDTHHMM) {
+    openNewDialog();
+    // Pré-preenche dia/hora se os campos existirem
+    const [d, h] = slotYYYYMMDDTHHMM.split("T");
+    if (fDia) fDia.value = d || "";
+    if (fHora) fHora.value = h || "";
+    dlgAg.setAttribute("data-slot", slotYYYYMMDDTHHMM);
+  }
+
+  function openEditDialog(item) {
+    if (!dlgAg) return;
+    agTitle.textContent = "Editar Agendamento";
+    agForm?.reset?.();
+
+    fId.value = item.id;
+    if (fPaciente) fPaciente.value = item.paciente || "";
+    if (fProf) fProf.value = item.profissional || "";
+    if (fObserv) fObserv.value = item.observacao || "";
+
+    // Dia/Hora no modal (se existir no HTML)
+    const dt = (item.inicio || "").replace("T", " ").slice(0, 16); // 'YYYY-MM-DD HH:MM'
+    if (dt && fDia && fHora) {
+      const [dPart, tPart] = dt.split(" ");
+      fDia.value = dPart || "";
+      fHora.value = (tPart || "").slice(0, 5);
+    }
+
+    // Tipo (se backend devolver 'tipo')
+    if (fTipoRadios.length && item.tipo) {
+      fTipoRadios.forEach((r) => (r.checked = r.value === item.tipo));
+    }
+    if (fQtdSessoes && item.tipo === "recorrente" && item.qtd_sessoes) {
+      fQtdSessoes.value = item.qtd_sessoes;
+    }
+
+    btnSalvar?.classList.add("hidden");
+    btnSalvarEd?.classList.remove("hidden");
+    btnExcluir?.classList.remove("hidden");
+    btnExcluir.dataset.serieUid = item.serie_uid || "";
+
+    dlgAg.removeAttribute("data-slot");
+    dlgAg.showModal();
+  }
+
+  // ---------- CRUD handlers ----------
+  async function onCreate() {
+    if (!agForm) return;
+
+    const paciente = (fPaciente?.value || "").trim();
+    const profissional = (fProf?.value || "").trim();
+    if (!paciente || !profissional) {
+      alert("Preencha paciente e profissional.");
+      return;
+    }
+
+    // slot preferindo Dia/Hora do modal
+    const slot = buildSlotFromModalOrDefault(); // 'YYYY-MM-DDTHH:MM'
+
+    // tipo do modal novo
+    const tipo = getAgTipo(); // 'unico' | 'recorrente' | 'indefinido'
+
+    const payload = {
+      paciente,
+      profissional,                   // trocar por profissional_id se backend aceitar ID
+      inicio: slot.replace("T", " "), // 'YYYY-MM-DD HH:MM'
+      duracao_min: 30,
+      observacao: fObserv?.value || null,
+      tipo, // mapeia 1:1 no backend
+    };
+
+    if (tipo === "recorrente") {
+      const qtd = parseInt(fQtdSessoes?.value || "0", 10);
+      if (!(qtd >= 1)) {
+        alert("Informe a quantidade de sessões (>=1) para recorrente, ou escolha 'Recorrente (indefinido)'.");
+        return;
+      }
+      payload.quantidadeSessoes = qtd;
+    } else if (tipo === "indefinido") {
+      payload.pacienteRecorrente = true; // série aberta
+    }
+
+    try {
+      await apiCreate(payload);
+      dlgAg.close();
+      await loadWeek(); // recarrega e pinta
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Falha ao salvar agendamento.");
+    }
+  }
+
+  async function onUpdate() {
+    if (!agForm) return;
+    const id = parseInt(fId?.value || "0", 10);
+    if (!id) return;
+
+    const paciente = (fPaciente?.value || "").trim();
+    const profissional = (fProf?.value || "").trim();
+    if (!paciente || !profissional) {
+      alert("Preencha paciente e profissional.");
+      return;
+    }
+
+    const payload = {
+      paciente,
+      profissional,
+      observacao: fObserv?.value || null,
+      // Para permitir mudar horário na edição, descomente:
+      // inicio: buildSlotFromModalOrDefault().replace("T", " "),
+      // duracao_min: 30,
+    };
+
+    try {
+      await apiUpdate(id, payload);
+      dlgAg.close();
+      await loadWeek();
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Falha ao editar agendamento.");
+    }
+  }
+
+  async function onDelete() {
+    const id = parseInt(fId?.value || "0", 10);
+    if (!id) return;
+
+    const serieUid = btnExcluir?.dataset?.serieUid || "";
+    if (serieUid) {
+      const modo = prompt(
+        "Este agendamento faz parte de uma SÉRIE.\n" +
+          "Digite:\n" +
+          "  1 para excluir APENAS este\n" +
+          "  2 para excluir a SÉRIE inteira"
+      );
+      if (modo === "2") {
+        if (!confirm("Tem certeza que deseja excluir toda a série?")) return;
+        try {
+          await apiDeleteSerie(serieUid);
+          dlgAg.close();
+          await loadWeek();
+          return;
+        } catch (e) {
+          console.error(e);
+          alert(e.message || "Falha ao excluir série.");
+          return;
+        }
+      } else if (modo !== "1") {
+        return;
+      }
+    }
+
+    if (!confirm("Excluir este agendamento?")) return;
+    try {
+      await apiDelete(id);
+      dlgAg.close();
+      await loadWeek();
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "Falha ao excluir agendamento.");
+    }
+  }
+
+  // ---------- Go ----------
+  let _boot = false;
+  function bootOnce(){ if (_boot) return; _boot = true; init(); }
+  document.addEventListener("DOMContentLoaded", bootOnce);
+  if (document.readyState === "interactive" || document.readyState === "complete") {
+    bootOnce();
+  }
+})();
+
+css
+
+
+/* =======================================================
+   agenda.css — estilo Google Agenda · versão turbinada
+   (compatível com agenda.js: ag-head / ag-grid / ag-cell)
+   ======================================================= */
+
+/* ------------------ Tokens ------------------ */
+:root{
+  --bg: #f7f9fb;
+  --muted-bg: #ecf0f1;
+  --card: #ffffff;
+  --border: #e3e8ef;
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  --brand: #2c3e50;
+  --brand-600:#34495e;
+
+  --slot-hover:#dff9fb;
+  --slot-active:#c7f3f6;
+
+  --event: #3498db;
+  --event-600:#2d85c0;
+
+  --success:#22c55e;
+  --warn:#f59e0b;
+  --danger:#dc3545;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 8px 24px rgba(0,0,0,.08);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+
+  --top-sticky: 56px;     /* altura do header superior da página */
+  --row-h: 40px;          /* altura de cada slot (30min) */
+  --day-min: 160px;       /* largura mínima por dia (coluna) */
+}
+
+/* telas menores: header pode ocupar 2 linhas */
+@media (max-width: 960px){
+  :root{ --top-sticky: 64px; --day-min: 120px; }
+}
+
+/* ------------------ Dark mode ------------------ */
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg: #0f172a;
+    --muted-bg: #111827;
+    --card: #0b1222;
+    --border: #1f2937;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+
+    --brand: #1f2a37;
+    --brand-600:#263241;
+
+    --slot-hover:#0f2533;
+    --slot-active:#133042;
+
+    --event: #2563eb;
+    --event-600:#1d4ed8;
+
+    --shadow: 0 8px 24px rgba(0,0,0,.35);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  }
+}
+
+/* ------------------ Layout base ------------------ */
+body{ background: var(--bg); color: var(--text); }
+.page-agenda{ max-width: 1200px; margin: 12px auto; padding: 12px; }
+
+.agenda-header{
+  display:flex; align-items:center; gap:12px;
+  padding:14px 16px; background: var(--muted-bg);
+  border-bottom:1px solid var(--border); flex-wrap:wrap;
+  position: sticky; top:0; z-index: 20;
+}
+.agenda-header .btn,
+.agenda-header button{
+  padding: 8px 12px; background: var(--brand); color:#fff;
+  border:0; border-radius:8px; cursor:pointer; font-size:14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .06s ease, background .15s ease;
+}
+.agenda-header .btn.sec{ background:#fff; color:var(--text); border:1px solid var(--border); }
+.agenda-header .btn.icon{ width:36px; height:36px; display:grid; place-items:center; padding:0; }
+.agenda-header .btn:hover{ background: var(--brand-600); }
+.agenda-header .btn.sec:hover{ background:#f8fafc; }
+.agenda-header .btn:active{ transform: translateY(1px); }
+.agenda-header label{ display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+.agenda-header input[type="date"], .agenda-header select{
+  padding:8px 12px; border:1px solid var(--border);
+  border-radius:8px; background:#fff; color:#333; font-size:14px;
+}
+@media (prefers-color-scheme: dark){
+  .agenda-header input[type="date"], .agenda-header select{ background:#0b1222; color:var(--text); }
+}
+
+/* ------------------ Wrapper com scroll horizontal ------------------ */
+.agenda-container{
+  display:block;
+  overflow-x: auto;              /* >>> barra de rolagem horizontal */
+  background: var(--bg);
+}
+
+/* ===================================================================
+   1) Cabeçalho dos dias (ag-head) e 2) Grade (ag-grid) compartilham
+   EXATAMENTE a mesma malha: 80px (horas) + 7 * minmax(day-min, 1fr)
+   width:max-content garante que a soma das colunas não “achate”.
+   =================================================================== */
+
+/* ------------------ Cabeçalho dos dias (ag-head) ------------------ */
+.ag-head{
+  display:grid;
+  grid-template-columns: 80px repeat(7, minmax(var(--day-min), 1fr));
+  border:1px solid var(--border);
+  border-bottom:none;
+  background: var(--muted-bg);
+  position: sticky;
+  top: var(--top-sticky);
+  z-index: 15;
+  width: max-content;            /* <<< impede esmagar as colunas */
+  box-shadow: 0 1px 0 var(--border);   /* linha sutil na base */
+}
+.ag-head .ag-col{
+  padding:10px; border-right:1px solid var(--border);
+  display:flex; flex-direction:column; gap:2px;
+}
+.ag-head .ag-col strong{ font-size:14px; color:var(--text); }
+.ag-head .ag-col span{ font-size:12px; color:var(--muted); white-space:nowrap; }
+
+/* ------------------ Grade (ag-grid) ------------------ */
+.ag-grid{
+  display:grid;
+  grid-template-columns: 80px repeat(7, minmax(var(--day-min), 1fr));
+  border:1px solid var(--border);
+  border-top:none; background: var(--card);
+  width: max-content;            /* <<< alinha com o cabeçalho */
+  position: relative;
+  /* espaço de segurança para o cabeçalho sticky não cobrir a 1ª linha */
+  margin-top: 20px;                 /* (o head está fora da grid; não precisa padding) */
+}
+
+/* Coluna de horas à esquerda */
+.ag-hours{
+  background: var(--card);
+  border-right:1px solid var(--border);
+}
+.ag-hour{
+  height: var(--row-h);
+  border-bottom:1px dashed #e9edf3;
+  font-size:12px; color:var(--muted);
+  display:flex; align-items:flex-start; justify-content:flex-end;
+  padding:6px 8px 0 0; line-height:1;
+}
+
+/* Células dos slots (cada 30min) */
+.ag-cell{
+  height: var(--row-h);
+  border-bottom:1px dashed #e9edf3;
+  border-right:1px solid var(--border);
+  padding:4px 6px; position:relative; overflow:hidden;
+  background: var(--card); cursor:pointer; transition: background .12s ease;
+}
+.ag-cell:hover{ background: var(--slot-hover); }
+.ag-cell:active{ background: var(--slot-active); }
+.ag-cell:focus{ outline:2px solid #60a5fa; outline-offset:-2px; }
+
+/* Empilhamento vertical de conteúdo dentro do slot */
+.ag-cell .stack{
+  display:flex; flex-direction:column; gap:2px;
+  max-height:100%; overflow:hidden;
+}
+
+/* Badges de nome/contagem */
+.badge{
+  display:inline-block; font-size:11px; line-height:1; border-radius:999px;
+  padding:4px 8px; background:#eef2ff; color:#1e3a8a;
+  white-space:nowrap; max-width:100%; text-overflow:ellipsis; overflow:hidden;
+  box-shadow: var(--shadow-sm);
+}
+.badge.secondary{ background:#f1f5f9; color:#334155; }
+.badge.overflow{ background:#fee2e2; color:#991b1b; }
+
+/* ------------------ Itens (quando mostramos blocos) ------------------ */
+.agendamento{
+  position:relative; background: var(--event); color:#fff;
+  padding: 3px 8px; margin:2px 0; font-size:12px;
+  border-radius: var(--radius-sm); overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; box-shadow: var(--shadow-sm);
+  display:flex; align-items:center; gap:6px;
+  transition: filter .12s ease, transform .06s ease;
+}
+.agendamento:hover{ filter:brightness(.97); }
+.agendamento:active{ transform: translateY(1px); }
+.agendamento .rec-badge{
+  margin-left:auto; font-size:11px; opacity:.9; background: rgba(255,255,255,.16);
+  border-radius: 999px; padding: 0 6px; line-height:18px; height:18px; display:inline-flex; align-items:center;
+}
+
+/* ------------------ Modal (dialog) ------------------ */
+.ag-modal::backdrop{ background: rgba(0,0,0,.25); }
+.ag-modal-card{
+  width:min(560px,95vw); background:var(--card);
+  border-radius:12px; box-shadow:var(--shadow); border:1px solid var(--border);
+}
+.ag-modal-card header, .ag-modal-card footer{
+  padding:12px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.ag-modal-card footer{ border-top:1px solid var(--border); border-bottom:none; }
+.ag-modal-body{ padding:12px; display:flex; flex-direction:column; gap:8px; }
+
+.ag-item{
+  border:1px solid var(--border); border-radius:10px; padding:8px 10px;
+  display:flex; justify-content:space-between; gap:10px;
+}
+.ag-item .left{ display:flex; flex-direction:column; font-size:13px; }
+.ag-item .right{ font-size:12px; color:var(--muted); text-align:right; }
+.btn{ padding:.55rem .8rem; border:1px solid var(--border); border-radius:10px; background:#fff; cursor:pointer; }
+.btn.pri{ background:var(--brand); color:#fff; border-color:transparent; }
+.btn.sec{ background:#fff; }
+.btn.icon{ width:36px; height:36px; display:grid; place-items:center; }
+
+/* ======= Toggle Meus horários (minimal) ======= */
+.switch-inline{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  user-select:none;
+}
+
+.switch-inline .switch-label{
+  font-size:13px;
+  color: var(--text);
+}
+
+.switch-inline input[type="checkbox"]{
+  position:absolute;
+  opacity:0;
+  width:0;
+  height:0;
+}
+
+.switch-inline .switch-slider{
+  position:relative;
+  width:44px;
+  height:24px;
+  border-radius:999px;
+  background:#cbd5e1;
+  border:1px solid var(--border);
+  display:inline-block;
+  transition:background .18s ease;
+}
+
+.switch-inline .switch-slider::after{
+  content:"";
+  position:absolute;
+  top:50%;
+  left:2px;
+  transform:translateY(-50%);
+  width:20px;
+  height:20px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow: var(--shadow-sm);
+  transition:left .18s ease;
+}
+
+/* Estados */
+.switch-inline input[type="checkbox"]:checked + .switch-slider{
+  background: var(--brand);
+}
+.switch-inline input[type="checkbox"]:checked + .switch-slider::after{
+  left:22px;
+}
+.switch-inline input[disabled] + .switch-slider{
+  opacity:.5;
+  cursor:not-allowed;
+}
+.switch-inline input[disabled] ~ .switch-label{
+  opacity:.7;
+}
+
+/* Dark mode compatível */
+@media (prefers-color-scheme: dark){
+  .switch-inline .switch-slider{
+    background:#374151;
+    border-color:#2a3340;
+  }
+}
+
+
+/* ------------------ Responsivo ------------------ */
+@media (max-width: 960px){
+  .page-agenda{ padding:8px; }
+  :root{ --row-h: 36px; }
+}
+@media (max-width: 640px){
+  .agenda-header{ gap:8px; }
+  .agenda-header .btn{ padding:7px 10px; font-size:13px; }
+}
+
+/* ------------------ Classe utilitária ------------------ */
+.hidden{ display:none !important; }
+
+

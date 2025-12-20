@@ -1,0 +1,418 @@
+{# sgd/financeiro/templates/financeiro.html #}
+{% extends 'layout.html' %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/financeiro.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="fin-container">
+
+  {# flashes #}
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="fin-flashes">
+        {% for cat, m in msgs %}
+          <div class="flash {{ cat }}">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {# header #}
+  <div class="fin-head">
+    <div class="title-area">
+      <h2>Financeiro</h2>
+      <p class="muted">Caixa, recebíveis, pagáveis e faturamento. Data de referência: {{ data_ref|default('') }}</p>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnNovoReceber">+ Novo recebível</button>
+      <button class="btn" id="btnNovoPagar">+ Nova despesa</button>
+      <button class="btn" id="btnConcilia">Conciliação</button>
+      <button class="btn ghost" id="btnEmitirNFSe">Emitir NFSe</button>
+    </div>
+  </div>
+
+  {# KPIs #}
+  <section class="fin-cards">
+    <div class="kpi-card">
+      <div class="kpi-label">Saldo consolidado</div>
+      <div class="kpi-value" id="kpiSaldo">R$ {{ (kpis.saldo_caixa|default(0.0)) | round(2) }}</div>
+      <div class="kpi-sub">
+        <ul class="acc-list">
+          {% for c in contas|default([]) %}
+            <li><span class="dot"></span>{{ c.apelido }} — <strong>R$ {{ c.saldo|round(2) }}</strong></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">A receber (30 dias)</div>
+      <div class="kpi-value" id="kpiReceber">R$ {{ (kpis.receber_30d|default(0.0)) | round(2) }}</div>
+      <div class="kpi-sub">Aging e cobranças</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">A pagar (30 dias)</div>
+      <div class="kpi-value" id="kpiPagar">R$ {{ (kpis.pagar_30d|default(0.0)) | round(2) }}</div>
+      <div class="kpi-sub">Calendário de vencimentos</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Inadimplência</div>
+      <div class="kpi-value" id="kpiInad">{{ (kpis.inadimplencia|default(0.0)) | round(1) }}%</div>
+      <div class="kpi-sub">Convênios + particular</div>
+    </div>
+  </section>
+
+  {# avisos #}
+  <section class="fin-alerts">
+    <h3 class="section-title">Alertas</h3>
+    <ul class="alerts-list" id="alertsList">
+      {% for a in avisos|default([]) %}
+      <li class="alert-card">
+        <div class="alert-main"><strong>{{ a.tipo }}</strong> — {{ a.msg }}</div>
+        <div class="alert-actions">
+          <button class="btn xs">{{ a.acao }}</button>
+        </div>
+      </li>
+      {% else %}
+      <li class="alert-empty">Sem alertas por enquanto.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  {# Fluxo de caixa (gráfico) #}
+  <section class="fin-section">
+    <div class="section-head">
+      <h3 class="section-title">Fluxo de Caixa (14 dias)</h3>
+      <div class="section-actions">
+        <button class="btn xs" id="btnExportFluxo">Exportar CSV</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chartFluxo" width="900" height="280" aria-label="Gráfico do fluxo de caixa" role="img"></canvas>
+    </div>
+  </section>
+
+  {# Receber + Pagar (lado a lado) #}
+  <section class="fin-grid-two">
+    <div class="fin-card">
+      <div class="section-head">
+        <h3 class="section-title">Contas a Receber</h3>
+        <div class="section-actions">
+          <button class="btn xs" id="btnReceberCSV">Exportar CSV</button>
+        </div>
+      </div>
+
+      <form class="filters" id="fReceber">
+        <input type="text" id="qReceber" placeholder="Buscar pagador, paciente...">
+        <select id="stReceber">
+          <option value="">Status</option>
+          <option value="EM_ABERTO">Em aberto</option>
+          <option value="PROGRAMADO">Programado</option>
+          <option value="PAGO">Pago</option>
+          <option value="EM_ATRASO">Em atraso</option>
+        </select>
+        <select id="ccReceber">
+          <option value="">Centro de custo</option>
+          {% for cc in centros_custo|default([]) %}
+            <option value="{{ cc.id }}">{{ cc.nome }}</option>
+          {% endfor %}
+        </select>
+        <input type="date" id="dtDeReceber" title="De">
+        <input type="date" id="dtAteReceber" title="Até">
+        <button class="btn">Filtrar</button>
+        <button type="button" class="btn ghost" id="btnLimparReceber">Limpar</button>
+      </form>
+
+      <div class="table-wrap">
+        <table class="table" id="tReceber">
+          <thead>
+            <tr>
+              <th>Emissão</th>
+              <th>Venc.</th>
+              <th>Pagador</th>
+              <th>Paciente</th>
+              <th class="num">Valor</th>
+              <th>Status</th>
+              <th style="width:140px">Ações</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="emptyReceber">Nenhum título encontrado.</div>
+      </div>
+    </div>
+
+    <div class="fin-card">
+      <div class="section-head">
+        <h3 class="section-title">Contas a Pagar</h3>
+        <div class="section-actions">
+          <button class="btn xs" id="btnPagarCSV">Exportar CSV</button>
+        </div>
+      </div>
+
+      <form class="filters" id="fPagar">
+        <input type="text" id="qPagar" placeholder="Buscar fornecedor, descrição...">
+        <select id="stPagar">
+          <option value="">Status</option>
+          <option value="EM_ABERTO">Em aberto</option>
+          <option value="PROGRAMADO">Programado</option>
+          <option value="PAGO">Pago</option>
+          <option value="EM_ATRASO">Em atraso</option>
+        </select>
+        <select id="ccPagar">
+          <option value="">Centro de custo</option>
+          {% for cc in centros_custo|default([]) %}
+            <option value="{{ cc.id }}">{{ cc.nome }}</option>
+          {% endfor %}
+        </select>
+        <input type="date" id="dtDePagar" title="De">
+        <input type="date" id="dtAtePagar" title="Até">
+        <button class="btn">Filtrar</button>
+        <button type="button" class="btn ghost" id="btnLimparPagar">Limpar</button>
+      </form>
+
+      <div class="table-wrap">
+        <table class="table" id="tPagar">
+          <thead>
+            <tr>
+              <th>Emissão</th>
+              <th>Venc.</th>
+              <th>Fornecedor</th>
+              <th>Descrição</th>
+              <th class="num">Valor</th>
+              <th>Status</th>
+              <th style="width:140px">Ações</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="emptyPagar">Nenhum título encontrado.</div>
+      </div>
+    </div>
+  </section>
+
+  {# Conciliação #}
+  <section class="fin-section">
+    <div class="section-head">
+      <h3 class="section-title">Conciliação Bancária</h3>
+      <div class="section-actions">
+        <label class="btn">
+          Importar OFX/CSV
+          <input type="file" id="fileExtrato" accept=".ofx,.csv" hidden>
+        </label>
+        <button class="btn" id="btnSugerirConc">Sugerir conciliação</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table" id="tExtrato">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Histórico</th>
+            <th>Documento</th>
+            <th class="num">Valor</th>
+            <th>Match</th>
+            <th style="width:120px">Ações</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="emptyExtrato">Nenhum lançamento importado.</div>
+    </div>
+  </section>
+
+  {# Modal: Novo Recebível #}
+  <dialog id="modalReceber" class="modal">
+    <form id="formReceber" class="modal-card" method="post" action="#">
+      <header class="modal-header">
+        <h3>Novo recebível</h3>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
+      </header>
+      <section class="modal-body">
+        <div class="grid two">
+          <div class="field">
+            <label>Pagador *</label>
+            <input type="text" name="pagador" required>
+          </div>
+          <div class="field">
+            <label>Paciente</label>
+            <input type="text" name="paciente">
+          </div>
+        </div>
+        <div class="grid four">
+          <div class="field">
+            <label>Origem</label>
+            <select name="origem">
+              <option value="PARTICULAR">Particular</option>
+              <option value="CONVENIO">Convênio</option>
+              <option value="SUS">SUS</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Centro de custo</label>
+            <select name="centro_custo">
+              <option value="">—</option>
+              {% for cc in centros_custo|default([]) %}
+                <option value="{{ cc.id }}">{{ cc.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Vencimento *</label>
+            <input type="date" name="venc" required>
+          </div>
+          <div class="field">
+            <label>Valor *</label>
+            <input type="number" name="valor" min="0" step="0.01" required>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="field">
+            <label>Status</label>
+            <select name="status">
+              <option value="EM_ABERTO">Em aberto</option>
+              <option value="PROGRAMADO">Programado</option>
+              <option value="PAGO">Pago</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Anexo (opcional)</label>
+            <input type="file" name="anexo" accept=".pdf,.jpg,.png,.jpeg">
+          </div>
+        </div>
+      </section>
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  {# Modal: Nova Despesa (Pagar) #}
+  <dialog id="modalPagar" class="modal">
+    <form id="formPagar" class="modal-card" method="post" action="#">
+      <header class="modal-header">
+        <h3>Nova despesa</h3>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
+      </header>
+      <section class="modal-body">
+        <div class="grid two">
+          <div class="field">
+            <label>Fornecedor *</label>
+            <input type="text" name="fornecedor" required>
+          </div>
+          <div class="field">
+            <label>Descrição</label>
+            <input type="text" name="descricao">
+          </div>
+        </div>
+        <div class="grid four">
+          <div class="field">
+            <label>Centro de custo</label>
+            <select name="centro_custo">
+              <option value="">—</option>
+              {% for cc in centros_custo|default([]) %}
+                <option value="{{ cc.id }}">{{ cc.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Vencimento *</label>
+            <input type="date" name="venc" required>
+          </div>
+          <div class="field">
+            <label>Valor *</label>
+            <input type="number" name="valor" min="0" step="0.01" required>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select name="status">
+              <option value="EM_ABERTO">Em aberto</option>
+              <option value="PROGRAMADO">Programado</option>
+              <option value="PAGO">Pago</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="field">
+            <label>Anexo (nota/contrato)</label>
+            <input type="file" name="anexo" accept=".pdf,.jpg,.png,.jpeg">
+          </div>
+          <div class="field">
+            <label>Aprovação</label>
+            <select name="aprovacao">
+              <option value="">—</option>
+              <option value="SOLICITADO">Solicitado</option>
+              <option value="APROVADO">Aprovado</option>
+              <option value="REPROVADO">Reprovado</option>
+            </select>
+          </div>
+        </div>
+      </section>
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  {# Modal: Emissão NFSe (simples/preview) #}
+  <dialog id="modalNFSe" class="modal">
+    <form id="formNFSe" class="modal-card" method="post" action="#">
+      <header class="modal-header">
+        <h3>Emitir NFSe</h3>
+        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
+      </header>
+      <section class="modal-body">
+        <div class="grid two">
+          <div class="field">
+            <label>Tomador *</label>
+            <input type="text" name="tomador" required>
+          </div>
+          <div class="field">
+            <label>Município (código IBGE)</label>
+            <input type="text" name="ibge" placeholder="Ex.: 2704302 (Maceió)">
+          </div>
+        </div>
+        <div class="grid three">
+          <div class="field">
+            <label>Serviço</label>
+            <input type="text" name="servico" placeholder="Descrição do serviço">
+          </div>
+          <div class="field">
+            <label>Código serviço (município)</label>
+            <input type="text" name="codigo_servico" placeholder="Ex.: 4.01">
+          </div>
+          <div class="field">
+            <label>Valor *</label>
+            <input type="number" name="valor" step="0.01" min="0" required>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="field">
+            <label>ISS (%)</label>
+            <input type="number" name="iss" step="0.01" min="0" max="10" placeholder="5,00">
+          </div>
+          <div class="field">
+            <label>RPS (número/serie)</label>
+            <input type="text" name="rps" placeholder="Ex.: 123/UN1">
+          </div>
+        </div>
+      </section>
+      <footer class="modal-footer">
+        <button type="button" class="btn" data-modal-close>Cancelar</button>
+        <button type="submit" class="btn primary">Emitir (preview)</button>
+      </footer>
+    </form>
+  </dialog>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('financeiro.static', filename='js/financeiro.js') }}" defer></script>
+{% endblock %}

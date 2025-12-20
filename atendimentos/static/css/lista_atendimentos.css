@@ -1,0 +1,461 @@
+/* ===================== RESET / BASE ===================== */
+:root{
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --ink-2:#334155;
+  --muted:#64748b;
+  --line:#e5e7eb;
+  --shadow: 0 8px 24px rgba(0,0,0,.08);
+
+  --primary:#2563eb;  /* azul */
+  --primary-ink:#ffffff;
+
+  --danger:#ef4444;
+  --danger-ink:#ffffff;
+
+  --success:#10b981;
+  --success-ink:#ffffff;
+
+  --pill-bg:#f1f5f9;
+  --pill-ink:#0f172a;
+
+  --prio-green:#10b981;
+  --prio-yellow:#f59e0b;
+  --prio-red:#ef4444;
+
+  --menu-bg:#ffffff;
+  --menu-ink:#0f172a;
+  --menu-line:#e5e7eb;
+
+  --chip-bg:#eef2ff;
+  --chip-ink:#3730a3;
+  --chip-line:#c7d2fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root{
+    --bg:#0b1020;
+    --card:#0f1528;
+    --ink:#e5e7eb;
+    --ink-2:#cbd5e1;
+    --muted:#93a2b7;
+    --line:#1f2a44;
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+
+    --primary:#3b82f6;
+    --primary-ink:#00132b;
+
+    --pill-bg:#121a33;
+    --pill-ink:#e5e7eb;
+
+    --menu-bg:#0f1528;
+    --menu-ink:#e5e7eb;
+    --menu-line:#1f2a44;
+
+    --chip-bg:#1a2444;
+    --chip-ink:#c7d2fe;
+    --chip-line:#243159;
+  }
+}
+
+*{ box-sizing: border-box; }
+html,body{ height:100%; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font: 14.5px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+}
+
+/* ===================== CONTAINER / FLASHES ===================== */
+.att-container{ max-width: 1200px; margin: 24px auto; padding: 0 16px; position:relative; z-index:0; }
+
+.att-flashes{ margin-bottom: 16px; display:grid; gap:8px; }
+.flash{ padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); box-shadow: var(--shadow); }
+.flash.success{ border-color: rgba(16,185,129,.35); }
+.flash.error{ border-color: rgba(239,68,68,.35); }
+
+/* ===================== HEADER ===================== */
+.att-page-head{
+  display:flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 16px;
+}
+.title-area h2{ margin:0 0 4px; font-size: 22px; }
+.title-area .muted{ color:var(--muted); margin:0; }
+.actions{ display:flex; gap:10px; flex-wrap: wrap; }
+
+/* ===================== BUTTONS ===================== */
+.btn{
+  appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink);
+  padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;
+  display:inline-flex; align-items:center; gap:8px; transition: .15s ease;
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+.btn:hover{ filter: brightness(.98); transform: translateY(-1px); }
+.btn:active{ transform: translateY(0); }
+.btn:focus-visible{ outline: 2px solid color-mix(in oklab, var(--primary) 60%, #fff); outline-offset: 2px; }
+.btn.primary{ background:var(--primary); color:var(--primary-ink); border-color: transparent; }
+.btn.danger{ background:var(--danger); color:var(--danger-ink); border-color: transparent; }
+.btn.ghost{ background:var(--card); }
+.btn.xs{ padding:6px 9px; font-size: 12px; border-radius: 8px; }
+
+/* botão hambúrguer */
+.btn.icon.only{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:36px; height:36px; padding:0; border-radius:10px;
+  border:1px solid var(--line); background:var(--card); cursor:pointer;
+}
+.btn.icon.only:hover{ background: color-mix(in oklab, var(--card) 85%, #e9eefc); }
+
+/* ===================== CARDS / GRID ===================== */
+.att-card{
+  background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px;
+  box-shadow: var(--shadow); margin-bottom: 16px;
+}
+.card-head{ display:flex; align-items:center; gap:10px; }
+.card-head.between{ justify-content: space-between; }
+.card-head h3{ margin:0; font-size:18px; }
+
+.att-grid{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+.field{ display:flex; flex-direction: column; gap:6px; }
+.field label{ font-weight:700; color:var(--ink-2); }
+.field textarea{ min-height: 70px; resize: vertical; }
+
+.input-rounded, .field select, .field textarea{
+  background: var(--card); border:1px solid var(--line); color:var(--ink);
+  padding:10px 12px; border-radius:10px; width:100%;
+}
+.input-rounded:focus, .field select:focus, .field textarea:focus{
+  outline: 2px solid color-mix(in oklab, var(--primary) 50%, transparent);
+  outline-offset: 1px;
+}
+.span-2{ grid-column: span 2; }
+
+/* ===================== PILLS / PRIORIDADE ===================== */
+.prio-group{ display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+.prio-pill{
+  display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
+  background: var(--pill-bg); color: var(--pill-ink); border:1px solid var(--line); cursor:pointer; user-select:none;
+}
+.prio-group input{ display:none; }
+.prio-group input:checked + .prio-pill{
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+/* Filtro de prioridade */
+.prio-filter{ display:flex; gap:6px; align-items:center; flex-wrap: wrap; }
+.pf-pill{
+  border:1px solid var(--line); background: var(--pill-bg); color: var(--pill-ink);
+  border-radius: 999px; padding:6px 10px; cursor:pointer; font-weight:600;
+}
+.pf-pill.active{ outline: 2px solid color-mix(in oklab, var(--primary) 45%, transparent); outline-offset: 1px; }
+
+/* ===================== TABLE ===================== */
+.table-wrap{ overflow:auto; border-radius: 12px; border:1px solid var(--line); }
+.queue-table{ width:100%; border-collapse: collapse; min-width: 820px; }
+.queue-table thead th{
+  background: color-mix(in oklab, var(--card) 70%, #e9eefc);
+  border-bottom:1px solid var(--line); padding:10px; text-align:left; font-weight:800;
+}
+.queue-table tbody td{
+  border-bottom:1px solid var(--line); padding:10px; vertical-align: middle;
+}
+.queue-table tbody tr:hover{ background: color-mix(in oklab, var(--card) 85%, #e9eefc); }
+
+/* Badge padrão e de prioridade */
+.badge{
+  display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700;
+  background: var(--chip-bg); color: var(--chip-ink); border:1px solid var(--chip-line);
+}
+.badge.prio{ color:#fff; border-color: transparent; }
+.badge.prio.verde{ background: var(--prio-green); }
+.badge.prio.amarelo{ background: var(--prio-yellow); }
+.badge.prio.vermelho{ background: var(--prio-red); }
+
+/* indicador "veio da agenda" */
+.from-agenda{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:4px; margin-right:6px;
+  background: color-mix(in oklab, var(--primary) 10%, var(--card));
+  border:1px solid var(--line); font-size:12px;
+}
+
+/* contador */
+.counter{ font-weight:800; color: var(--ink-2); }
+
+/* vazio */
+.empty{ text-align:center; color: var(--muted); padding: 18px 8px; }
+
+/* ===================== MENU DROPDOWN ===================== */
+.row-actions{ position: relative; z-index: 2; }
+.menu{ position:relative; }
+.menu [hidden]{ display:none !important; }
+
+/* popover quando ancorado no .menu (fallback) */
+.menu-pop{
+  position:absolute; right:0; top:calc(100% + 6px);
+  min-width:180px; background:var(--menu-bg); color:var(--menu-ink);
+  border:1px solid var(--menu-line); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.18); padding:6px; z-index: 9999;
+}
+
+/* popover portado para o body — SEMPRE usado pelo JS */
+.menu-pop.is-portal{
+  position:fixed; z-index: 2147483647; /* topo absoluto */
+  background:var(--menu-bg); color:var(--menu-ink);
+  border:1px solid var(--menu-line); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.22); padding:6px;
+}
+
+.menu-pop .menu-item{
+  width:100%; text-align:left; background:transparent; border:0;
+  padding:8px 10px; border-radius:8px; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; gap:8px;
+}
+.menu-pop .menu-item:hover{ background:#f3f4f6; }
+.menu-pop .menu-item.danger{ color:#b91c1c; }
+.menu-pop .menu-item.danger:hover{ background:#fee2e2; }
+
+/* ===================== UTIL ===================== */
+.muted{ color: var(--muted); }
+.hidden{ display:none !important; }
+[hidden]{ display:none !important; }
+.row-actions .menu{ margin-left: 4px; }
+
+/* ===================== RESPONSIVO ===================== */
+@media (max-width: 920px){
+  .att-page-head{ flex-direction: column; align-items:flex-start; gap: 12px; }
+}
+@media (max-width: 720px){
+  .att-grid{ grid-template-columns: 1fr; }
+  .span-2{ grid-column: auto; }
+  .queue-table{ min-width: 680px; } /* scroll horizontal na tabela */
+}
+
+/* ===================== IMPRESSÃO ===================== */
+@media print {
+  :root{ --bg:#fff; --card:#fff; --ink:#000; --line:#ddd; --muted:#555; }
+  body{ background:#fff; }
+  .att-page-head .actions,
+  .row-actions,
+  .prio-filter,
+  #fProf, #fBusca, #btnLimparFila, #btnImprimir { display:none !important; }
+
+  .att-card{ box-shadow:none; border-color:#ddd; }
+  .table-wrap{ border-color:#ddd; }
+  .queue-table thead th{ background:#f5f5f5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .badge.prio.verde{ background:#10b981 !important; color:#fff !important; }
+  .badge.prio.amarelo{ background:#f59e0b !important; color:#fff !important; }
+  .badge.prio.vermelho{ background:#ef4444 !important; color:#fff !important; }
+}
+
+/* ===================== ACESSIBILIDADE / REDUZIR MOVIMENTO ===================== */
+@media (prefers-reduced-motion: reduce){
+  .btn, .menu-item{ transition: none; }
+}
+
+/* ===================== MICRO AJUSTES ===================== */
+.queue-filters{ display:flex; flex-wrap: wrap; gap: 8px; align-items:center; }
+.queue-filters input[type="text"], .queue-filters select{
+  padding:8px 10px; border-radius: 8px; border:1px solid var(--line); background: var(--card); color: var(--ink);
+}
+.queue-filters input[type="text"]:focus, .queue-filters select:focus{
+  outline: 2px solid color-mix(in oklab, var(--primary) 40%, transparent); outline-offset: 1px;
+}
+
+
+/* ====== UNIFORMIZAÇÃO VISUAL DA TABELA / AÇÕES ====== */
+
+/* altura mínima e alinhamento vertical nas linhas */
+.queue-table tbody td {
+  height: 48px;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+
+/* coluna de ações com largura fixa e centralização */
+.queue-table th:last-child,
+.queue-table td:last-child {
+  width: 160px;              /* ajuste fino aqui se quiser mais/menos */
+  text-align: center;
+}
+
+/* barra de ações da linha: tudo alinhado e no mesmo tamanho */
+.row-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;                  /* espaço entre botões */
+}
+
+/* todos os botões de ação com o MESMO tamanho (ícone) */
+.row-actions .btn,
+.row-actions .btn.xs,
+.row-actions .btn.icon.only,
+.row-actions [data-menu-toggle] {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;              /* esconde texto quando for ícone */
+}
+
+/* ícones SVG centralizados e do mesmo tamanho */
+.row-actions .btn svg,
+.row-actions [data-menu-toggle] svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+/* botão de menu (hambúrguer) com cara de botão */
+[data-menu-toggle]{
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+[data-menu-toggle]:hover{
+  background: color-mix(in oklab, var(--card) 85%, #e9eefc);
+}
+
+/* badge “veio da agenda” com tamanho compacto e alinhado */
+.from-agenda{
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border-radius: 6px;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* popover do menu: largura fixa e itens com mesma altura */
+.menu-pop { min-width: 200px; padding: 8px; }
+.menu-pop .menu-item{ height: 36px; padding: 0 10px; gap: 10px; font-size: 14px; }
+
+/* estados hover/active consistentes nos botões */
+.row-actions .btn,
+[data-menu-toggle]{
+  transition: background .15s ease, transform .04s ease, filter .15s ease;
+}
+.row-actions .btn:hover,
+[data-menu-toggle]:hover{ filter: brightness(.98); transform: translateY(-1px); }
+.row-actions .btn:active,
+[data-menu-toggle]:active{ transform: translateY(0); }
+
+/* ===== AJUSTES PEDIDOS: limpar fila, adicionar, prioridades, ações da tabela ===== */
+
+/* 1) Botão "Limpar fila" (outline vermelho que preenche no hover) */
+#btnLimparFila{
+  border-color: var(--danger);
+  color: var(--danger);
+  background: transparent;
+}
+#btnLimparFila:hover{
+  background: color-mix(in oklab, var(--danger) 14%, var(--card));
+  filter: none;
+  transform: translateY(-1px);
+}
+#btnLimparFila:active{
+  background: color-mix(in oklab, var(--danger) 22%, var(--card));
+}
+
+/* 2) Botão "Adicionar" (primário mais destacado) */
+#btnAdicionar,
+#btnAdicionarItem{
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--primary) 22%, transparent);
+}
+#btnAdicionar:hover,
+#btnAdicionarItem:hover{
+  filter: brightness(1.02);
+  transform: translateY(-1px);
+}
+#btnAdicionar:active,
+#btnAdicionarItem:active{
+  transform: translateY(0);
+}
+
+/* 3) Prioridades — hovers coloridos (classe OU data-atributo) */
+.prio-pill.verde:hover,
+.prio-pill[data-prio="leve"]:hover{
+  background: color-mix(in oklab, var(--prio-green) 18%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-green) 45%, var(--line));
+}
+.prio-pill.amarelo:hover,
+.prio-pill[data-prio="moderado"]:hover{
+  background: color-mix(in oklab, var(--prio-yellow) 18%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-yellow) 45%, var(--line));
+}
+.prio-pill.vermelho:hover,
+.prio-pill[data-prio="urgente"]:hover{
+  background: color-mix(in oklab, var(--prio-red) 18%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-red) 45%, var(--line));
+}
+
+/* Quando selecionada, reforça o “anel” na cor da prioridade */
+.prio-group input:checked + .prio-pill.verde,
+.prio-group input:checked + .prio-pill[data-prio="leve"]{
+  border-color: color-mix(in oklab, var(--prio-green) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-green) 45%, transparent);
+}
+.prio-group input:checked + .prio-pill.amarelo,
+.prio-group input:checked + .prio-pill[data-prio="moderado"]{
+  border-color: color-mix(in oklab, var(--prio-yellow) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-yellow) 45%, transparent);
+}
+.prio-group input:checked + .prio-pill.vermelho,
+.prio-group input:checked + .prio-pill[data-prio="urgente"]{
+  border-color: color-mix(in oklab, var(--prio-red) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-red) 45%, transparent);
+}
+
+/* 4) Ações na tabela — Atender (azul) e Remover (vermelho) */
+.row-actions .btn.atender{
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+  width: 36px; height: 36px; min-width:36px; min-height:36px; padding:0; border-radius:10px;
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+.row-actions .btn.atender:hover{ filter: brightness(1.02); transform: translateY(-1px); }
+
+.row-actions .btn.remover{
+  background: var(--danger);
+  color: var(--danger-ink);
+  border-color: transparent;
+  width: 36px; height: 36px; min-width:36px; min-height:36px; padding:0; border-radius:10px;
+  box-shadow: 0 6px 16px color-mix(in oklab, var(--danger) 18%, transparent);
+}
+.row-actions .btn.remover:hover{ filter: brightness(1.02); transform: translateY(-1px); }
+
+/* Foco acessível nas variações sólidas */
+#btnAdicionar:focus-visible,
+#btnAdicionarItem:focus-visible,
+.row-actions .btn.atender:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--primary) 65%, #fff);
+  outline-offset: 2px;
+}
+#btnLimparFila:focus-visible,
+.row-actions .btn.remover:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--danger) 65%, #fff);
+  outline-offset: 2px;
+}
+
+/* Correção: botão com texto dentro de .row-actions (ex.: “Adicionar à fila”) */
+.row-actions .btn.primary {
+  width: auto;
+  min-width: 120px;
+  height: auto;
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 14px;
+  gap: 8px;
+}

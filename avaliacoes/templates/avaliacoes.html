@@ -1,0 +1,223 @@
+{% extends "layout.html" %}
+{% block title %}Avaliações · SGD{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ====== BASE ====== */
+.page-av{
+  max-width:min(1200px,96vw);
+  margin:18px auto 40px;
+  padding:0 12px 28px;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+.page-head{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  gap:12px;flex-wrap:wrap;margin-bottom:16px;
+}
+.page-head h2{margin:0;font-size:22px;font-weight:900}
+.page-head p{margin:4px 0 0;color:#64748b;font-size:.95rem}
+
+/* ====== BOTÕES ====== */
+.btn{
+  border:0;cursor:pointer;padding:10px 14px;border-radius:12px;
+  font-weight:900;font-size:.95rem;text-decoration:none;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.btn-primary{background:#1e3a8a;color:#fff}
+.btn-ghost{background:#f1f5f9;color:#0f172a}
+.btn-soft{background:#eef2ff;color:#1e3a8a}
+
+/* ====== CARDS ====== */
+.card{
+  background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+  box-shadow:0 10px 30px rgba(2,6,23,.06);
+  margin-bottom:16px;
+}
+.card-head{
+  padding:14px;border-bottom:1px solid #eef2f7;
+  display:flex;justify-content:space-between;gap:10px;
+}
+.card-title{margin:0;font-size:16px;font-weight:900}
+.card-sub{margin:4px 0 0;font-size:.9rem;color:#64748b}
+.card-body{padding:14px}
+
+/* ====== PICKS ====== */
+.pick-grid{
+  display:grid;gap:12px;grid-template-columns:1fr;
+}
+@media(min-width:700px){
+  .pick-grid{grid-template-columns:1fr 1fr}
+}
+.pick{
+  border:1px solid #e5e7eb;border-radius:16px;padding:14px;
+  background:#f8fafc;display:flex;gap:12px;text-decoration:none;
+  color:inherit;
+}
+.pick-ico{
+  width:44px;height:44px;border-radius:14px;
+  display:grid;place-items:center;font-size:18px;
+  background:#eef2ff;color:#1e3a8a;font-weight:900;
+}
+
+/* ====== FILTROS ====== */
+.filters{
+  display:grid;gap:10px;
+  grid-template-columns:1fr;
+}
+@media(min-width:900px){
+  .filters{grid-template-columns:1.3fr .9fr .7fr .6fr}
+}
+.f-field{display:flex;flex-direction:column;gap:6px}
+.f-label{font-weight:900;font-size:.85rem}
+.f-input,.f-select{
+  border:1px solid #e5e7eb;border-radius:12px;
+  padding:10px 12px;font-size:.95rem;
+}
+
+/* ====== TABELA ====== */
+.table-wrap{
+  margin-top:12px;border:1px solid #e5e7eb;
+  border-radius:16px;overflow:hidden;
+}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;border-bottom:1px solid #eef2f7}
+th{background:#f8fafc;font-size:.8rem;text-transform:uppercase}
+tr:hover td{background:#f8fafc}
+.pill{
+  padding:6px 10px;border-radius:999px;
+  font-size:.8rem;font-weight:900;
+  background:#eef2ff;color:#1e3a8a;
+}
+.muted{color:#64748b;font-size:.9rem}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-av">
+
+  <!-- ===== CABEÇALHO ===== -->
+  <header class="page-head">
+    <div>
+      <h2>📋 Avaliações</h2>
+      <p>Registro, filtro e histórico das avaliações multiprofissionais.</p>
+    </div>
+    <a class="btn btn-soft" href="{{ url_for('avaliacoes.tela_anamnese') }}">+ Nova avaliação</a>
+  </header>
+
+  <!-- ===== BLOCO 1 · TIPOS ===== -->
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h3 class="card-title">Tipo de avaliação</h3>
+        <p class="card-sub">Selecione o formulário desejado.</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="pick-grid">
+        {% for c in cards %}
+          {% if c.route %}
+          <a class="pick" href="{{ url_for(c.route) }}">
+            <div class="pick-ico">📄</div>
+            <div>
+              <strong>{{ c.label }}</strong>
+              <div class="muted">Abrir formulário</div>
+            </div>
+          </a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BLOCO 2 · FILTROS ===== -->
+  <section class="card">
+    <div class="card-head">
+      <h3 class="card-title">Filtros</h3>
+    </div>
+    <div class="card-body">
+      <div class="filters">
+        <div class="f-field">
+          <label class="f-label">Paciente</label>
+          <input id="fNome" class="f-input" placeholder="Nome do paciente">
+        </div>
+        <div class="f-field">
+          <label class="f-label">CBO</label>
+          <input id="fCbo" class="f-input" placeholder="Ex.: 251510">
+        </div>
+        <div class="f-field">
+          <label class="f-label">Competência</label>
+          <input id="fComp" class="f-input" type="month">
+        </div>
+        <div class="f-field">
+          <label class="f-label">&nbsp;</label>
+          <button class="btn btn-primary" id="btnLimpar">Limpar</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BLOCO 3 · TABELA ===== -->
+  <section class="card">
+    <div class="card-head">
+      <h3 class="card-title">Registros</h3>
+    </div>
+    <div class="card-body">
+      <div class="table-wrap">
+        <table id="tblAvaliacoes">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Paciente</th>
+              <th>Tipo</th>
+              <th>Profissional</th>
+              <th>Competência</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in avaliacoes %}
+            <tr
+              data-nome="{{ a.paciente_nome|lower }}"
+              data-cbo="{{ a.usuario_cbo or '' }}"
+              data-comp="{{ a.criado_em[:7] }}"
+            >
+              <td>#{{ a.id }}</td>
+              <td>{{ a.paciente_nome }}</td>
+              <td><span class="pill">{{ tipos.get(a.tipo,a.tipo) }}</span></td>
+              <td>{{ a.usuario_nome }}</td>
+              <td class="muted">{{ a.criado_em[:7] }}</td>
+              <td>
+                <a class="btn btn-ghost" href="{{ url_for('avaliacoes.visualizar', id=a.id) }}">Ver</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ===== JS FILTRO ===== -->
+<script>
+(function(){
+  const nome = document.getElementById('fNome');
+  const cbo  = document.getElementById('fCbo');
+  const comp = document.getElementById('fComp');
+  const rows = document.querySelectorAll('#tblAvaliacoes tbody tr');
+  const clear = document.getElementById('btnLimpar');
+
+  function apply(){
+    rows.forEach(r=>{
+      const okNome = !nome.value || r.dataset.nome.includes(nome.value.toLowerCase());
+      const okCbo  = !cbo.value  || r.dataset.cbo.includes(cbo.value);
+      const okComp = !comp.value || r.dataset.comp === comp.value;
+      r.style.display = (okNome && okCbo && okComp) ? '' : 'none';
+    });
+  }
+  [nome,cbo,comp].forEach(i=>i.addEventListener('input',apply));
+  clear.onclick = ()=>{nome.value=cbo.value=comp.value='';apply();}
+})();
+</script>
+{% endblock %}
