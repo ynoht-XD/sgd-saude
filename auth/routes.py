@@ -10,10 +10,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import auth_bp
 
 # === Caminho do banco (absoluto, a partir da raiz do projeto) ===
+# === Caminho do banco ===
+# Local: usa data_base/sgd_db.db
+# Render (sem disk): usa /tmp/sgd_db.db (pode sumir e tudo bem por enquanto)
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DATA_DIR = os.path.join(BASE_DIR, "data_base")
-os.makedirs(DATA_DIR, exist_ok=True)
-CAMINHO_DB = os.path.join(DATA_DIR, "sgd_db.db")
+CAMINHO_DB = os.environ.get("SQLITE_PATH") or os.path.join(BASE_DIR, "data_base", "sgd_db.db")
+
+# (opcional) log pra você ver no Render qual caminho está usando
+print("🧠 SQLite AUTH em:", CAMINHO_DB)
 
 # Master (seed automático ao acessar /auth/login)
 MASTER_CPF = "11286922445"
