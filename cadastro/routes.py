@@ -135,34 +135,37 @@ def _add_col(conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
 
 def ensure_pacientes_schema(conn: sqlite3.Connection) -> None:
     """
-    Garante que a tabela pacientes exista e tenha TODAS as colunas usadas no INSERT.
+    Garante que a tabela pacientes exista e tenha TODAS as colunas usadas no cadastro.
     Idempotente (seguro rodar sempre).
     """
     cur = conn.cursor()
 
-    # base mínima (se não existir)
+    # 1) Base mínima (se não existir)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS pacientes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prontuario TEXT,
-            nome TEXT,
-            cns TEXT,
-            status TEXT,
-            nascimento TEXT,
-            idade TEXT,
-            sexo TEXT,
-            mod TEXT,
-            cid TEXT,
-            cid2 TEXT,
-            admissao TEXT,
-            cpf TEXT
+            id INTEGER PRIMARY KEY AUTOINCREMENT
         )
         """
     )
     conn.commit()
 
-    # garante colunas do teu INSERT (todas)
+    # 2) Colunas base (IMPORTANTE: se a tabela já existia antiga, isso adiciona também)
+    #    (aqui está a correção do teu erro: 'admissao' agora é garantida via ALTER TABLE)
+    _add_col(conn, "pacientes", "prontuario", "TEXT")
+    _add_col(conn, "pacientes", "nome", "TEXT")
+    _add_col(conn, "pacientes", "cns", "TEXT")
+    _add_col(conn, "pacientes", "status", "TEXT")
+    _add_col(conn, "pacientes", "nascimento", "TEXT")
+    _add_col(conn, "pacientes", "idade", "TEXT")
+    _add_col(conn, "pacientes", "sexo", "TEXT")
+    _add_col(conn, "pacientes", "mod", "TEXT")
+    _add_col(conn, "pacientes", "cid", "TEXT")
+    _add_col(conn, "pacientes", "cid2", "TEXT")
+    _add_col(conn, "pacientes", "admissao", "TEXT")  # ✅ agora garante mesmo em tabela antiga
+    _add_col(conn, "pacientes", "cpf", "TEXT")
+
+    # 3) Colunas do teu formulário/INSERT
     _add_col(conn, "pacientes", "nis", "TEXT")
     _add_col(conn, "pacientes", "raca", "TEXT")
     _add_col(conn, "pacientes", "logradouro", "TEXT")
@@ -198,11 +201,46 @@ def ensure_pacientes_schema(conn: sqlite3.Connection) -> None:
     _add_col(conn, "pacientes", "rg_responsavel", "TEXT")
     _add_col(conn, "pacientes", "orgao_rg_responsavel", "TEXT")
 
-    # índices úteis
+    # 4) Índices úteis (só cria se não existir)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_nome ON pacientes(nome);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_cpf  ON pacientes(cpf);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_prontuario ON pacientes(prontuario);")
     conn.commit()
+
+
+def _insert_paciente_safe(conn: sqlite3.Connection, dados: dict) -> int:
+    """
+    INSERT à prova de mudanças:
+    - Usa apenas colunas que existem no banco.
+    - Mantém a ordem do teu formulário.
+    """
+    cols_exist = _table_columns(conn, "pacientes")
+
+    desired_cols = [
+        "prontuario", "nome", "cns", "status", "nascimento", "idade", "sexo", "mod",
+        "cid", "cid2", "nis", "raca", "admissao",
+        "logradouro", "codigo_logradouro", "numero_casa", "complemento", "bairro", "municipio", "cep",
+        "cpf", "rg", "orgao_rg", "estado_civil",
+        "mae", "cpf_mae", "rg_mae", "rg_ssp_mae", "nis_mae",
+        "pai", "cpf_pai", "rg_pai", "rg_ssp_pai",
+        "telefone1", "telefone2", "telefone3", "email",
+        "responsavel", "cpf_responsavel", "rg_responsavel", "orgao_rg_responsavel",
+    ]
+
+    cols = [c for c in desired_cols if c in cols_exist]
+    if not cols:
+        raise RuntimeError("Tabela 'pacientes' sem colunas compatíveis para INSERT.")
+
+    placeholders = ", ".join(["?"] * len(cols))
+    col_sql = ", ".join(cols)
+
+    sql = f"INSERT INTO pacientes ({col_sql}) VALUES ({placeholders})"
+    vals = [dados.get(c) for c in cols]
+
+    cur = conn.cursor()
+    cur.execute(sql, vals)
+    conn.commit()
+    return cur.lastrowid
 
 
 # =============================================================================
@@ -223,72 +261,13 @@ def salvar_paciente():
 
     try:
         with conectar_db() as conn:
-            # ✅ garante schema antes do insert
+            # ✅ garante schema antes do insert (agora adiciona 'admissao' mesmo em tabela antiga)
             ensure_pacientes_schema(conn)
 
-            cursor = conn.cursor()
             print("📦 Dados recebidos (normalizados):", dados)
 
-            cursor.execute(
-                """
-                INSERT INTO pacientes (
-                    prontuario, nome, cns, status, nascimento, idade, sexo, mod,
-                    cid, cid2, nis, raca, admissao,
-                    logradouro, codigo_logradouro, numero_casa, complemento, bairro, municipio, cep,
-                    cpf, rg, orgao_rg, estado_civil,
-                    mae, cpf_mae, rg_mae, rg_ssp_mae, nis_mae,
-                    pai, cpf_pai, rg_pai, rg_ssp_pai,
-                    telefone1, telefone2, telefone3, email,
-                    responsavel, cpf_responsavel, rg_responsavel, orgao_rg_responsavel
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    dados.get("prontuario"),
-                    dados.get("nome"),
-                    dados.get("cns"),
-                    dados.get("status"),
-                    dados.get("nascimento"),
-                    dados.get("idade"),
-                    dados.get("sexo"),
-                    dados.get("mod"),
-                    dados.get("cid"),
-                    dados.get("cid2"),
-                    dados.get("nis"),
-                    dados.get("raca"),
-                    dados.get("admissao"),
-                    dados.get("logradouro"),
-                    dados.get("codigo_logradouro"),
-                    dados.get("numero_casa"),
-                    dados.get("complemento"),
-                    dados.get("bairro"),
-                    dados.get("municipio"),
-                    dados.get("cep"),
-                    dados.get("cpf"),
-                    dados.get("rg"),
-                    dados.get("orgao_rg"),
-                    dados.get("estado_civil"),
-                    dados.get("mae"),
-                    dados.get("cpf_mae"),
-                    dados.get("rg_mae"),
-                    dados.get("rg_ssp_mae"),
-                    dados.get("nis_mae"),
-                    dados.get("pai"),
-                    dados.get("cpf_pai"),
-                    dados.get("rg_pai"),
-                    dados.get("rg_ssp_pai"),
-                    dados.get("telefone1"),
-                    dados.get("telefone2"),
-                    dados.get("telefone3"),
-                    dados.get("email"),
-                    dados.get("responsavel"),
-                    dados.get("cpf_responsavel"),
-                    dados.get("rg_responsavel"),
-                    dados.get("orgao_rg_responsavel"),
-                ),
-            )
-
-            last_id = cursor.lastrowid
-            conn.commit()
+            # ✅ INSERT safe (não quebra se faltar/variar coluna no Render)
+            last_id = _insert_paciente_safe(conn, dados)
 
         redirect_url = _build_redirect_url(dados, last_id)
 
