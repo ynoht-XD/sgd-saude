@@ -129,28 +129,31 @@ def api_buscar_pacientes():
         return jsonify({"items": []})
 
     conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
 
-    cur.execute("""
-        SELECT id, nome, prontuario
-        FROM pacientes
-        WHERE nome LIKE ?
-        ORDER BY nome
-        LIMIT 20
-    """, (f"%{q}%",))
+        cur.execute("""
+            SELECT id, nome, prontuario
+            FROM pacientes
+            WHERE nome LIKE ?
+            ORDER BY nome
+            LIMIT 20
+        """, (f"%{q}%",))
 
-    return jsonify({
-        "items": [
-            {
-                "id": r["id"],
-                "nome": r["nome"],
-                "prontuario": r["prontuario"],
-                "label": f'{r["nome"]} · Pront: {r["prontuario"]}'
-            }
-            for r in cur.fetchall()
-        ]
-    })
+        return jsonify({
+            "items": [
+                {
+                    "id": r["id"],
+                    "nome": r["nome"],
+                    "prontuario": r["prontuario"],
+                    "label": f'{r["nome"]} · Pront: {r["prontuario"]}'
+                }
+                for r in cur.fetchall()
+            ]
+        })
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -160,23 +163,26 @@ def api_buscar_pacientes():
 @avaliacoes_bp.route("/")
 def index():
     conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    ensure_avaliacoes_schema(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_avaliacoes_schema(conn)
 
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, tipo, paciente_nome, paciente_prontuario,
-               usuario_nome, usuario_cbo, criado_em
-        FROM avaliacoes
-        ORDER BY criado_em DESC
-        LIMIT 500
-    """)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, tipo, paciente_nome, paciente_prontuario,
+                   usuario_nome, usuario_cbo, criado_em
+            FROM avaliacoes
+            ORDER BY criado_em DESC
+            LIMIT 500
+        """)
 
-    return render_template(
-        "avaliacoes.html",
-        avaliacoes=cur.fetchall(),
-        tipos=TIPOS_AVALIACAO
-    )
+        return render_template(
+            "avaliacoes.html",
+            avaliacoes=cur.fetchall(),
+            tipos=TIPOS_AVALIACAO
+        )
+    finally:
+        conn.close()
 
 
 @avaliacoes_bp.route("/lista")
@@ -211,30 +217,33 @@ def nova():
         dados.pop(k, None)
 
     conn = conectar_db()
-    ensure_avaliacoes_schema(conn)
-    cur = conn.cursor()
+    try:
+        ensure_avaliacoes_schema(conn)
+        cur = conn.cursor()
 
-    cur.execute("""
-        INSERT INTO avaliacoes (
-            tipo, paciente_nome, paciente_prontuario, paciente_cpf,
-            usuario_id, usuario_nome, usuario_cbo,
-            dados_json, criado_em
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        tipo,
-        paciente_nome,
-        request.form.get("paciente_prontuario"),
-        request.form.get("paciente_cpf"),
-        usuario_id,
-        session.get("nome"),
-        session.get("cbo"),
-        json.dumps(dados, ensure_ascii=False),
-        datetime.now().isoformat(timespec="seconds")
-    ))
+        cur.execute("""
+            INSERT INTO avaliacoes (
+                tipo, paciente_nome, paciente_prontuario, paciente_cpf,
+                usuario_id, usuario_nome, usuario_cbo,
+                dados_json, criado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            tipo,
+            paciente_nome,
+            request.form.get("paciente_prontuario"),
+            request.form.get("paciente_cpf"),
+            usuario_id,
+            session.get("nome"),
+            session.get("cbo"),
+            json.dumps(dados, ensure_ascii=False),
+            datetime.now().isoformat(timespec="seconds")
+        ))
 
-    conn.commit()
-    flash("Avaliação registrada com sucesso ✅", "success")
-    return redirect(url_for("avaliacoes.lista"))
+        conn.commit()
+        flash("Avaliação registrada com sucesso ✅", "success")
+        return redirect(url_for("avaliacoes.lista"))
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -244,25 +253,28 @@ def nova():
 @avaliacoes_bp.route("/<int:id>")
 def visualizar(id: int):
     conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    ensure_avaliacoes_schema(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_avaliacoes_schema(conn)
 
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
-    av = cur.fetchone()
-    if not av:
-        abort(404)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
+        av = cur.fetchone()
+        if not av:
+            abort(404)
 
-    dados = json.loads(av["dados_json"] or "{}")
+        dados = json.loads(av["dados_json"] or "{}")
 
-    return render_template(
-        "avaliacao_visualizar.html",
-        avaliacao={
-            **dict(av),
-            "titulo": TIPOS_AVALIACAO.get(av["tipo"], av["tipo"]),
-            "itens": montar_itens_visualizacao(dados)
-        }
-    )
+        return render_template(
+            "avaliacao_visualizar.html",
+            avaliacao={
+                **dict(av),
+                "titulo": TIPOS_AVALIACAO.get(av["tipo"], av["tipo"]),
+                "itens": montar_itens_visualizacao(dados)
+            }
+        )
+    finally:
+        conn.close()
 
 
 # ============================================================
@@ -272,68 +284,71 @@ def visualizar(id: int):
 @avaliacoes_bp.route("/<int:id>/pdf")
 def imprimir_pdf(id: int):
     conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    ensure_avaliacoes_schema(conn)
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_avaliacoes_schema(conn)
 
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
-    av = cur.fetchone()
-    if not av:
-        abort(404)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
+        av = cur.fetchone()
+        if not av:
+            abort(404)
 
-    dados = json.loads(av["dados_json"] or "{}")
-    itens = montar_itens_visualizacao(dados)
+        dados = json.loads(av["dados_json"] or "{}")
+        itens = montar_itens_visualizacao(dados)
 
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
+        w, h = A4
 
-    y = h - 50
+        y = h - 50
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, y, "AVALIAÇÃO CLÍNICA")
-    y -= 18
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(40, y, "AVALIAÇÃO CLÍNICA")
+        y -= 18
 
-    c.setFont("Helvetica", 10)
-    c.drawString(40, y, f"Tipo: {TIPOS_AVALIACAO.get(av['tipo'])}")
-    y -= 14
-    c.drawString(40, y, f"Paciente: {av['paciente_nome']}")
-    y -= 14
-    c.drawString(40, y, f"Data: {av['criado_em']}")
-    y -= 14
-    c.drawString(40, y, f"Profissional: {av['usuario_nome']} ({av['usuario_cbo']})")
-    y -= 20
+        c.setFont("Helvetica", 10)
+        c.drawString(40, y, f"Tipo: {TIPOS_AVALIACAO.get(av['tipo'])}")
+        y -= 14
+        c.drawString(40, y, f"Paciente: {av['paciente_nome']}")
+        y -= 14
+        c.drawString(40, y, f"Data: {av['criado_em']}")
+        y -= 14
+        c.drawString(40, y, f"Profissional: {av['usuario_nome']} ({av['usuario_cbo']})")
+        y -= 20
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(40, y, "DADOS DA AVALIAÇÃO")
-    y -= 16
-    c.setFont("Helvetica", 10)
-
-    for item in itens:
-        if y < 60:
-            c.showPage()
-            y = h - 50
-            c.setFont("Helvetica", 10)
-
-        c.drawString(40, y, f"{item['label']}:")
-        y -= 12
-        c.drawString(60, y, item["valor"])
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(40, y, "DADOS DA AVALIAÇÃO")
         y -= 16
+        c.setFont("Helvetica", 10)
 
-    y -= 30
-    c.line(40, y, 260, y)
-    c.drawString(40, y - 12, "Assinatura do profissional")
+        for item in itens:
+            if y < 60:
+                c.showPage()
+                y = h - 50
+                c.setFont("Helvetica", 10)
 
-    c.showPage()
-    c.save()
-    buf.seek(0)
+            c.drawString(40, y, f"{item['label']}:")
+            y -= 12
+            c.drawString(60, y, item["valor"])
+            y -= 16
 
-    return send_file(
-        buf,
-        mimetype="application/pdf",
-        download_name=f"avaliacao_{id}.pdf",
-        as_attachment=False
-    )
+        y -= 30
+        c.line(40, y, 260, y)
+        c.drawString(40, y - 12, "Assinatura do profissional")
+
+        c.showPage()
+        c.save()
+        buf.seek(0)
+
+        return send_file(
+            buf,
+            mimetype="application/pdf",
+            download_name=f"avaliacao_{id}.pdf",
+            as_attachment=False
+        )
+    finally:
+        conn.close()
 
 
 # ============================================================
