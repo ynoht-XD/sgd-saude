@@ -15,14 +15,62 @@ DOW_LABELS_PT = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "S
 DOW_LABELS = [(str(i), nome) for i, nome in enumerate(DOW_LABELS_PT)]
 
 
+def _has_table(conn: sqlite3.Connection, table: str) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;",
+        (table,),
+    )
+    return cur.fetchone() is not None
+
+
 def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
     cur = conn.cursor()
     cur.execute(f"PRAGMA table_info({table});")
     return column in {row[1] for row in cur.fetchall()}
 
 
+def _ensure_agendamentos_table(conn: sqlite3.Connection):
+    """
+    Garante a tabela 'agendamentos' no mínimo necessário para a agenda funcionar.
+    Não destrói nada, não recria se já existir.
+    """
+    if _has_table(conn, "agendamentos"):
+        return
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agendamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            paciente TEXT,
+            profissional TEXT,
+            profissional_cpf TEXT,
+
+            inicio TEXT,
+            fim TEXT,
+
+            dia TEXT,
+            observacao TEXT,
+
+            status TEXT DEFAULT 'ativo',
+
+            recorrente INTEGER DEFAULT 0,
+            serie_uid TEXT,
+            dow_dom INTEGER,
+
+            valor_sessao REAL
+        );
+        """
+    )
+    conn.commit()
+
+
 def _ensure_valor_col(conn: sqlite3.Connection):
     """Garante a coluna valor_sessao na tabela agendamentos."""
+    if not _has_table(conn, "agendamentos"):
+        return
     if not _has_column(conn, "agendamentos", "valor_sessao"):
         cur = conn.cursor()
         cur.execute("ALTER TABLE agendamentos ADD COLUMN valor_sessao REAL;")
@@ -38,10 +86,22 @@ def _ensure_dia_col(conn: sqlite3.Connection):
       - A partir de agora, a coluna 'dia' será usada apenas para guardar
         o NOME do dia ("Segunda", "Terça", ...), se você quiser olhar no SQLite.
     """
+    if not _has_table(conn, "agendamentos"):
+        return
     if not _has_column(conn, "agendamentos", "dia"):
         cur = conn.cursor()
         cur.execute("ALTER TABLE agendamentos ADD COLUMN dia TEXT;")
         conn.commit()
+
+
+def ensure_schema_agenda(conn: sqlite3.Connection):
+    """
+    Um ponto único para garantir schema da agenda.
+    Pode ser chamado com segurança várias vezes.
+    """
+    _ensure_agendamentos_table(conn)
+    _ensure_valor_col(conn)
+    _ensure_dia_col(conn)
 
 
 def _parse_hhmm(s: str) -> Optional[tuple[int, int]]:
@@ -75,7 +135,7 @@ def _usuario_by_cpf(conn: sqlite3.Connection, cpf: str):
          WHERE TRIM(COALESCE(cpf,'')) = TRIM(?)
            AND COALESCE(is_active,1)=1
          LIMIT 1;
-    """,
+        """,
         (cpf,),
     )
     r = cur.fetchone()
@@ -109,18 +169,18 @@ def _to_dt(val):
 
 @agenda_bp.route("/", methods=["GET"], endpoint="visualizar_agenda")
 def agenda_form():
-    # só precisamos da lista de pacientes para fallback; a busca será via AJAX
     pacientes = []
     with conectar_db() as conn:
         cur = conn.cursor()
+
+        # garante schema/colunas
+        ensure_schema_agenda(conn)
+
         try:
             cur.execute("SELECT id, nome FROM pacientes ORDER BY nome;")
             pacientes = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
         except Exception:
             pacientes = []
-        # garante colunas auxiliares
-        _ensure_valor_col(conn)
-        _ensure_dia_col(conn)
 
     return render_template("agenda.html", pacientes=pacientes, dow_labels=DOW_LABELS)
 
@@ -142,10 +202,6 @@ def agenda_salvar():
         "valor_sessao": 50.00,                    // opcional (REAL)
         "profissional_cpf": "000.000.000-00"      // OBRIGATÓRIO (resolverá o nome)
       }
-
-    Observação:
-      - Se "paciente_nome" = "VAGO" (case-insensitive), não tenta resolver paciente no banco;
-        cria apenas um horário vago (sem paciente_id e sem redirect de prontuário).
     """
     data = request.get_json(silent=True) or {}
     pac_id = data.get("paciente_id")
@@ -175,15 +231,15 @@ def agenda_salvar():
 
     with conectar_db() as conn:
         cur = conn.cursor()
-        _ensure_valor_col(conn)
-        _ensure_dia_col(conn)
+
+        # garante schema/colunas
+        ensure_schema_agenda(conn)
 
         # ================== resolve paciente ==================
         pid = None
         nome = None
 
         if is_vago:
-            # Horário vago: não vincula a paciente da tabela
             pid = None
             nome = "VAGO"
         else:
@@ -200,7 +256,7 @@ def agenda_salvar():
                       FROM pacientes
                      WHERE TRIM(UPPER(nome)) = TRIM(UPPER(?))
                      LIMIT 1;
-                """,
+                    """,
                     (pac_nome,),
                 )
                 r = cur.fetchone()
@@ -236,7 +292,7 @@ def agenda_salvar():
             fim_dt = ini_dt + timedelta(minutes=dur_min)
             dow_dom_val = ((ini_dt.weekday() + 1) % 7)  # 0=Dom..6=Sáb
 
-            # >>> AQUI: no SQLite, coluna 'dia' vai receber o NOME do dia
+            # coluna 'dia' vai receber o NOME do dia
             try:
                 dia_label = DOW_LABELS_PT[dow_dom_val]
             except Exception:
@@ -258,14 +314,14 @@ def agenda_salvar():
                     dow_dom,
                     valor_sessao)
                 VALUES (?, ?, ?, ?, ?, ?, NULL, 'ativo', 0, NULL, ?, ?);
-            """,
+                """,
                 (
                     nome,
                     prof_nome,
                     prof_cpf,
                     ini_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     fim_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    dia_label,   # <<< EX.: "Segunda", "Terça", ...
+                    dia_label,
                     dow_dom_val,
                     valor,
                 ),
@@ -307,7 +363,7 @@ def api_profissionais():
                  WHERE TRIM(COALESCE(cpf,'')) <> ''
                    AND COALESCE(is_active,1)=1
                  ORDER BY nome;
-            """
+                """
             )
             rows = cur.fetchall()
             out = []
@@ -332,12 +388,6 @@ def api_agregados():
       - horário de início (HH:MM)
       - profissional
       - paciente
-
-    Agora também expõe:
-      - dia: nome do dia ("Segunda", ...)
-      - dia_num: índice 0..6
-      - dia_data: continua existindo só se a coluna `dia` for usada para isso,
-        mas a UI já usa apenas o label vindo de DOW.
     """
     try:
         qp = request.args
@@ -354,9 +404,8 @@ def api_agregados():
         with conectar_db() as conn:
             cur = conn.cursor()
 
-            # garante colunas auxiliares
-            _ensure_valor_col(conn)
-            _ensure_dia_col(conn)
+            # garante schema/colunas
+            ensure_schema_agenda(conn)
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
@@ -426,7 +475,6 @@ def api_agregados():
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
             select_pront = ", MIN(p.prontuario) AS prontuario" if has_pront else ""
-            # se quiser, ainda podemos trazer a coluna 'dia' bruta:
             select_dia = ", MIN(a.dia) AS dia_data" if has_dia else ""
 
             sql = f"""
@@ -454,7 +502,6 @@ def api_agregados():
             out = []
             for r in rows:
                 try:
-                    # índice/keys variam conforme presença de pront/dia
                     dow = r["dow"]
                     hora_ini = r["hora_ini"]
                     prof = r["profissional"]
@@ -465,13 +512,12 @@ def api_agregados():
                     pront = r["prontuario"] if has_pront else None
                     dia_data = r["dia_data"] if has_dia else None
                 except Exception:
-                    # fallback por índice
                     if has_pront and has_dia:
                         dow, hora_ini, prof, pac, qtd, any_id, paciente_id, pront, dia_data = r
                     elif has_pront and not has_dia:
                         dow, hora_ini, prof, pac, qtd, any_id, paciente_id, pront = r
                         dia_data = None
-                    elif not has_pront and has_dia:
+                    elif (not has_pront) and has_dia:
                         dow, hora_ini, prof, pac, qtd, any_id, paciente_id, dia_data = r
                         pront = None
                     else:
@@ -488,8 +534,7 @@ def api_agregados():
 
                 out.append(
                     {
-                        # 'dia' já vem com o NOME do dia
-                        "dia": dia_label,                                # "Segunda", "Terça", ...
+                        "dia": dia_label,
                         "dia_num": int(dow) if dow is not None else None,
                         "dia_label": dia_label,
                         "hora_ini": hora_ini or "—",
@@ -499,8 +544,6 @@ def api_agregados():
                         "prontuario": pront,
                         "qtd": int(qtd or 0),
                         "any_id": int(any_id or 0),
-                        # aqui tanto faz o conteúdo; se a coluna 'dia' estiver com label, vem o label,
-                        # mas a UI está usando 'dia' e 'dia_label' calculados acima
                         "dia_data": dia_data,
                     }
                 )
@@ -601,11 +644,13 @@ def api_agregados_export():
 def api_get_agendamento(ag_id: int):
     """
     Retorna os dados de UM agendamento para preencher o modal de edição.
-    (Agora a edição será apenas desse registro, não do grupo inteiro.)
     """
     try:
         with conectar_db() as conn:
             cur = conn.cursor()
+
+            # garante schema/colunas
+            ensure_schema_agenda(conn)
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
@@ -667,7 +712,7 @@ def api_get_agendamento(ag_id: int):
                     "paciente": paciente,
                     "profissional": profissional,
                     "profissional_cpf": profissional_cpf,
-                    "dia": dia,  # dia da semana 0..6
+                    "dia": dia,  # 0..6
                     "hora_de": hora_de,
                     "hora_ate": hora_ate,
                     "qtd": 1,
@@ -687,14 +732,6 @@ def api_get_agendamento(ag_id: int):
 def api_editar_agendamento(ag_id: int):
     """
     Edita apenas UM agendamento (id = ag_id).
-    Espera JSON (todos opcionais):
-      {
-        "dia": "1",                     # 0=Dom..6=Sáb (atualiza dow_dom se existir)
-        "hora_de": "08:00",
-        "hora_ate": "08:30",           # opcional, senão mantém duração original
-        "valor_sessao": 50.00,         # opcional
-        "profissional_cpf": "000..."   # opcional, troca profissional
-      }
     """
     data = request.get_json(silent=True) or {}
 
@@ -708,6 +745,9 @@ def api_editar_agendamento(ag_id: int):
         with conectar_db() as conn:
             cur = conn.cursor()
 
+            # garante schema/colunas
+            ensure_schema_agenda(conn)
+
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
             has_dow = "dow_dom" in cols_ag
@@ -715,7 +755,6 @@ def api_editar_agendamento(ag_id: int):
             has_valor = "valor_sessao" in cols_ag
             has_dia = "dia" in cols_ag
 
-            # Carrega o registro atual
             cur.execute(
                 """
                 SELECT id,
@@ -744,7 +783,7 @@ def api_editar_agendamento(ag_id: int):
                 _id,
                 paciente,
                 profissional,
-                profissional_cpf,
+                profissional_cpf_atual,
                 inicio_raw,
                 fim_raw,
                 dow_dom,
@@ -757,56 +796,44 @@ def api_editar_agendamento(ag_id: int):
             if not dt_ini:
                 return jsonify({"error": "Não foi possível interpretar o horário inicial atual."}), 500
 
-            # duração original
-            if dt_fim:
-                dur_min_original = int((dt_fim - dt_ini).total_seconds() // 60)
-            else:
-                dur_min_original = 30
+            dur_min_original = (
+                int((dt_fim - dt_ini).total_seconds() // 60) if dt_fim else 30
+            )
 
-            # novo dia da semana (0..6)
             novo_dia_semana = None
             if dia_raw:
                 if not dia_raw.isdigit() or not (0 <= int(dia_raw) <= 6):
                     return jsonify({"error": "Valor de 'dia' inválido (use 0..6)."}), 400
                 novo_dia_semana = int(dia_raw)
 
-            # novo horário início
             if hora_de:
                 hhmm_de = _parse_hhmm(hora_de)
                 if not hhmm_de:
                     return jsonify({"error": "Horário inicial inválido. Use HH:MM."}), 400
-                dt_ini_new = dt_ini.replace(
-                    hour=hhmm_de[0], minute=hhmm_de[1], second=0, microsecond=0
-                )
+                dt_ini_new = dt_ini.replace(hour=hhmm_de[0], minute=hhmm_de[1], second=0, microsecond=0)
             else:
                 dt_ini_new = dt_ini
 
-            # novo horário fim
             if hora_ate:
                 hhmm_ate = _parse_hhmm(hora_ate)
                 if not hhmm_ate:
                     return jsonify({"error": "Horário final inválido. Use HH:MM."}), 400
-                dt_fim_new = dt_ini_new.replace(
-                    hour=hhmm_ate[0], minute=hhmm_ate[1], second=0, microsecond=0
-                )
+                dt_fim_new = dt_ini_new.replace(hour=hhmm_ate[0], minute=hhmm_ate[1], second=0, microsecond=0)
                 if dt_fim_new <= dt_ini_new:
                     return jsonify({"error": "Horário final deve ser após o inicial."}), 400
             else:
                 dt_fim_new = dt_ini_new + timedelta(minutes=dur_min_original)
 
-            # se vier novo dia da semana, ajusta a data para cair nesse dia
             if novo_dia_semana is not None:
-                dow_atual_dom = (dt_ini_new.weekday() + 1) % 7  # 0=Dom..6=Sáb
+                dow_atual_dom = (dt_ini_new.weekday() + 1) % 7
                 delta_d = (novo_dia_semana - dow_atual_dom) % 7
                 dt_ini_new = dt_ini_new + timedelta(days=delta_d)
                 dt_fim_new = dt_fim_new + timedelta(days=delta_d)
 
-            # já calcula o novo índice de dia da semana (0..6) para usar em dow/dia
-            dow_dom_novo = (dt_ini_new.weekday() + 1) % 7  # 0=Dom..6
+            dow_dom_novo = (dt_ini_new.weekday() + 1) % 7
 
-            # novo profissional
             novo_prof_nome = profissional
-            novo_prof_cpf_resolvido = profissional_cpf
+            novo_prof_cpf_resolvido = profissional_cpf_atual
             if novo_prof_cpf:
                 u = _usuario_by_cpf(conn, novo_prof_cpf)
                 if not u:
@@ -814,7 +841,6 @@ def api_editar_agendamento(ag_id: int):
                 novo_prof_nome = u["nome"]
                 novo_prof_cpf_resolvido = u["cpf"]
 
-            # novo valor
             val_float = None
             if has_valor and valor_sessao is not None:
                 try:
@@ -822,17 +848,14 @@ def api_editar_agendamento(ag_id: int):
                 except Exception:
                     return jsonify({"error": "Valor da sessão inválido."}), 400
 
-            # monta UPDATE
             set_parts = []
             params_up = []
 
-            # inicio/fim
             set_parts.append("inicio = ?")
             params_up.append(dt_ini_new.strftime("%Y-%m-%d %H:%M:%S"))
             set_parts.append("fim = ?")
             params_up.append(dt_fim_new.strftime("%Y-%m-%d %H:%M:%S"))
 
-            # coluna 'dia' agora guarda o NOME do dia ("Segunda", ...)
             if has_dia:
                 try:
                     dia_label = DOW_LABELS_PT[dow_dom_novo]
@@ -860,11 +883,7 @@ def api_editar_agendamento(ag_id: int):
             if not set_parts:
                 return jsonify({"ok": True, "updated_id": ag_id, "note": "Nada para atualizar."})
 
-            sql_up = f"""
-                UPDATE agendamentos
-                   SET {", ".join(set_parts)}
-                 WHERE id = ?;
-            """
+            sql_up = f"UPDATE agendamentos SET {', '.join(set_parts)} WHERE id = ?;"
             params_up.append(ag_id)
 
             cur.execute(sql_up, params_up)
@@ -885,6 +904,7 @@ def api_excluir_agendamento(ag_id: int):
     try:
         with conectar_db() as conn:
             cur = conn.cursor()
+            ensure_schema_agenda(conn)
             cur.execute("DELETE FROM agendamentos WHERE id = ?;", (ag_id,))
             deleted = cur.rowcount or 0
             conn.commit()
@@ -907,7 +927,6 @@ def api_excluir_grupo():
         - hora_ini (HH:MM)  [obrigatório]
         - profissional (nome exato)  [obrigatório]
         - paciente (nome exato)  [obrigatório]
-    Considera dow_dom se existir; senão calcula via strftime('%w', inicio).
     """
     try:
         dow = request.args.get("dow", "").strip()
@@ -924,6 +943,9 @@ def api_excluir_grupo():
 
         with conectar_db() as conn:
             cur = conn.cursor()
+
+            ensure_schema_agenda(conn)
+
             cur.execute("PRAGMA table_info(agendamentos);")
             cols = {row[1] for row in cur.fetchall()}
             has_dow = "dow_dom" in cols
@@ -936,7 +958,7 @@ def api_excluir_grupo():
                        AND TRIM(UPPER(profissional)) = TRIM(UPPER(?))
                        AND TRIM(UPPER(paciente)) = TRIM(UPPER(?))
                        AND strftime('%H:%M', inicio) = ?
-                """,
+                    """,
                     (int(dow), prof, pac, hora_ini),
                 )
             else:
@@ -947,7 +969,7 @@ def api_excluir_grupo():
                        AND TRIM(UPPER(profissional)) = TRIM(UPPER(?))
                        AND TRIM(UPPER(paciente)) = TRIM(UPPER(?))
                        AND strftime('%H:%M', inicio) = ?
-                """,
+                    """,
                     (int(dow), prof, pac, hora_ini),
                 )
 
