@@ -97,10 +97,7 @@ def _int_or_none(s: str) -> Optional[int]:
 # ============================================================
 
 def _resolve_logged_profissional_id(conn) -> int | None:
-    """
-    Retorna o id do usuário logado (usuarios.id),
-    que é exatamente o que você grava em atendimentos.profissional_id.
-    """
+    # 1) tenta id direto na session
     for key in ("usuario_id", "user_id", "id"):
         val = session.get(key)
         if val is not None:
@@ -110,25 +107,37 @@ def _resolve_logged_profissional_id(conn) -> int | None:
                 pass
 
     login_like = session.get("usuario_logado") or session.get("login") or session.get("username")
-    if login_like and has_table(conn, "usuarios"):
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                """
-                SELECT id
-                  FROM usuarios
-                 WHERE TRIM(LOWER(COALESCE(login, nome, email, ''))) = TRIM(LOWER(?))
-                 LIMIT 1
-                """,
-                (login_like,),
-            )
-            row = cur.fetchone()
-            if row:
-                return int(row[0])
-        except Exception:
-            pass
+    if not login_like:
+        return None
 
-    return None
+    if not has_table(conn, "usuarios"):
+        return None
+
+    cols = _table_columns(conn, "usuarios")
+
+    # monta expressão segura só com colunas que existem
+    parts = []
+    if "login" in cols: parts.append("login")
+    if "nome" in cols:  parts.append("nome")
+    if "email" in cols: parts.append("email")
+
+    if not parts:
+        return None
+
+    expr = "COALESCE(" + ", ".join(parts + ["''"]) + ")"
+
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT id
+          FROM usuarios
+         WHERE TRIM(LOWER({expr})) = TRIM(LOWER(?))
+         LIMIT 1
+        """,
+        (login_like,),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
 
 
 def _build_url_with_page(page: int) -> str:
