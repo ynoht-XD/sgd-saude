@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 import sqlite3, io, csv
 from typing import Optional
+
 from flask import render_template, request, jsonify, url_for, send_file
 from . import agenda_bp
 from db import conectar_db
@@ -127,6 +128,13 @@ def _combine_date_time(day: datetime, hh: int, mm: int) -> datetime:
 
 
 def _usuario_by_cpf(conn: sqlite3.Connection, cpf: str):
+    """
+    Resolve usuário/profissional pelo CPF.
+    Harden: se tabela usuarios não existir (primeiro boot), retorna None.
+    """
+    if not _has_table(conn, "usuarios"):
+        return None
+
     cur = conn.cursor()
     cur.execute(
         """
@@ -166,16 +174,14 @@ def _to_dt(val):
 
 # ==================== /agenda (GET): formulário ====================
 
-
 @agenda_bp.route("/", methods=["GET"], endpoint="visualizar_agenda")
 def agenda_form():
     pacientes = []
     with conectar_db() as conn:
-        cur = conn.cursor()
-
-        # garante schema/colunas
+        # garante schema/colunas (ANTES de qualquer coisa)
         ensure_schema_agenda(conn)
 
+        cur = conn.cursor()
         try:
             cur.execute("SELECT id, nome FROM pacientes ORDER BY nome;")
             pacientes = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
@@ -186,7 +192,6 @@ def agenda_form():
 
 
 # ==================== /agenda (POST): salvar ====================
-
 
 @agenda_bp.route("/", methods=["POST"], endpoint="agenda_salvar")
 def agenda_salvar():
@@ -222,18 +227,18 @@ def agenda_salvar():
         return jsonify({"error": "Profissional é obrigatório."}), 400
     if not dia.isdigit() or not (0 <= int(dia) <= 6):
         return jsonify({"error": "Dia inválido. Use 0..6 (0=Dom..6=Sáb)."}), 400
+
     hhmm_de = _parse_hhmm(hora_de)
     if not hhmm_de:
         return jsonify({"error": "Horário inicial inválido. Use HH:MM."}), 400
+
     hhmm_ate = _parse_hhmm(hora_ate) if hora_ate else None
     if qtd < 1:
         return jsonify({"error": "Quantidade de sessões deve ser >= 1."}), 400
 
     with conectar_db() as conn:
-        cur = conn.cursor()
-
-        # garante schema/colunas
         ensure_schema_agenda(conn)
+        cur = conn.cursor()
 
         # ================== resolve paciente ==================
         pid = None
@@ -349,12 +354,14 @@ def agenda_salvar():
 
 # ==================== API: profissionais (para o select) ====================
 
-
 @agenda_bp.get("/api/profissionais", endpoint="api_profissionais")
 def api_profissionais():
     """Retorna [{nome, cpf}] de usuários ativos com CPF."""
     try:
         with conectar_db() as conn:
+            # padrão: garante schema (não é obrigatório aqui, mas mantém consistência)
+            ensure_schema_agenda(conn)
+
             cur = conn.cursor()
             cur.execute(
                 """
@@ -379,7 +386,6 @@ def api_profissionais():
 
 # ==================== API: agregados para listagem da UI ====================
 
-
 @agenda_bp.get("/api/agregados", endpoint="api_agregados")
 def api_agregados():
     """
@@ -402,10 +408,8 @@ def api_agregados():
         cid_q = (qp.get("cid") or qp.get("cid10") or "").strip()
 
         with conectar_db() as conn:
-            cur = conn.cursor()
-
-            # garante schema/colunas
             ensure_schema_agenda(conn)
+            cur = conn.cursor()
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
@@ -557,7 +561,6 @@ def api_agregados():
 
 # ==================== EXPORT: agregados para Excel/CSV ====================
 
-
 @agenda_bp.get("/api/agregados/export", endpoint="api_agregados_export")
 def api_agregados_export():
     """
@@ -639,7 +642,6 @@ def api_agregados_export():
 
 # ==================== API: obter um agendamento (para edição) ====================
 
-
 @agenda_bp.get("/api/agendamentos/<int:ag_id>", endpoint="api_get_agendamento")
 def api_get_agendamento(ag_id: int):
     """
@@ -647,10 +649,8 @@ def api_get_agendamento(ag_id: int):
     """
     try:
         with conectar_db() as conn:
-            cur = conn.cursor()
-
-            # garante schema/colunas
             ensure_schema_agenda(conn)
+            cur = conn.cursor()
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
@@ -727,7 +727,6 @@ def api_get_agendamento(ag_id: int):
 
 # ==================== API: editar um agendamento (individual, por ID) ====================
 
-
 @agenda_bp.put("/api/agendamentos/<int:ag_id>", endpoint="api_editar_agendamento")
 def api_editar_agendamento(ag_id: int):
     """
@@ -743,10 +742,8 @@ def api_editar_agendamento(ag_id: int):
 
     try:
         with conectar_db() as conn:
-            cur = conn.cursor()
-
-            # garante schema/colunas
             ensure_schema_agenda(conn)
+            cur = conn.cursor()
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
@@ -796,9 +793,7 @@ def api_editar_agendamento(ag_id: int):
             if not dt_ini:
                 return jsonify({"error": "Não foi possível interpretar o horário inicial atual."}), 500
 
-            dur_min_original = (
-                int((dt_fim - dt_ini).total_seconds() // 60) if dt_fim else 30
-            )
+            dur_min_original = int((dt_fim - dt_ini).total_seconds() // 60) if dt_fim else 30
 
             novo_dia_semana = None
             if dia_raw:
@@ -898,13 +893,13 @@ def api_editar_agendamento(ag_id: int):
 
 # ==================== API: excluir um agendamento (individual) ====================
 
-
 @agenda_bp.delete("/api/agendamentos/<int:ag_id>", endpoint="api_excluir_agendamento")
 def api_excluir_agendamento(ag_id: int):
     try:
         with conectar_db() as conn:
-            cur = conn.cursor()
             ensure_schema_agenda(conn)
+            cur = conn.cursor()
+
             cur.execute("DELETE FROM agendamentos WHERE id = ?;", (ag_id,))
             deleted = cur.rowcount or 0
             conn.commit()
@@ -916,7 +911,6 @@ def api_excluir_agendamento(ag_id: int):
 
 
 # ==================== API: excluir um GRUPO agregado ====================
-
 
 @agenda_bp.delete("/api/agregados", endpoint="api_excluir_grupo")
 def api_excluir_grupo():
@@ -942,9 +936,8 @@ def api_excluir_grupo():
             return jsonify({"error": "Parâmetros 'profissional' e 'paciente' são obrigatórios."}), 400
 
         with conectar_db() as conn:
-            cur = conn.cursor()
-
             ensure_schema_agenda(conn)
+            cur = conn.cursor()
 
             cur.execute("PRAGMA table_info(agendamentos);")
             cols = {row[1] for row in cur.fetchall()}
