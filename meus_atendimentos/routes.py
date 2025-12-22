@@ -11,7 +11,7 @@ from db import conectar_db
 
 
 # ============================================================
-# HELPERS DE INTROSPECÇÃO
+# SCHEMA · ATENDIMENTOS (CRÍTICO NO RENDER)
 # ============================================================
 
 def has_table(conn, table_name: str) -> bool:
@@ -22,6 +22,108 @@ def has_table(conn, table_name: str) -> bool:
     )
     return cur.fetchone() is not None
 
+
+def _table_columns(conn, table: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table})")
+    return {r[1] for r in cur.fetchall()}
+
+
+def ensure_column(conn: sqlite3.Connection, table: str, col: str, ddl_type: str):
+    """
+    Adiciona coluna se não existir. Idempotente.
+    """
+    if not has_table(conn, table):
+        return
+    cols = _table_columns(conn, table)
+    if col in cols:
+        return
+    cur = conn.cursor()
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_type}")
+    conn.commit()
+
+
+def ensure_atendimentos_schema(conn: sqlite3.Connection):
+    """
+    Garante tabelas mínimas para o módulo 'Meus atendimentos' não quebrar no Render.
+    Se tu já tiver schema mais completo em outro lugar, isso aqui não atrapalha:
+    - CREATE IF NOT EXISTS
+    - ALTER TABLE só adiciona o que faltar
+    """
+    cur = conn.cursor()
+
+    # Tabela principal (mínimo pra listagem funcionar)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS atendimentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            -- profissional (quem atendeu)
+            profissional_id INTEGER,
+            usuario_id INTEGER,
+
+            -- paciente
+            paciente_id INTEGER,
+            cidadao_id INTEGER,
+            paciente_nome TEXT,
+            nome_paciente TEXT,
+            paciente TEXT,
+            nome TEXT,
+
+            -- data
+            data_atendimento TEXT,
+            data TEXT,
+            dt_atendimento TEXT,
+            criado_em TEXT,
+            created_at TEXT,
+
+            -- conteúdo
+            evolucao TEXT,
+            evolucao_texto TEXT,
+
+            -- extras úteis pra filtros (se existir)
+            cidade TEXT,
+            municipio TEXT,
+            cid TEXT,
+            cid_codigo TEXT
+        )
+    """)
+
+    # Procedimentos (opcional, mas tua query já tenta juntar)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            atendimento_id INTEGER NOT NULL,
+            procedimento TEXT,
+            procedimento_nome TEXT,
+            descricao TEXT,
+            FOREIGN KEY(atendimento_id) REFERENCES atendimentos(id)
+        )
+    """)
+
+    # índices (não dói e ajuda)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ap_atend ON atendimento_procedimentos (atendimento_id)")
+
+    conn.commit()
+
+    # Se tua base veio de outro ambiente com colunas faltando, garante o mínimo:
+    ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "usuario_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "cidadao_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "data_atendimento", "TEXT")
+    ensure_column(conn, "atendimentos", "criado_em", "TEXT")
+    ensure_column(conn, "atendimentos", "evolucao", "TEXT")
+    ensure_column(conn, "atendimentos", "cidade", "TEXT")
+    ensure_column(conn, "atendimentos", "municipio", "TEXT")
+    ensure_column(conn, "atendimentos", "cid", "TEXT")
+
+
+# ============================================================
+# HELPERS DE INTROSPECÇÃO
+# ============================================================
 
 def has_column(conn, table_name: str, column_name: str) -> bool:
     cur = conn.cursor()
@@ -38,12 +140,6 @@ def _first_existing(cols: set[str], opts: list[str]) -> str | None:
         if c in cols:
             return c
     return None
-
-
-def _table_columns(conn, table: str) -> set[str]:
-    cur = conn.cursor()
-    cur.execute(f"PRAGMA table_info({table})")
-    return {r[1] for r in cur.fetchall()}
 
 
 def _today_iso() -> str:
@@ -115,7 +211,6 @@ def _resolve_logged_profissional_id(conn) -> int | None:
 
     cols = _table_columns(conn, "usuarios")
 
-    # monta expressão segura só com colunas que existem
     parts = []
     if "login" in cols: parts.append("login")
     if "nome" in cols:  parts.append("nome")
@@ -141,7 +236,6 @@ def _resolve_logged_profissional_id(conn) -> int | None:
 
 
 def _build_url_with_page(page: int) -> str:
-    """Mantém todos os filtros atuais e só troca o page."""
     args = dict(request.args)
     args["page"] = str(page)
     return url_for("meus_atendimentos.index", **args)
@@ -170,12 +264,11 @@ def _query_meus_atendimentos_paginado(
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    if not has_table(conn, "atendimentos"):
-        raise RuntimeError("Tabela 'atendimentos' não existe no banco.")
+    # ✅ garante que exista (no Render pode vir vazio)
+    ensure_atendimentos_schema(conn)
 
     a_cols = _table_columns(conn, "atendimentos")
 
-    # colunas principais
     col_prof = _first_existing(a_cols, ["profissional_id", "usuario_id", "user_id"])
     col_pac_id = _first_existing(a_cols, ["paciente_id", "cidadao_id"])
     col_pac_nome = _first_existing(a_cols, ["nome", "paciente", "paciente_nome", "nome_paciente"])
@@ -187,19 +280,16 @@ def _query_meus_atendimentos_paginado(
     if not col_data:
         raise RuntimeError("Tabela atendimentos sem coluna de data (data_atendimento/data/etc).")
 
-    # Expressões base
     paciente_expr = f"TRIM(COALESCE(a.{col_pac_nome}, ''))" if col_pac_nome else "''"
     data_expr = f"date(a.{col_data})"
     evol_expr = f"COALESCE(a.{col_evol}, '')" if col_evol else "''"
 
-    # ---- Cidade/CID: tenta primeiro em atendimentos
     col_a_cidade = _first_existing(a_cols, ["cidade", "municipio", "município", "cidade_nome"])
     col_a_cid = _first_existing(a_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
 
     cidade_expr = f"TRIM(LOWER(COALESCE(a.{col_a_cidade},'')))" if col_a_cidade else "''"
     cid_expr = f"TRIM(UPPER(COALESCE(a.{col_a_cid},'')))" if col_a_cid else "''"
 
-    # Procedimentos (filhos) — 1 linha por atendimento com GROUP_CONCAT
     join_proc = ""
     proc_expr = "''"
     use_group = False
@@ -212,7 +302,6 @@ def _query_meus_atendimentos_paginado(
             proc_expr = f"COALESCE(GROUP_CONCAT(TRIM(COALESCE(ap.{col_ap_proc},'')), ' • '), '')"
             use_group = True
 
-    # Idade + fallback cidade/cid via pacientes (se precisar)
     join_pac = ""
     idade_expr = "NULL"
 
@@ -222,7 +311,6 @@ def _query_meus_atendimentos_paginado(
         col_p_nasc = _first_existing(p_cols, ["nascimento", "data_nascimento", "dt_nascimento"])
         col_p_nome = _first_existing(p_cols, ["nome", "nome_completo"])
 
-        # cidade/cid via pacientes (fallback)
         col_p_cidade = _first_existing(p_cols, ["municipio", "município", "cidade", "cidade_nome"])
         col_p_cid = _first_existing(p_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
 
@@ -232,19 +320,16 @@ def _query_meus_atendimentos_paginado(
         if col_p_id and col_p_nasc:
             idade_expr = f"CAST((julianday('now') - julianday(p.{col_p_nasc})) / 365.25 AS INT)"
 
-        # nome fallback (se atendimento vier vazio)
         if col_p_nome and col_pac_nome:
             paciente_expr = f"TRIM(COALESCE(NULLIF(a.{col_pac_nome},''), p.{col_p_nome}, ''))"
         elif col_p_nome and not col_pac_nome:
             paciente_expr = f"TRIM(COALESCE(p.{col_p_nome}, ''))"
 
-        # se atendimentos não tiver cidade/cid, tenta pacientes
         if (not col_a_cidade) and col_p_cidade:
             cidade_expr = f"TRIM(LOWER(COALESCE(p.{col_p_cidade},'')))"
         if (not col_a_cid) and col_p_cid:
             cid_expr = f"TRIM(UPPER(COALESCE(p.{col_p_cid},'')))"
 
-    # WHERE
     where: List[str] = [f"a.{col_prof} = ?"]
     params: List[Any] = [int(profissional_uid)]
 
@@ -268,7 +353,6 @@ def _query_meus_atendimentos_paginado(
             where.append(f"({idade_expr}) <= ?")
             params.append(idade_max)
 
-    # cidade/cid
     if cidade and cidade_expr != "''":
         where.append(f"{cidade_expr} LIKE ?")
         params.append(f"%{cidade.strip().lower()}%")
@@ -279,7 +363,6 @@ def _query_meus_atendimentos_paginado(
 
     where_sql = " AND ".join(where)
 
-    # COUNT (1 por atendimento) — DISTINCT por causa do join de procedimentos
     count_sql = f"""
         SELECT COUNT(DISTINCT a.id) AS total
           FROM atendimentos a
@@ -290,7 +373,6 @@ def _query_meus_atendimentos_paginado(
     cur.execute(count_sql, params)
     total = int(cur.fetchone()["total"] or 0)
 
-    # paginação
     page = max(1, int(page or 1))
     per_page = max(1, min(200, int(per_page or 20)))
     offset = (page - 1) * per_page
@@ -329,6 +411,9 @@ def _query_meus_atendimentos_paginado(
 def index():
     conn = conectar_db()
     try:
+        # ✅ garante schema no Render
+        ensure_atendimentos_schema(conn)
+
         profissional_uid = _resolve_logged_profissional_id(conn)
         if not profissional_uid:
             return (
@@ -337,7 +422,6 @@ def index():
                 {"Content-Type": "text/html; charset=utf-8"},
             )
 
-        # filtros
         q_nome = (request.args.get("q") or "").strip()
         cidade = (request.args.get("cidade") or "").strip()
         cid = (request.args.get("cid") or "").strip()
@@ -347,11 +431,9 @@ def index():
         idade_min = _int_or_none(request.args.get("idade_min"))
         idade_max = _int_or_none(request.args.get("idade_max"))
 
-        # paginação
         page = _int_or_none(request.args.get("page")) or 1
         per_page = _int_or_none(request.args.get("per_page")) or 20
 
-        # ✅ DEFAULT MENSAL se não veio filtro de data (não derruba com 20k linhas)
         if not data_ini and not data_fim:
             data_ini = _month_start_iso()
             data_fim = _today_iso()
@@ -377,7 +459,6 @@ def index():
         has_prev = page > 1
         has_next = page < pages
 
-        # ✅ CASO 1: template em templates/meus_atendimentos.html
         return render_template(
             "meus_atendimentos.html",
             atendimentos=rows,
@@ -418,6 +499,8 @@ def index():
 def api_list():
     conn = conectar_db()
     try:
+        ensure_atendimentos_schema(conn)
+
         profissional_uid = _resolve_logged_profissional_id(conn)
         if not profissional_uid:
             return jsonify({"ok": False, "error": "not_logged_profissional"}), 401
@@ -434,7 +517,6 @@ def api_list():
         page = _int_or_none(request.args.get("page")) or 1
         per_page = _int_or_none(request.args.get("per_page")) or 20
 
-        # default mensal também no API
         if not data_ini and not data_fim:
             data_ini = _month_start_iso()
             data_fim = _today_iso()
