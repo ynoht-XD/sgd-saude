@@ -41,22 +41,19 @@ def _db() -> sqlite3.Connection:
 # MIGRATION HELPERS (idempotentes)
 # ============================================================
 
-def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-    cur = conn.cursor()
-    cur.execute(f"PRAGMA table_info({table})")
-    return {r[1] for r in cur.fetchall()}
-
-
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;", (table,))
     return cur.fetchone() is not None
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table})")
+    return {r[1] for r in cur.fetchall()}
+
+
 def _add_col(conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
-    """
-    ddl exemplo: "INTEGER NOT NULL DEFAULT 0"
-    """
     cols = _table_columns(conn, table)
     if col in cols:
         return
@@ -68,82 +65,115 @@ def _add_col(conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
 def _ensure_schema(conn: sqlite3.Connection):
     """
     Cria a tabela 'usuarios' se não existir.
-    Se existir (em versões antigas), adiciona colunas faltantes.
+    Se existir (versões antigas), adiciona colunas faltantes.
     """
     cur = conn.cursor()
 
-    # 1) cria base mínima se não existir
+    # 1) base mínima
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS usuarios (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome             TEXT NOT NULL,
-            cpf              TEXT NOT NULL UNIQUE,
-            email            TEXT,
-            role             TEXT NOT NULL,
-            profissional_id  INTEGER,
-            password_hash    TEXT NOT NULL
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome          TEXT NOT NULL,
+            cpf           TEXT NOT NULL UNIQUE,
+            email         TEXT,
+            role          TEXT,
+            password_hash TEXT
         )
         """
     )
     conn.commit()
 
-    # 2) migra colunas faltantes (compat com tabelas antigas)
-    # flags/controle
+    # 2) garante colunas essenciais (migração)
+    # compatibilidade total
+    _add_col(conn, "usuarios", "role", "TEXT")
+    _add_col(conn, "usuarios", "email", "TEXT")
+    _add_col(conn, "usuarios", "profissional_id", "INTEGER")
+    _add_col(conn, "usuarios", "password_hash", "TEXT")
+
     _add_col(conn, "usuarios", "must_change_pass", "INTEGER NOT NULL DEFAULT 0")
     _add_col(conn, "usuarios", "is_active", "INTEGER NOT NULL DEFAULT 1")
     _add_col(conn, "usuarios", "last_login_at", "TEXT")
     _add_col(conn, "usuarios", "created_at", "TEXT NOT NULL DEFAULT (datetime('now'))")
 
-    # 3) índices (não quebra se já existir)
+    # 3) índices
     cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_role ON usuarios(role);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_active ON usuarios(is_active);")
     conn.commit()
 
 
 def _ensure_admin_exists():
-    """Garante o usuário master com CPF e senha definidos acima."""
+    """
+    Garante o MASTER.
+    - migra tabela antiga
+    - cria/atualiza o MASTER
+    - não quebra se existirem variações da tabela
+    """
     conn = None
     try:
         conn = _db()
         _ensure_schema(conn)
 
+        cols = _table_columns(conn, "usuarios")
         c = conn.cursor()
 
         pw_hash = generate_password_hash(MASTER_PASSWORD, method="pbkdf2:sha256", salt_length=16)
 
-        # Se já existir, atualiza; se não, cria
         c.execute("SELECT id FROM usuarios WHERE cpf=? LIMIT 1", (MASTER_CPF,))
         row = c.fetchone()
 
+        # ========= UPDATE =========
         if row:
-            c.execute(
-                """
-                UPDATE usuarios
-                   SET nome=?,
-                       email=?,
-                       role='ADMIN',
-                       is_active=1,
-                       password_hash=?,
-                       must_change_pass=0
-                 WHERE id=?
-                """,
-                (MASTER_NOME, MASTER_EMAIL, pw_hash, row["id"]),
-            )
-        else:
-            c.execute(
-                """
-                INSERT INTO usuarios
-                    (nome, cpf, email, role, profissional_id, password_hash, must_change_pass, is_active, created_at)
-                VALUES
-                    (?, ?, ?, 'ADMIN', NULL, ?, 0, 1, ?)
-                """,
-                (MASTER_NOME, MASTER_CPF, MASTER_EMAIL, pw_hash, datetime.utcnow().isoformat()),
-            )
+            sets = []
+            params = []
 
-        # opcional: desativar placeholders antigos
+            if "nome" in cols:
+                sets.append("nome=?"); params.append(MASTER_NOME)
+            if "email" in cols:
+                sets.append("email=?"); params.append(MASTER_EMAIL)
+            if "role" in cols:
+                sets.append("role=?"); params.append("ADMIN")
+            if "is_active" in cols:
+                sets.append("is_active=1")
+            if "password_hash" in cols:
+                sets.append("password_hash=?"); params.append(pw_hash)
+            if "must_change_pass" in cols:
+                sets.append("must_change_pass=0")
+
+            if sets:
+                sql = "UPDATE usuarios SET " + ", ".join(sets) + " WHERE id=?"
+                params.append(row["id"])
+                c.execute(sql, params)
+
+        # ========= INSERT =========
+        else:
+            insert_cols = []
+            insert_vals = []
+            insert_params = []
+
+            def add(col, val):
+                if col in cols:
+                    insert_cols.append(col)
+                    insert_vals.append("?")
+                    insert_params.append(val)
+
+            add("nome", MASTER_NOME)
+            add("cpf", MASTER_CPF)
+            add("email", MASTER_EMAIL)
+            add("role", "ADMIN")
+            add("profissional_id", None)
+            add("password_hash", pw_hash)
+            add("must_change_pass", 0)
+            add("is_active", 1)
+            add("created_at", datetime.utcnow().isoformat())
+
+            sql = f"INSERT INTO usuarios ({', '.join(insert_cols)}) VALUES ({', '.join(insert_vals)})"
+            c.execute(sql, insert_params)
+
+        # opcional: desativar placeholder antigo
         try:
-            c.execute("UPDATE usuarios SET is_active=0 WHERE cpf='00000000000'")
+            if "is_active" in cols:
+                c.execute("UPDATE usuarios SET is_active=0 WHERE cpf='00000000000'")
         except Exception:
             pass
 
@@ -190,24 +220,30 @@ def login():
 
         conn = _db()
         try:
-            _ensure_schema(conn)  # ✅ garante colunas antes de query
+            _ensure_schema(conn)
             c = conn.cursor()
+
+            # tolerante: password_hash pode existir, mas estar NULL em usuário legado
             c.execute("SELECT * FROM usuarios WHERE cpf=? AND is_active=1 LIMIT 1", (cpf,))
             u = c.fetchone()
 
-            if not u or not check_password_hash(u["password_hash"], senha):
+            if not u:
+                flash("CPF ou senha inválidos.", "error")
+                return redirect(url_for("auth.login", next=next_url))
+
+            pw_hash = u["password_hash"] if "password_hash" in u.keys() else None
+            if not pw_hash or not check_password_hash(pw_hash, senha):
                 flash("CPF ou senha inválidos.", "error")
                 return redirect(url_for("auth.login", next=next_url))
 
             c.execute("UPDATE usuarios SET last_login_at=? WHERE id=?", (datetime.utcnow().isoformat(), u["id"]))
             conn.commit()
 
-            # sessão
             session.clear()
             session["user_id"] = u["id"]
             session["nome"] = u["nome"]
             session["role"] = (u["role"] or "").upper()
-            session["profissional_id"] = u["profissional_id"]
+            session["profissional_id"] = u["profissional_id"] if "profissional_id" in u.keys() else None
 
             primeiro_nome = (u["nome"] or "").split()[0] if u["nome"] else "usuário"
             flash(f"Bem-vindo, {primeiro_nome}!", "success")
