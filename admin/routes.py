@@ -45,7 +45,19 @@ def digits_sql(expr: str) -> str:
     return s
 
 def db_conn(readonly: bool = False):
-    return conectar_db(readonly=readonly)
+    """
+    Wrapper único do conector do projeto.
+    - NÃO passa readonly como argumento (compatível com teu db.py atual).
+    - Se readonly=True, ativa PRAGMA query_only (SQLite) para proteger escrita acidental.
+    """
+    conn = conectar_db()  # <<< sem readonly=
+    try:
+        if readonly:
+            conn.execute("PRAGMA query_only = 1;")
+    except Exception:
+        # se algum ambiente/driver não suportar, só ignora
+        pass
+    return conn
 
 
 # =============================================================================
