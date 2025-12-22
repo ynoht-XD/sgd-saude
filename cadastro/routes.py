@@ -12,80 +12,6 @@ from db import conectar_db
 
 
 # =============================================================================
-# SCHEMA · PACIENTES  (CRÍTICO NO RENDER)
-# =============================================================================
-
-def ensure_pacientes_schema(conn: sqlite3.Connection):
-    """
-    Garante que a tabela pacientes exista com todas as colunas usadas no INSERT.
-    No Render, o SQLite pode iniciar vazio (/tmp/sgd_db.db), então isso é obrigatório.
-    """
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS pacientes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            prontuario TEXT,
-            nome TEXT,
-            cns TEXT,
-            status TEXT,
-            nascimento TEXT,
-            idade INTEGER,
-            sexo TEXT,
-            mod TEXT,
-
-            cid TEXT,
-            cid2 TEXT,
-            nis TEXT,
-            raca TEXT,
-            admissao TEXT,
-
-            logradouro TEXT,
-            codigo_logradouro TEXT,
-            numero_casa TEXT,
-            complemento TEXT,
-            bairro TEXT,
-            municipio TEXT,
-            cep TEXT,
-
-            cpf TEXT,
-            rg TEXT,
-            orgao_rg TEXT,
-            estado_civil TEXT,
-
-            mae TEXT,
-            cpf_mae TEXT,
-            rg_mae TEXT,
-            rg_ssp_mae TEXT,
-            nis_mae TEXT,
-
-            pai TEXT,
-            cpf_pai TEXT,
-            rg_pai TEXT,
-            rg_ssp_pai TEXT,
-
-            telefone1 TEXT,
-            telefone2 TEXT,
-            telefone3 TEXT,
-            email TEXT,
-
-            responsavel TEXT,
-            cpf_responsavel TEXT,
-            rg_responsavel TEXT,
-            orgao_rg_responsavel TEXT
-        )
-    """)
-
-    # índices úteis (não quebram se já existirem)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_nome ON pacientes (nome)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_cpf ON pacientes (cpf)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_prontuario ON pacientes (prontuario)")
-
-    conn.commit()
-
-
-# =============================================================================
 # Helpers de normalização
 # =============================================================================
 
@@ -99,41 +25,15 @@ _UPPER_FIELDS = {
 _ALLOWED_MODS = {"FIS", "INT", "AUD", "EQUO", "MED", "VISU", "EXAM", "SEM MOD"}
 
 _MOD_MAP = {
-    "FIS": "FIS",
-    "FISIOTERAPIA": "FIS",
-    "FISIOTERAPIA (FIS)": "FIS",
-
-    "INT": "INT",
-    "INTELECTUAL": "INT",
-    "DEFICIENCIA INTELECTUAL": "INT",
-    "DEFICIÊNCIA INTELECTUAL": "INT",
-
-    "AUD": "AUD",
-    "AUDITIVA": "AUD",
-    "DEFICIENCIA AUDITIVA": "AUD",
-    "DEFICIÊNCIA AUDITIVA": "AUD",
-
-    "EQUO": "EQUO",
-    "EQUOTERAPIA": "EQUO",
-
-    "MED": "MED",
-    "MEDICO": "MED",
-    "MÉDICO": "MED",
-
-    "VISU": "VISU",
-    "VISUAL": "VISU",
-    "DEFICIENCIA VISUAL": "VISU",
-    "DEFICIÊNCIA VISUAL": "VISU",
-
-    "EXAM": "EXAM",
-    "EXAME": "EXAM",
-    "EXAMES": "EXAM",
-
-    "SEM MOD": "SEM MOD",
-    "SEM MODALIDADE": "SEM MOD",
-    "SEM": "SEM MOD",
-    "": "SEM MOD",
-    None: "SEM MOD",
+    "FIS": "FIS", "FISIOTERAPIA": "FIS", "FISIOTERAPIA (FIS)": "FIS",
+    "INT": "INT", "INTELECTUAL": "INT", "DEFICIENCIA INTELECTUAL": "INT", "DEFICIÊNCIA INTELECTUAL": "INT",
+    "AUD": "AUD", "AUDITIVA": "AUD", "DEFICIENCIA AUDITIVA": "AUD", "DEFICIÊNCIA AUDITIVA": "AUD",
+    "EQUO": "EQUO", "EQUOTERAPIA": "EQUO",
+    "MED": "MED", "MEDICO": "MED", "MÉDICO": "MED",
+    "VISU": "VISU", "VISUAL": "VISU", "DEFICIENCIA VISUAL": "VISU", "DEFICIÊNCIA VISUAL": "VISU",
+    "EXAM": "EXAM", "EXAME": "EXAM", "EXAMES": "EXAM",
+    "SEM MOD": "SEM MOD", "SEM MODALIDADE": "SEM MOD", "SEM": "SEM MOD",
+    "": "SEM MOD", None: "SEM MOD",
 }
 
 
@@ -186,6 +86,7 @@ def _upperize_payload(dados: dict) -> dict:
     out["prontuario"] = _normalize_prontuario(out.get("prontuario"))
     out["mod"] = _normalize_mod(out.get("mod"))
     out["admissao"] = _normalize_admissao(out.get("admissao"))
+
     return out
 
 
@@ -208,6 +109,103 @@ def _build_redirect_url(dados: dict, last_id: int) -> str:
 
 
 # =============================================================================
+# MIGRATION / SCHEMA: PACIENTES
+# =============================================================================
+
+def _has_table(conn: sqlite3.Connection, table: str) -> bool:
+    cur = conn.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1;", (table,))
+    return cur.fetchone() is not None
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table})")
+    return {r[1] for r in cur.fetchall()}
+
+
+def _add_col(conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
+    cols = _table_columns(conn, table)
+    if col in cols:
+        return
+    cur = conn.cursor()
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl};")
+    conn.commit()
+
+
+def ensure_pacientes_schema(conn: sqlite3.Connection) -> None:
+    """
+    Garante que a tabela pacientes exista e tenha TODAS as colunas usadas no INSERT.
+    Idempotente (seguro rodar sempre).
+    """
+    cur = conn.cursor()
+
+    # base mínima (se não existir)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pacientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prontuario TEXT,
+            nome TEXT,
+            cns TEXT,
+            status TEXT,
+            nascimento TEXT,
+            idade TEXT,
+            sexo TEXT,
+            mod TEXT,
+            cid TEXT,
+            cid2 TEXT,
+            admissao TEXT,
+            cpf TEXT
+        )
+        """
+    )
+    conn.commit()
+
+    # garante colunas do teu INSERT (todas)
+    _add_col(conn, "pacientes", "nis", "TEXT")
+    _add_col(conn, "pacientes", "raca", "TEXT")
+    _add_col(conn, "pacientes", "logradouro", "TEXT")
+    _add_col(conn, "pacientes", "codigo_logradouro", "TEXT")
+    _add_col(conn, "pacientes", "numero_casa", "TEXT")
+    _add_col(conn, "pacientes", "complemento", "TEXT")
+    _add_col(conn, "pacientes", "bairro", "TEXT")
+    _add_col(conn, "pacientes", "municipio", "TEXT")
+    _add_col(conn, "pacientes", "cep", "TEXT")
+
+    _add_col(conn, "pacientes", "rg", "TEXT")
+    _add_col(conn, "pacientes", "orgao_rg", "TEXT")
+    _add_col(conn, "pacientes", "estado_civil", "TEXT")
+
+    _add_col(conn, "pacientes", "mae", "TEXT")
+    _add_col(conn, "pacientes", "cpf_mae", "TEXT")
+    _add_col(conn, "pacientes", "rg_mae", "TEXT")
+    _add_col(conn, "pacientes", "rg_ssp_mae", "TEXT")
+    _add_col(conn, "pacientes", "nis_mae", "TEXT")
+
+    _add_col(conn, "pacientes", "pai", "TEXT")
+    _add_col(conn, "pacientes", "cpf_pai", "TEXT")
+    _add_col(conn, "pacientes", "rg_pai", "TEXT")
+    _add_col(conn, "pacientes", "rg_ssp_pai", "TEXT")
+
+    _add_col(conn, "pacientes", "telefone1", "TEXT")
+    _add_col(conn, "pacientes", "telefone2", "TEXT")
+    _add_col(conn, "pacientes", "telefone3", "TEXT")
+    _add_col(conn, "pacientes", "email", "TEXT")
+
+    _add_col(conn, "pacientes", "responsavel", "TEXT")
+    _add_col(conn, "pacientes", "cpf_responsavel", "TEXT")
+    _add_col(conn, "pacientes", "rg_responsavel", "TEXT")
+    _add_col(conn, "pacientes", "orgao_rg_responsavel", "TEXT")
+
+    # índices úteis
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_nome ON pacientes(nome);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_cpf  ON pacientes(cpf);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_prontuario ON pacientes(prontuario);")
+    conn.commit()
+
+
+# =============================================================================
 # Rotas
 # =============================================================================
 
@@ -225,7 +223,7 @@ def salvar_paciente():
 
     try:
         with conectar_db() as conn:
-            # ✅ GARANTE A TABELA NO RENDER
+            # ✅ garante schema antes do insert
             ensure_pacientes_schema(conn)
 
             cursor = conn.cursor()
@@ -295,17 +293,12 @@ def salvar_paciente():
         redirect_url = _build_redirect_url(dados, last_id)
 
         if is_json:
-            return (
-                jsonify(
-                    {
-                        "status": "sucesso",
-                        "mensagem": "Paciente cadastrado com sucesso",
-                        "id": last_id,
-                        "redirect": redirect_url,
-                    }
-                ),
-                201,
-            )
+            return jsonify({
+                "status": "sucesso",
+                "mensagem": "Paciente cadastrado com sucesso",
+                "id": last_id,
+                "redirect": redirect_url,
+            }), 201
 
         return redirect(redirect_url, code=303)
 
