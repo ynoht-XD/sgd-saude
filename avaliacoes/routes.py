@@ -176,7 +176,6 @@ def index():
             LIMIT 500
         """)
 
-        # 🔥 CARDS PARA O TEMPLATE
         cards = [
             {
                 "key": k,
@@ -190,7 +189,7 @@ def index():
             "avaliacoes.html",
             avaliacoes=cur.fetchall(),
             tipos=TIPOS_AVALIACAO,
-            cards=cards   # 👈 ESSENCIAL
+            cards=cards
         )
     finally:
         conn.close()
@@ -255,3 +254,37 @@ def nova():
         return redirect(url_for("avaliacoes.lista"))
     finally:
         conn.close()
+
+
+# ============================================================
+# TELAS (ENDPOINTS EXPLÍCITOS)
+# ============================================================
+
+@avaliacoes_bp.route("/anamnese", endpoint="tela_anamnese")
+def tela_anamnese():
+    return render_template("anamnese.html", tipos=TIPOS_AVALIACAO)
+
+
+@avaliacoes_bp.route("/social", endpoint="tela_social")
+def tela_social():
+    return render_template("social.html", tipos=TIPOS_AVALIACAO)
+
+
+@avaliacoes_bp.route("/enfermagem", endpoint="tela_enfermagem")
+def tela_enfermagem():
+    return render_template("enfermagem.html", tipos=TIPOS_AVALIACAO)
+
+
+@avaliacoes_bp.route("/terapia-ocupacional", endpoint="tela_terapia_ocupacional")
+def tela_terapia_ocupacional():
+    return render_template("terapia_ocupacional.html", tipos=TIPOS_AVALIACAO)
+
+
+@avaliacoes_bp.route("/psicologia-infantil", endpoint="tela_psicologia_infantil")
+def tela_psicologia_infantil():
+    return render_template("psicologia_infantil.html", tipos=TIPOS_AVALIACAO)
+
+
+@avaliacoes_bp.route("/fonoaudiologia-infantil", endpoint="tela_fonoaudiologia_infantil")
+def tela_fonoaudiologia_infantil():
+    return render_template("fonoaudiologia_infantil.html", tipos=TIPOS_AVALIACAO)
