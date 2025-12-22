@@ -1,4 +1,3 @@
-# sgd/avaliacoes/routes.py
 from __future__ import annotations
 
 import json
@@ -49,6 +48,40 @@ FORM_ROUTES = {
 
 
 # ============================================================
+# SCHEMA · AVALIACOES  (CRÍTICO NO RENDER)
+# ============================================================
+
+def ensure_avaliacoes_schema(conn: sqlite3.Connection):
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS avaliacoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL,
+
+            paciente_nome TEXT,
+            paciente_prontuario TEXT,
+            paciente_cpf TEXT,
+
+            usuario_id INTEGER,
+            usuario_nome TEXT,
+            usuario_cbo TEXT,
+
+            dados_json TEXT NOT NULL,
+            criado_em TEXT NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_avaliacoes_tipo
+        ON avaliacoes (tipo)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_avaliacoes_criado
+        ON avaliacoes (criado_em)
+    """)
+    conn.commit()
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
@@ -61,12 +94,11 @@ def labelize(chave: str) -> str:
              .capitalize()
     )
 
+
 def valor_humano(v):
     if v in (None, "", "0"):
         return None
-    if v == "1":
-        return "Sim"
-    if v == "sim":
+    if v in ("1", "sim"):
         return "Sim"
     if v == "nao":
         return "Não"
@@ -129,8 +161,9 @@ def api_buscar_pacientes():
 def index():
     conn = conectar_db()
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
+    ensure_avaliacoes_schema(conn)
 
+    cur = conn.cursor()
     cur.execute("""
         SELECT id, tipo, paciente_nome, paciente_prontuario,
                usuario_nome, usuario_cbo, criado_em
@@ -178,6 +211,7 @@ def nova():
         dados.pop(k, None)
 
     conn = conectar_db()
+    ensure_avaliacoes_schema(conn)
     cur = conn.cursor()
 
     cur.execute("""
@@ -211,8 +245,9 @@ def nova():
 def visualizar(id: int):
     conn = conectar_db()
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
+    ensure_avaliacoes_schema(conn)
 
+    cur = conn.cursor()
     cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
     av = cur.fetchone()
     if not av:
@@ -231,15 +266,16 @@ def visualizar(id: int):
 
 
 # ============================================================
-# PDF PROFISSIONAL
+# PDF
 # ============================================================
 
 @avaliacoes_bp.route("/<int:id>/pdf")
 def imprimir_pdf(id: int):
     conn = conectar_db()
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
+    ensure_avaliacoes_schema(conn)
 
+    cur = conn.cursor()
     cur.execute("SELECT * FROM avaliacoes WHERE id = ?", (id,))
     av = cur.fetchone()
     if not av:
@@ -254,7 +290,6 @@ def imprimir_pdf(id: int):
 
     y = h - 50
 
-    # Cabeçalho
     c.setFont("Helvetica-Bold", 14)
     c.drawString(40, y, "AVALIAÇÃO CLÍNICA")
     y -= 18
@@ -269,7 +304,6 @@ def imprimir_pdf(id: int):
     c.drawString(40, y, f"Profissional: {av['usuario_nome']} ({av['usuario_cbo']})")
     y -= 20
 
-    # Corpo
     c.setFont("Helvetica-Bold", 11)
     c.drawString(40, y, "DADOS DA AVALIAÇÃO")
     y -= 16
@@ -286,7 +320,6 @@ def imprimir_pdf(id: int):
         c.drawString(60, y, item["valor"])
         y -= 16
 
-    # Rodapé
     y -= 30
     c.line(40, y, 260, y)
     c.drawString(40, y - 12, "Assinatura do profissional")
