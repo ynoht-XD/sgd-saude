@@ -1,461 +1,1014 @@
-/* ===================== RESET / BASE ===================== */
+/* =========================================================
+   LISTA DE ATENDIMENTOS · VISUAL EM CARDS
+   ========================================================= */
+
 :root{
-  --bg: #f6f7fb;
+  --bg: #f5f7fb;
   --card: #ffffff;
+  --card-soft: #fbfcff;
   --ink: #0f172a;
-  --ink-2:#334155;
-  --muted:#64748b;
-  --line:#e5e7eb;
-  --shadow: 0 8px 24px rgba(0,0,0,.08);
+  --ink-2: #334155;
+  --muted: #64748b;
+  --line: #e5e7eb;
+  --line-strong: #dbe3ef;
 
-  --primary:#2563eb;  /* azul */
-  --primary-ink:#ffffff;
+  --primary: #2563eb;
+  --primary-2: #1d4ed8;
+  --primary-soft: rgba(37, 99, 235, .10);
 
-  --danger:#ef4444;
-  --danger-ink:#ffffff;
+  --success: #10b981;
+  --success-soft: rgba(16, 185, 129, .12);
 
-  --success:#10b981;
-  --success-ink:#ffffff;
+  --warn: #f59e0b;
+  --warn-soft: rgba(245, 158, 11, .14);
 
-  --pill-bg:#f1f5f9;
-  --pill-ink:#0f172a;
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, .12);
 
-  --prio-green:#10b981;
-  --prio-yellow:#f59e0b;
-  --prio-red:#ef4444;
+  --pill-bg: #f1f5f9;
+  --pill-ink: #0f172a;
 
-  --menu-bg:#ffffff;
-  --menu-ink:#0f172a;
-  --menu-line:#e5e7eb;
+  --prio-green: #10b981;
+  --prio-yellow: #f59e0b;
+  --prio-red: #ef4444;
 
-  --chip-bg:#eef2ff;
-  --chip-ink:#3730a3;
-  --chip-line:#c7d2fe;
+  --menu-bg: #ffffff;
+  --menu-ink: #0f172a;
+  --menu-line: #e5e7eb;
+
+  --shadow-xs: 0 4px 12px rgba(15, 23, 42, .04);
+  --shadow-sm: 0 10px 30px rgba(15, 23, 42, .08);
+  --shadow-md: 0 18px 44px rgba(15, 23, 42, .12);
+
+  --radius-xl: 24px;
+  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+
+  --combo-ok-bg: #ecfdf5;
+  --combo-ok-ink: #047857;
+  --combo-ok-line: #a7f3d0;
+
+  --combo-no-bg: #f8fafc;
+  --combo-no-ink: #475569;
+  --combo-no-line: #e2e8f0;
+
+  --combo-zero-bg: #fef2f2;
+  --combo-zero-ink: #b91c1c;
+  --combo-zero-line: #fecaca;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark){
   :root{
-    --bg:#0b1020;
-    --card:#0f1528;
-    --ink:#e5e7eb;
-    --ink-2:#cbd5e1;
-    --muted:#93a2b7;
-    --line:#1f2a44;
-    --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --bg: #0b1120;
+    --card: #111827;
+    --card-soft: #172033;
+    --ink: #e5e7eb;
+    --ink-2: #cbd5e1;
+    --muted: #94a3b8;
+    --line: #243045;
+    --line-strong: #334155;
 
-    --primary:#3b82f6;
-    --primary-ink:#00132b;
+    --primary: #3b82f6;
+    --primary-2: #2563eb;
+    --primary-soft: rgba(59, 130, 246, .16);
 
-    --pill-bg:#121a33;
-    --pill-ink:#e5e7eb;
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, .15);
 
-    --menu-bg:#0f1528;
-    --menu-ink:#e5e7eb;
-    --menu-line:#1f2a44;
+    --warn: #fbbf24;
+    --warn-soft: rgba(251, 191, 36, .15);
 
-    --chip-bg:#1a2444;
-    --chip-ink:#c7d2fe;
-    --chip-line:#243159;
+    --danger: #f87171;
+    --danger-soft: rgba(248, 113, 113, .15);
+
+    --pill-bg: #162033;
+    --pill-ink: #e5e7eb;
+
+    --menu-bg: #111827;
+    --menu-ink: #e5e7eb;
+    --menu-line: #243045;
+
+    --shadow-xs: 0 6px 14px rgba(0, 0, 0, .24);
+    --shadow-sm: 0 16px 34px rgba(0, 0, 0, .26);
+    --shadow-md: 0 22px 52px rgba(0, 0, 0, .34);
+
+    --combo-ok-bg: rgba(16, 185, 129, .12);
+    --combo-ok-ink: #86efac;
+    --combo-ok-line: rgba(16, 185, 129, .22);
+
+    --combo-no-bg: rgba(148, 163, 184, .10);
+    --combo-no-ink: #cbd5e1;
+    --combo-no-line: rgba(148, 163, 184, .18);
+
+    --combo-zero-bg: rgba(239, 68, 68, .12);
+    --combo-zero-ink: #fca5a5;
+    --combo-zero-line: rgba(239, 68, 68, .20);
   }
 }
 
-*{ box-sizing: border-box; }
-html,body{ height:100%; }
+*,
+*::before,
+*::after{
+  box-sizing: border-box;
+}
+
+html, body{
+  min-height: 100%;
+}
+
 body{
-  margin:0; background:var(--bg); color:var(--ink);
-  font: 14.5px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14.5px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* ===================== CONTAINER / FLASHES ===================== */
-.att-container{ max-width: 1200px; margin: 24px auto; padding: 0 16px; position:relative; z-index:0; }
-
-.att-flashes{ margin-bottom: 16px; display:grid; gap:8px; }
-.flash{ padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); box-shadow: var(--shadow); }
-.flash.success{ border-color: rgba(16,185,129,.35); }
-.flash.error{ border-color: rgba(239,68,68,.35); }
-
-/* ===================== HEADER ===================== */
-.att-page-head{
-  display:flex; align-items: center; justify-content: space-between;
-  gap: 16px; margin-bottom: 16px;
-}
-.title-area h2{ margin:0 0 4px; font-size: 22px; }
-.title-area .muted{ color:var(--muted); margin:0; }
-.actions{ display:flex; gap:10px; flex-wrap: wrap; }
-
-/* ===================== BUTTONS ===================== */
-.btn{
-  appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink);
-  padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer;
-  display:inline-flex; align-items:center; gap:8px; transition: .15s ease;
-  box-shadow: 0 1px 0 rgba(0,0,0,.04);
-}
-.btn:hover{ filter: brightness(.98); transform: translateY(-1px); }
-.btn:active{ transform: translateY(0); }
-.btn:focus-visible{ outline: 2px solid color-mix(in oklab, var(--primary) 60%, #fff); outline-offset: 2px; }
-.btn.primary{ background:var(--primary); color:var(--primary-ink); border-color: transparent; }
-.btn.danger{ background:var(--danger); color:var(--danger-ink); border-color: transparent; }
-.btn.ghost{ background:var(--card); }
-.btn.xs{ padding:6px 9px; font-size: 12px; border-radius: 8px; }
-
-/* botão hambúrguer */
-.btn.icon.only{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:36px; height:36px; padding:0; border-radius:10px;
-  border:1px solid var(--line); background:var(--card); cursor:pointer;
-}
-.btn.icon.only:hover{ background: color-mix(in oklab, var(--card) 85%, #e9eefc); }
-
-/* ===================== CARDS / GRID ===================== */
-.att-card{
-  background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px;
-  box-shadow: var(--shadow); margin-bottom: 16px;
-}
-.card-head{ display:flex; align-items:center; gap:10px; }
-.card-head.between{ justify-content: space-between; }
-.card-head h3{ margin:0; font-size:18px; }
-
-.att-grid{ display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
-.field{ display:flex; flex-direction: column; gap:6px; }
-.field label{ font-weight:700; color:var(--ink-2); }
-.field textarea{ min-height: 70px; resize: vertical; }
-
-.input-rounded, .field select, .field textarea{
-  background: var(--card); border:1px solid var(--line); color:var(--ink);
-  padding:10px 12px; border-radius:10px; width:100%;
-}
-.input-rounded:focus, .field select:focus, .field textarea:focus{
-  outline: 2px solid color-mix(in oklab, var(--primary) 50%, transparent);
-  outline-offset: 1px;
-}
-.span-2{ grid-column: span 2; }
-
-/* ===================== PILLS / PRIORIDADE ===================== */
-.prio-group{ display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
-.prio-pill{
-  display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px;
-  background: var(--pill-bg); color: var(--pill-ink); border:1px solid var(--line); cursor:pointer; user-select:none;
-}
-.prio-group input{ display:none; }
-.prio-group input:checked + .prio-pill{
-  border-color: color-mix(in oklab, var(--primary) 45%, var(--line));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--primary) 45%, transparent);
+/* =========================================================
+   CONTAINER / FLASH
+   ========================================================= */
+.att-container{
+  max-width: 1400px;
+  margin: 24px auto 42px;
+  padding: 0 16px;
 }
 
-/* Filtro de prioridade */
-.prio-filter{ display:flex; gap:6px; align-items:center; flex-wrap: wrap; }
-.pf-pill{
-  border:1px solid var(--line); background: var(--pill-bg); color: var(--pill-ink);
-  border-radius: 999px; padding:6px 10px; cursor:pointer; font-weight:600;
-}
-.pf-pill.active{ outline: 2px solid color-mix(in oklab, var(--primary) 45%, transparent); outline-offset: 1px; }
-
-/* ===================== TABLE ===================== */
-.table-wrap{ overflow:auto; border-radius: 12px; border:1px solid var(--line); }
-.queue-table{ width:100%; border-collapse: collapse; min-width: 820px; }
-.queue-table thead th{
-  background: color-mix(in oklab, var(--card) 70%, #e9eefc);
-  border-bottom:1px solid var(--line); padding:10px; text-align:left; font-weight:800;
-}
-.queue-table tbody td{
-  border-bottom:1px solid var(--line); padding:10px; vertical-align: middle;
-}
-.queue-table tbody tr:hover{ background: color-mix(in oklab, var(--card) 85%, #e9eefc); }
-
-/* Badge padrão e de prioridade */
-.badge{
-  display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700;
-  background: var(--chip-bg); color: var(--chip-ink); border:1px solid var(--chip-line);
-}
-.badge.prio{ color:#fff; border-color: transparent; }
-.badge.prio.verde{ background: var(--prio-green); }
-.badge.prio.amarelo{ background: var(--prio-yellow); }
-.badge.prio.vermelho{ background: var(--prio-red); }
-
-/* indicador "veio da agenda" */
-.from-agenda{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:18px; height:18px; border-radius:4px; margin-right:6px;
-  background: color-mix(in oklab, var(--primary) 10%, var(--card));
-  border:1px solid var(--line); font-size:12px;
+.att-flashes{
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-/* contador */
-.counter{ font-weight:800; color: var(--ink-2); }
-
-/* vazio */
-.empty{ text-align:center; color: var(--muted); padding: 18px 8px; }
-
-/* ===================== MENU DROPDOWN ===================== */
-.row-actions{ position: relative; z-index: 2; }
-.menu{ position:relative; }
-.menu [hidden]{ display:none !important; }
-
-/* popover quando ancorado no .menu (fallback) */
-.menu-pop{
-  position:absolute; right:0; top:calc(100% + 6px);
-  min-width:180px; background:var(--menu-bg); color:var(--menu-ink);
-  border:1px solid var(--menu-line); border-radius:10px;
-  box-shadow:0 12px 32px rgba(0,0,0,.18); padding:6px; z-index: 9999;
-}
-
-/* popover portado para o body — SEMPRE usado pelo JS */
-.menu-pop.is-portal{
-  position:fixed; z-index: 2147483647; /* topo absoluto */
-  background:var(--menu-bg); color:var(--menu-ink);
-  border:1px solid var(--menu-line); border-radius:10px;
-  box-shadow:0 12px 32px rgba(0,0,0,.22); padding:6px;
-}
-
-.menu-pop .menu-item{
-  width:100%; text-align:left; background:transparent; border:0;
-  padding:8px 10px; border-radius:8px; font-size:14px; cursor:pointer;
-  display:flex; align-items:center; gap:8px;
-}
-.menu-pop .menu-item:hover{ background:#f3f4f6; }
-.menu-pop .menu-item.danger{ color:#b91c1c; }
-.menu-pop .menu-item.danger:hover{ background:#fee2e2; }
-
-/* ===================== UTIL ===================== */
-.muted{ color: var(--muted); }
-.hidden{ display:none !important; }
-[hidden]{ display:none !important; }
-.row-actions .menu{ margin-left: 4px; }
-
-/* ===================== RESPONSIVO ===================== */
-@media (max-width: 920px){
-  .att-page-head{ flex-direction: column; align-items:flex-start; gap: 12px; }
-}
-@media (max-width: 720px){
-  .att-grid{ grid-template-columns: 1fr; }
-  .span-2{ grid-column: auto; }
-  .queue-table{ min-width: 680px; } /* scroll horizontal na tabela */
-}
-
-/* ===================== IMPRESSÃO ===================== */
-@media print {
-  :root{ --bg:#fff; --card:#fff; --ink:#000; --line:#ddd; --muted:#555; }
-  body{ background:#fff; }
-  .att-page-head .actions,
-  .row-actions,
-  .prio-filter,
-  #fProf, #fBusca, #btnLimparFila, #btnImprimir { display:none !important; }
-
-  .att-card{ box-shadow:none; border-color:#ddd; }
-  .table-wrap{ border-color:#ddd; }
-  .queue-table thead th{ background:#f5f5f5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .badge.prio.verde{ background:#10b981 !important; color:#fff !important; }
-  .badge.prio.amarelo{ background:#f59e0b !important; color:#fff !important; }
-  .badge.prio.vermelho{ background:#ef4444 !important; color:#fff !important; }
-}
-
-/* ===================== ACESSIBILIDADE / REDUZIR MOVIMENTO ===================== */
-@media (prefers-reduced-motion: reduce){
-  .btn, .menu-item{ transition: none; }
-}
-
-/* ===================== MICRO AJUSTES ===================== */
-.queue-filters{ display:flex; flex-wrap: wrap; gap: 8px; align-items:center; }
-.queue-filters input[type="text"], .queue-filters select{
-  padding:8px 10px; border-radius: 8px; border:1px solid var(--line); background: var(--card); color: var(--ink);
-}
-.queue-filters input[type="text"]:focus, .queue-filters select:focus{
-  outline: 2px solid color-mix(in oklab, var(--primary) 40%, transparent); outline-offset: 1px;
-}
-
-
-/* ====== UNIFORMIZAÇÃO VISUAL DA TABELA / AÇÕES ====== */
-
-/* altura mínima e alinhamento vertical nas linhas */
-.queue-table tbody td {
-  height: 48px;
-  line-height: 1.2;
-  vertical-align: middle;
-}
-
-/* coluna de ações com largura fixa e centralização */
-.queue-table th:last-child,
-.queue-table td:last-child {
-  width: 160px;              /* ajuste fino aqui se quiser mais/menos */
-  text-align: center;
-}
-
-/* barra de ações da linha: tudo alinhado e no mesmo tamanho */
-.row-actions {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;                  /* espaço entre botões */
-}
-
-/* todos os botões de ação com o MESMO tamanho (ícone) */
-.row-actions .btn,
-.row-actions .btn.xs,
-.row-actions .btn.icon.only,
-.row-actions [data-menu-toggle] {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0;              /* esconde texto quando for ícone */
-}
-
-/* ícones SVG centralizados e do mesmo tamanho */
-.row-actions .btn svg,
-.row-actions [data-menu-toggle] svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.8;
-}
-
-/* botão de menu (hambúrguer) com cara de botão */
-[data-menu-toggle]{
+.flash{
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--line);
   background: var(--card);
-}
-[data-menu-toggle]:hover{
-  background: color-mix(in oklab, var(--card) 85%, #e9eefc);
+  box-shadow: var(--shadow-xs);
 }
 
-/* badge “veio da agenda” com tamanho compacto e alinhado */
-.from-agenda{
-  width: 20px;
-  height: 20px;
+.flash.success{ border-color: rgba(16,185,129,.28); }
+.flash.error{ border-color: rgba(239,68,68,.28); }
+.flash.warning{ border-color: rgba(245,158,11,.28); }
+
+/* =========================================================
+   HERO
+   ========================================================= */
+.att-page-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top left, rgba(37,99,235,.11), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(16,185,129,.08), transparent 30%),
+    linear-gradient(180deg, var(--card), var(--card-soft));
+  box-shadow: var(--shadow-sm);
+}
+
+.att-kicker{
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
   font-size: 12px;
-  border-radius: 6px;
-  margin-right: 6px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.title-area h2{
+  margin: 0 0 6px;
+  font-size: clamp(1.6rem, 2vw, 2.2rem);
+  line-height: 1.06;
+}
+
+.muted{
+  color: var(--muted);
+}
+
+.title-area .muted{
+  margin: 0;
+  max-width: 74ch;
+}
+
+.actions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   BOTÕES
+   ========================================================= */
+.btn{
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  transition: transform .14s ease, filter .18s ease, box-shadow .18s ease, background .18s ease;
+  box-shadow: 0 1px 0 rgba(0,0,0,.03);
 }
 
-/* popover do menu: largura fixa e itens com mesma altura */
-.menu-pop { min-width: 200px; padding: 8px; }
-.menu-pop .menu-item{ height: 36px; padding: 0 10px; gap: 10px; font-size: 14px; }
-
-/* estados hover/active consistentes nos botões */
-.row-actions .btn,
-[data-menu-toggle]{
-  transition: background .15s ease, transform .04s ease, filter .15s ease;
+.btn:hover{
+  transform: translateY(-1px);
+  filter: brightness(.99);
 }
-.row-actions .btn:hover,
-[data-menu-toggle]:hover{ filter: brightness(.98); transform: translateY(-1px); }
-.row-actions .btn:active,
-[data-menu-toggle]:active{ transform: translateY(0); }
 
-/* ===== AJUSTES PEDIDOS: limpar fila, adicionar, prioridades, ações da tabela ===== */
+.btn:active{
+  transform: translateY(0);
+}
 
-/* 1) Botão "Limpar fila" (outline vermelho que preenche no hover) */
+.btn:focus-visible{
+  outline: 2px solid color-mix(in oklab, var(--primary) 58%, white);
+  outline-offset: 2px;
+}
+
+.btn.primary{
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, .22);
+}
+
+.btn.danger{
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn.ghost{
+  background: var(--card);
+}
+
+.btn.icon.only{
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 12px;
+}
+
+.btn svg{
+  flex: 0 0 auto;
+}
+
 #btnLimparFila{
   border-color: var(--danger);
   color: var(--danger);
   background: transparent;
 }
+
 #btnLimparFila:hover{
-  background: color-mix(in oklab, var(--danger) 14%, var(--card));
+  background: color-mix(in oklab, var(--danger) 10%, var(--card));
   filter: none;
-  transform: translateY(-1px);
-}
-#btnLimparFila:active{
-  background: color-mix(in oklab, var(--danger) 22%, var(--card));
 }
 
-/* 2) Botão "Adicionar" (primário mais destacado) */
-#btnAdicionar,
-#btnAdicionarItem{
-  background: var(--primary);
-  color: var(--primary-ink);
-  border-color: transparent;
-  box-shadow: 0 6px 18px color-mix(in oklab, var(--primary) 22%, transparent);
-}
-#btnAdicionar:hover,
-#btnAdicionarItem:hover{
-  filter: brightness(1.02);
-  transform: translateY(-1px);
-}
-#btnAdicionar:active,
-#btnAdicionarItem:active{
-  transform: translateY(0);
+/* =========================================================
+   CARDS GERAIS
+   ========================================================= */
+.att-card{
+  background: linear-gradient(180deg, var(--card), var(--card-soft));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
 }
 
-/* 3) Prioridades — hovers coloridos (classe OU data-atributo) */
-.prio-pill.verde:hover,
-.prio-pill[data-prio="leve"]:hover{
-  background: color-mix(in oklab, var(--prio-green) 18%, var(--pill-bg));
-  border-color: color-mix(in oklab, var(--prio-green) 45%, var(--line));
-}
-.prio-pill.amarelo:hover,
-.prio-pill[data-prio="moderado"]:hover{
-  background: color-mix(in oklab, var(--prio-yellow) 18%, var(--pill-bg));
-  border-color: color-mix(in oklab, var(--prio-yellow) 45%, var(--line));
-}
-.prio-pill.vermelho:hover,
-.prio-pill[data-prio="urgente"]:hover{
-  background: color-mix(in oklab, var(--prio-red) 18%, var(--pill-bg));
-  border-color: color-mix(in oklab, var(--prio-red) 45%, var(--line));
+.card-head{
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-/* Quando selecionada, reforça o “anel” na cor da prioridade */
-.prio-group input:checked + .prio-pill.verde,
-.prio-group input:checked + .prio-pill[data-prio="leve"]{
-  border-color: color-mix(in oklab, var(--prio-green) 55%, var(--line));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-green) 45%, transparent);
-}
-.prio-group input:checked + .prio-pill.amarelo,
-.prio-group input:checked + .prio-pill[data-prio="moderado"]{
-  border-color: color-mix(in oklab, var(--prio-yellow) 55%, var(--line));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-yellow) 45%, transparent);
-}
-.prio-group input:checked + .prio-pill.vermelho,
-.prio-group input:checked + .prio-pill[data-prio="urgente"]{
-  border-color: color-mix(in oklab, var(--prio-red) 55%, var(--line));
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--prio-red) 45%, transparent);
+.card-head.between{
+  justify-content: space-between;
 }
 
-/* 4) Ações na tabela — Atender (azul) e Remover (vermelho) */
-.row-actions .btn.atender{
-  background: var(--primary);
-  color: var(--primary-ink);
-  border-color: transparent;
-  width: 36px; height: 36px; min-width:36px; min-height:36px; padding:0; border-radius:10px;
-  box-shadow: 0 6px 16px color-mix(in oklab, var(--primary) 18%, transparent);
-}
-.row-actions .btn.atender:hover{ filter: brightness(1.02); transform: translateY(-1px); }
-
-.row-actions .btn.remover{
-  background: var(--danger);
-  color: var(--danger-ink);
-  border-color: transparent;
-  width: 36px; height: 36px; min-width:36px; min-height:36px; padding:0; border-radius:10px;
-  box-shadow: 0 6px 16px color-mix(in oklab, var(--danger) 18%, transparent);
-}
-.row-actions .btn.remover:hover{ filter: brightness(1.02); transform: translateY(-1px); }
-
-/* Foco acessível nas variações sólidas */
-#btnAdicionar:focus-visible,
-#btnAdicionarItem:focus-visible,
-.row-actions .btn.atender:focus-visible{
-  outline: 2px solid color-mix(in oklab, var(--primary) 65%, #fff);
-  outline-offset: 2px;
-}
-#btnLimparFila:focus-visible,
-.row-actions .btn.remover:focus-visible{
-  outline: 2px solid color-mix(in oklab, var(--danger) 65%, #fff);
-  outline-offset: 2px;
+.card-head h3{
+  margin: 0 0 4px;
+  font-size: 1.18rem;
+  line-height: 1.15;
 }
 
-/* Correção: botão com texto dentro de .row-actions (ex.: “Adicionar à fila”) */
-.row-actions .btn.primary {
-  width: auto;
-  min-width: 120px;
-  height: auto;
-  min-height: 36px;
-  padding: 8px 14px;
-  font-size: 14px;
+.card-head .muted{
+  margin: 0;
+}
+
+.atalho{
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* =========================================================
+   FORMULÁRIO SUPERIOR
+   ========================================================= */
+.att-grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field label{
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.field textarea{
+  min-height: 84px;
+  resize: vertical;
+}
+
+.input-rounded,
+.field select,
+.field textarea,
+.queue-filters input[type="text"],
+.queue-filters select{
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink);
+  padding: 11px 13px;
+  border-radius: 14px;
+  font: inherit;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.input-rounded:focus,
+.field select:focus,
+.field textarea:focus,
+.queue-filters input[type="text"]:focus,
+.queue-filters select:focus{
+  outline: none;
+  border-color: color-mix(in oklab, var(--primary) 42%, var(--line-strong));
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 14%, transparent);
+}
+
+.span-2{
+  grid-column: span 2;
+}
+
+/* =========================================================
+   PRIORIDADES
+   ========================================================= */
+.prio-group{
+  display: flex;
   gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.prio-group input{
+  display: none;
+}
+
+.prio-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  color: var(--pill-ink);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font-weight: 800;
+  user-select: none;
+  transition: .16s ease;
+}
+
+.prio-pill.verde:hover{
+  background: color-mix(in oklab, var(--prio-green) 16%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-green) 44%, var(--line));
+}
+
+.prio-pill.amarelo:hover{
+  background: color-mix(in oklab, var(--prio-yellow) 16%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-yellow) 44%, var(--line));
+}
+
+.prio-pill.vermelho:hover{
+  background: color-mix(in oklab, var(--prio-red) 16%, var(--pill-bg));
+  border-color: color-mix(in oklab, var(--prio-red) 44%, var(--line));
+}
+
+.prio-group input:checked + .prio-pill{
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.prio-group input:checked + .prio-pill.verde{
+  border-color: color-mix(in oklab, var(--prio-green) 55%, var(--line));
+}
+
+.prio-group input:checked + .prio-pill.amarelo{
+  border-color: color-mix(in oklab, var(--prio-yellow) 55%, var(--line));
+}
+
+.prio-group input:checked + .prio-pill.vermelho{
+  border-color: color-mix(in oklab, var(--prio-red) 55%, var(--line));
+}
+
+/* =========================================================
+   TOPO DA FILA
+   ========================================================= */
+.queue-head{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.counter{
+  font-weight: 800;
+  color: var(--ink-2);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in oklab, var(--primary) 22%, var(--line));
+  padding: 8px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.counter span{
+  font-size: 16px;
+}
+
+.queue-filters{
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(220px, .8fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.prio-filter{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pf-pill{
+  border: 1px solid var(--line);
+  background: var(--pill-bg);
+  color: var(--pill-ink);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 800;
+  transition: .16s ease;
+}
+
+.pf-pill.active{
+  outline: 2px solid color-mix(in oklab, var(--primary) 42%, transparent);
+  outline-offset: 1px;
+}
+
+.pf-pill.verde:hover{
+  background: color-mix(in oklab, var(--prio-green) 16%, var(--pill-bg));
+}
+
+.pf-pill.amarelo:hover{
+  background: color-mix(in oklab, var(--prio-yellow) 16%, var(--pill-bg));
+}
+
+.pf-pill.vermelho:hover{
+  background: color-mix(in oklab, var(--prio-red) 16%, var(--pill-bg));
+}
+
+/* =========================================================
+   GRID DOS CARDS
+   ========================================================= */
+.queue-cards-wrap{
+  width: 100%;
+}
+
+.queue-cards{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.fila-card{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 290px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(37,99,235,.05), transparent 36%),
+    linear-gradient(180deg, var(--card), var(--card-soft));
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  transition: transform .16s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.fila-card::before{
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary), var(--success));
+}
+
+.fila-card:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.fila-card.is-sem-saldo{
+  border-color: color-mix(in oklab, var(--danger) 30%, var(--line));
+  background:
+    radial-gradient(circle at top right, rgba(239,68,68,.08), transparent 40%),
+    linear-gradient(180deg, var(--card), var(--card-soft));
+}
+
+.fila-card.is-sem-saldo::before{
+  background: linear-gradient(90deg, var(--danger), #f97316);
+}
+
+.fila-card-head{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fila-card-time{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fila-card-time strong{
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.fila-card-label,
+.fila-card-mini-label{
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.fila-card-top-actions{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fila-card-body{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.fila-card-group{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fila-card-main{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fila-card-main strong{
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.fila-card-inline{
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+}
+
+.obs-text{
+  color: var(--ink-2);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.muted-mini{
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* =========================================================
+   BADGES
+   ========================================================= */
+.badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge.prio{
+  color: #fff;
+  border-color: transparent;
+}
+
+.badge.prio.verde{ background: var(--prio-green); }
+.badge.prio.amarelo{ background: var(--prio-yellow); }
+.badge.prio.vermelho{ background: var(--prio-red); }
+
+/* =========================================================
+   COMBO
+   ========================================================= */
+.combo-box{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--combo-no-line);
+  background: var(--combo-no-bg);
+}
+
+.combo-meta{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.combo-meta strong{
+  font-size: 14px;
+  color: var(--combo-no-ink);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.combo-meta span{
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.combo-box:not(.is-zero) .combo-meta strong{
+  color: var(--combo-ok-ink);
+}
+
+.combo-box:not(.is-zero){
+  background: var(--combo-ok-bg);
+  border-color: var(--combo-ok-line);
+}
+
+.combo-box.is-zero{
+  background: var(--combo-zero-bg);
+  border-color: var(--combo-zero-line);
+}
+
+.combo-box.is-zero .combo-meta strong,
+.combo-box.is-zero .combo-meta span{
+  color: var(--combo-zero-ink);
+}
+
+/* =========================================================
+   VEIO DA AGENDA
+   ========================================================= */
+.from-agenda{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--primary) 10%, var(--card));
+  border: 1px solid var(--line);
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+/* =========================================================
+   AÇÕES DOS CARDS
+   ========================================================= */
+.fila-card-actions{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in oklab, var(--line) 78%, transparent);
+}
+
+.fila-card-actions .btn,
+.fila-card-actions [data-menu-toggle]{
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fila-card-actions .btn svg,
+.fila-card-actions [data-menu-toggle] svg{
+  width: 18px;
+  height: 18px;
+}
+
+.fila-card-actions .btn.atender{
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 16px rgba(37,99,235,.20);
+}
+
+.fila-card-actions .btn.remover{
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 8px 16px rgba(239,68,68,.18);
+}
+
+/* =========================================================
+   MENU
+   ========================================================= */
+.menu{
+  position: relative;
+}
+
+.menu [hidden]{
+  display: none !important;
+}
+
+.menu-pop{
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 210px;
+  background: var(--menu-bg);
+  color: var(--menu-ink);
+  border: 1px solid var(--menu-line);
+  border-radius: 14px;
+  box-shadow: 0 18px 34px rgba(0,0,0,.18);
+  padding: 8px;
+  z-index: 999;
+}
+
+.menu-pop.is-portal{
+  position: fixed;
+  z-index: 2147483647;
+  background: var(--menu-bg);
+  color: var(--menu-ink);
+  border: 1px solid var(--menu-line);
+  border-radius: 14px;
+  box-shadow: 0 18px 34px rgba(0,0,0,.22);
+  padding: 8px;
+}
+
+.menu-pop .menu-item{
+  width: 100%;
+  min-height: 38px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.menu-pop .menu-item:hover{
+  background: color-mix(in oklab, var(--card) 78%, #e9eefc);
+}
+
+.menu-pop .menu-item.danger{
+  color: #b91c1c;
+}
+
+.menu-pop .menu-item.danger:hover{
+  background: #fee2e2;
+}
+
+/* =========================================================
+   PAGINAÇÃO
+   ========================================================= */
+.queue-pagination{
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.queue-pagination-info{
+  min-width: 130px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* =========================================================
+   EMPTY
+   ========================================================= */
+.empty{
+  text-align: center;
+  color: var(--muted);
+  padding: 22px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--card) 85%, #f8fbff);
+}
+
+/* =========================================================
+   RESPONSIVO
+   ========================================================= */
+@media (max-width: 1180px){
+  .queue-cards{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px){
+  .queue-filters{
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .queue-filters .prio-filter{
+    grid-column: 1 / -1;
+  }
+
+  .att-page-head{
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .card-head.between{
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 760px){
+  .att-grid{
+    grid-template-columns: 1fr;
+  }
+
+  .span-2{
+    grid-column: auto;
+  }
+
+  .queue-cards{
+    grid-template-columns: 1fr;
+  }
+
+  .fila-card-inline{
+    grid-template-columns: 1fr;
+  }
+
+  .queue-filters{
+    grid-template-columns: 1fr;
+  }
+
+  .fila-card-actions{
+    justify-content: space-between;
+  }
+
+  .actions{
+    width: 100%;
+  }
+
+  .actions .btn{
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px){
+  .att-container{
+    padding: 0 12px;
+  }
+
+  .att-page-head,
+  .att-card{
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .title-area h2{
+    font-size: 1.5rem;
+  }
+
+  .prio-filter{
+    gap: 6px;
+  }
+
+  .pf-pill,
+  .prio-pill{
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+}
+
+/* =========================================================
+   IMPRESSÃO
+   ========================================================= */
+@media print{
+  :root{
+    --bg:#fff;
+    --card:#fff;
+    --card-soft:#fff;
+    --ink:#000;
+    --ink-2:#222;
+    --muted:#555;
+    --line:#ddd;
+    --line-strong:#ddd;
+  }
+
+  body{
+    background:#fff;
+  }
+
+  .att-page-head .actions,
+  .row-actions,
+  .prio-filter,
+  #fProf, #fBusca, #btnLimparFila, #btnImprimir,
+  .queue-pagination,
+  .fila-card-actions{
+    display:none !important;
+  }
+
+  .att-card,
+  .fila-card{
+    box-shadow:none;
+    border-color:#ddd;
+  }
+
+  .queue-cards{
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 10px;
+  }
+}
+
+/* =========================================================
+   ACESSIBILIDADE
+   ========================================================= */
+@media (prefers-reduced-motion: reduce){
+  .btn,
+  .fila-card,
+  .menu-item{
+    transition: none;
+  }
 }

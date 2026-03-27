@@ -17,21 +17,31 @@
     {% endif %}
   {% endwith %}
 
+  <!-- HERO -->
   <header class="att-page-head">
     <div class="title-area">
+      <span class="att-kicker">SGD · Atendimento</span>
       <h2>Lista de Atendimentos</h2>
-      <p class="muted">Monte a fila: selecione paciente, profissional e adicione. A fila aparece abaixo.</p>
+      <p class="muted">
+        Organize a fila de forma rápida, acompanhe o profissional responsável
+        e visualize facilmente quando o paciente possui combo e quantas sessões ainda restam.
+      </p>
     </div>
+
     <div class="actions">
       <button type="button" class="btn ghost" id="btnImprimir">Imprimir</button>
       <button type="button" class="btn danger ghost" id="btnLimparFila">Limpar fila</button>
     </div>
   </header>
 
-  <!-- Bloco 1: Adicionar manualmente à fila -->
+  <!-- BLOCO 1: ADICIONAR -->
   <section class="card att-card" aria-labelledby="titulo-add">
     <div class="card-head">
-      <h3 id="titulo-add">Adicionar à fila</h3>
+      <div>
+        <h3 id="titulo-add">Adicionar à fila</h3>
+        <p class="muted">Selecione o paciente, profissional e monte a fila com mais organização.</p>
+      </div>
+
       <span class="muted atalho">Atalhos: Enter adiciona • Ctrl+P imprime</span>
     </div>
 
@@ -99,81 +109,159 @@
     </form>
   </section>
 
-  <!-- Bloco 2: Fila atual -->
+  <!-- BLOCO 2: FILA EM CARDS -->
   <section class="card att-card" aria-labelledby="titulo-fila">
     <div class="card-head between">
-      <h3 id="titulo-fila">Fila atual</h3>
+      <div>
+        <h3 id="titulo-fila">Fila atual</h3>
+        <p class="muted">Cards organizados por paciente, profissional, prioridade e situação do combo.</p>
+      </div>
 
       <div class="queue-head">
-        <div class="queue-filters">
-          <input type="text" id="fBusca" placeholder="Buscar na fila (nome/CPF/observação)">
-
-          <select id="fProf">
-            <option value="">Todos os profissionais</option>
-            {% for prof in profissionais|default([]) %}
-              <option value="{{ prof.id }}">{{ prof.nome }}</option>
-            {% endfor %}
-          </select>
-
-          <div class="prio-filter" id="prioFilter" role="group" aria-label="Filtrar prioridade">
-            <button type="button" class="pf-pill active" data-prio="">Todos</button>
-            <button type="button" class="pf-pill verde" data-prio="verde">Leve</button>
-            <button type="button" class="pf-pill amarelo" data-prio="amarelo">Moderado</button>
-            <button type="button" class="pf-pill vermelho" data-prio="vermelho">Urgente</button>
-          </div>
+        <div class="counter">
+          <span id="qtdFila">0</span> na fila
         </div>
-
-        <div class="counter"><span id="qtdFila">0</span> na fila</div>
       </div>
     </div>
 
-    <div class="table-wrap">
-      <table class="queue-table" id="tFila">
-        <thead>
-          <tr>
-            <th>Hora</th>
-            <th>Paciente</th>
-            <th>Profissional</th>
-            <th>Tipo</th>
-            <th>Prioridade</th>
-            <th>Observações</th>
-            <th style="width:160px;">Ações</th>
-          </tr>
-        </thead>
+    <div class="queue-filters">
+      <input type="text" id="fBusca" placeholder="Buscar na fila (nome/observação/combo)">
 
-        <tbody id="tbodyFila">
-          {% for item in fila|default([]) %}
+      <select id="fProf">
+        <option value="">Todos os profissionais</option>
+        {% for prof in profissionais|default([]) %}
+          <option value="{{ prof.id }}">{{ prof.nome }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="prio-filter" id="prioFilter" role="group" aria-label="Filtrar prioridade">
+        <button type="button" class="pf-pill active" data-prio="">Todos</button>
+        <button type="button" class="pf-pill verde" data-prio="verde">Leve</button>
+        <button type="button" class="pf-pill amarelo" data-prio="amarelo">Moderado</button>
+        <button type="button" class="pf-pill vermelho" data-prio="vermelho">Urgente</button>
+      </div>
+    </div>
+
+    <div class="queue-cards-wrap">
+      <div class="queue-cards" id="cardsFila">
+        {% for item in fila|default([]) %}
           {% set _origem = (item.origem or 'manual') %}
           {% set _from_agenda = (_origem == 'agenda') %}
           {% set _agenda_id = (item.agenda_id or '') %}
           {% set _status = (item.status or '') %}
-          <tr
+          {% set _combo = item.combo if item.combo is defined else none %}
+          {% set _tem_combo = _combo and _combo.id %}
+          {% set _combo_nome = (_combo.combo_nome or _combo.nome_plano or 'Combo/Plano') if _tem_combo else '' %}
+          {% set _combo_restantes = (_combo.sessoes_restantes if _tem_combo else 0) %}
+          {% set _combo_sem_saldo = _tem_combo and (_combo_restantes|int <= 0) %}
+
+          <article
+            class="fila-card {% if _combo_sem_saldo %}is-sem-saldo{% endif %}"
             data-id="{{ item.id }}"
             data-prof="{{ item.profissional_id }}"
             data-prio="{{ item.prioridade }}"
             data-origem="{{ _origem }}"
             data-agenda-id="{{ _agenda_id }}"
             data-status="{{ _status }}"
+            data-tem-combo="{{ 1 if _tem_combo else 0 }}"
+            data-combo-restantes="{{ _combo_restantes }}"
           >
-            <td>{{ item.hora }}</td>
+            <header class="fila-card-head">
+              <div class="fila-card-time">
+                <span class="fila-card-label">Hora</span>
+                <strong>{{ item.hora }}</strong>
+              </div>
 
-            <td data-pid="{{ item.paciente_id }}">
-              <span class="from-agenda" {% if not _from_agenda %}hidden{% endif %} title="Vindo da agenda">📅</span>
-              {{ item.paciente_nome }}
-            </td>
+              <div class="fila-card-top-actions">
+                {% if _from_agenda %}
+                  <span class="from-agenda" title="Vindo da agenda">📅</span>
+                {% endif %}
 
-            <td>{{ item.profissional_nome }}</td>
-            <td>{{ item.tipo }}</td>
+                <span class="badge prio {{ item.prioridade }}">
+                  {% if item.prioridade == 'verde' %}
+                    Leve
+                  {% elif item.prioridade == 'amarelo' %}
+                    Moderado
+                  {% elif item.prioridade == 'vermelho' %}
+                    Urgente
+                  {% else %}
+                    {{ item.prioridade|capitalize }}
+                  {% endif %}
+                </span>
+              </div>
+            </header>
 
-            <td>
-              <span class="badge prio {{ item.prioridade }}">
-                {{ item.prioridade|capitalize }}
-              </span>
-            </td>
+            <div class="fila-card-body">
+              <section class="fila-card-group">
+                <span class="fila-card-mini-label">Paciente</span>
+                <div class="fila-card-main" data-pid="{{ item.paciente_id }}">
+                  <strong>{{ item.paciente_nome }}</strong>
+                  <span class="muted-mini">ID: {{ item.paciente_id or '—' }}</span>
+                </div>
+              </section>
 
-            <td>{{ item.obs or '—' }}</td>
+              <section class="fila-card-group">
+                <span class="fila-card-mini-label">Combo</span>
+                {% if _tem_combo %}
+                  <div class="combo-box {% if _combo_sem_saldo %}is-zero{% endif %}">
+                    <div class="combo-meta">
+                      <strong>{{ _combo_nome }}</strong>
+                      <span>
+                        {% if _combo_restantes|int > 0 %}
+                          {{ _combo_restantes }} restante(s)
+                        {% else %}
+                          Sem saldo
+                        {% endif %}
+                      </span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="combo-box">
+                    <div class="combo-meta">
+                      <strong>Sem combo</strong>
+                    </div>
+                  </div>
+                {% endif %}
+              </section>
 
-            <td class="row-actions">
+              <section class="fila-card-group">
+                <span class="fila-card-mini-label">Profissional</span>
+                <div class="fila-card-main">
+                  <strong>{{ item.profissional_nome }}</strong>
+                </div>
+              </section>
+
+              <section class="fila-card-inline">
+                <div class="fila-card-group">
+                  <span class="fila-card-mini-label">Tipo</span>
+                  <div class="fila-card-main">
+                    <strong>{{ item.tipo }}</strong>
+                  </div>
+                </div>
+
+                <div class="fila-card-group">
+                  <span class="fila-card-mini-label">Observações</span>
+                  <div class="fila-card-main">
+                    <span class="obs-text">{{ item.obs or '—' }}</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <footer class="fila-card-actions">
+              <button type="button" class="btn atender" data-acao="atender" aria-label="Atender">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
+                </svg>
+              </button>
+
+              <button type="button" class="btn remover" data-acao="remover" aria-label="Remover">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
+                        stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+
               <div class="menu">
                 <button class="btn icon only" type="button"
                         data-menu-toggle aria-expanded="false" aria-haspopup="true"
@@ -225,15 +313,22 @@
                   </button>
                 </div>
               </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+            </footer>
+          </article>
+        {% endfor %}
+      </div>
     </div>
 
     <div id="emptyFila" class="empty" {% if fila and fila|length %}hidden{% endif %}>
       Nenhum paciente na fila. Adicione no bloco acima para começar.
+    </div>
+
+    <div class="queue-pagination" id="filaPagination" {% if not fila or not fila|length %}hidden{% endif %}>
+      <button type="button" class="btn ghost" id="filaPrev">Anterior</button>
+      <div class="queue-pagination-info">
+        <span id="filaPageInfo">Página 1 de 1</span>
+      </div>
+      <button type="button" class="btn ghost" id="filaNext">Próxima</button>
     </div>
   </section>
 </div>
@@ -241,8 +336,5 @@
 
 {% block extra_js %}
   {{ super() }}
-  <script id="prof-data" type="application/json">
-    {{ profissionais|default([])|tojson }}
-  </script>
   <script src="{{ url_for('atendimentos.static', filename='js/lista_atendimentos.js') }}" defer></script>
 {% endblock %}

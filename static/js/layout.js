@@ -1,316 +1,338 @@
 // layout.js
+(() => {
+  "use strict";
 
-// ==========================
-// Config
-// ==========================
-const MOBILE_MAX = 768;
-const IDLE_CLOSE_MS = 5000;
+  const MOBILE_MAX = 768;
 
-// ==========================
-// Util: trava/destrava scroll do body no mobile
-// ==========================
-function setBodyScrollLocked(locked) {
-  document.body.classList.toggle("no-scroll", !!locked);
-}
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-// ==========================
-// Helpers
-// ==========================
-function isMobile() {
-  return window.innerWidth <= MOBILE_MAX;
-}
+  const body = document.body;
+  const sidebar = $("#sidebar");
+  const overlay = $("#sidebarOverlay");
+  const mobileBtn = $("#mobileMenuBtn");
+  const sidebarToggleBtn = $("#sidebarToggleBtn");
 
-function getSidebar() {
-  return document.getElementById("sidebar");
-}
-
-function getToggleBtn() {
-  const sidebar = getSidebar();
-  return sidebar ? sidebar.querySelector(".toggle-btn") : null;
-}
-
-// ==========================
-// Sidebar: mobile open/close (classe .active)
-// ==========================
-function openMobileSidebar() {
-  const sidebar = getSidebar();
   if (!sidebar) return;
-  sidebar.classList.add("active");
-  setBodyScrollLocked(true);
-}
 
-function closeMobileSidebar() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-  sidebar.classList.remove("active");
-  setBodyScrollLocked(false);
-}
+  let desktopExpanded = false;
 
-function toggleMobileSidebar() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-  if (sidebar.classList.contains("active")) closeMobileSidebar();
-  else openMobileSidebar();
-}
-
-// ==========================
-// Sidebar: desktop collapse/hover + auto-close idle
-// ==========================
-let idleTimer = null;
-
-function clearIdleTimer() {
-  if (idleTimer) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
+  function isMobile() {
+    return window.innerWidth <= MOBILE_MAX;
   }
-}
 
-function startIdleTimer() {
-  clearIdleTimer();
-  idleTimer = setTimeout(() => {
-    const sidebar = getSidebar();
-    if (!sidebar) return;
+  function normalizePath(path) {
+    if (!path) return "/";
+    return path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
+  }
+
+  function lockBodyScroll(lock) {
+    body.classList.toggle("menu-open", !!lock);
+    body.classList.toggle("no-scroll", !!lock);
+  }
+
+  // =========================================================
+  // DESKTOP SIDEBAR
+  // =========================================================
+  function collapseDesktopSidebar() {
     if (isMobile()) return;
 
-    if (!sidebar.classList.contains("is-pinned")) {
-      sidebar.classList.remove("is-hovered");
-      sidebar.classList.add("is-collapsed");
-    }
-  }, IDLE_CLOSE_MS);
-}
+    sidebar.classList.add("is-collapsed");
+    sidebar.classList.remove("is-pinned");
+    body.classList.add("sidebar-collapsed");
+    desktopExpanded = false;
 
-function toggleDesktopPin() {
-  const sidebar = getSidebar();
-  if (!sidebar || isMobile()) return;
+    // ao recolher, fecha submenus
+    getMenuGroups().forEach((group) => setMenuState(group, false));
+  }
 
-  const pinned = sidebar.classList.toggle("is-pinned");
-  if (pinned) {
+  function expandDesktopSidebar() {
+    if (isMobile()) return;
+
     sidebar.classList.remove("is-collapsed");
-    sidebar.classList.add("is-hovered");
-    clearIdleTimer();
-  } else {
-    startIdleTimer();
-  }
-}
-
-// ==========================
-// Responsivo: aplica modo correto
-// ==========================
-function applyMode() {
-  const sidebar = getSidebar();
-  if (!sidebar) return;
-
-  if (isMobile()) {
-    // Mobile: nunca usar estados de desktop
-    sidebar.classList.remove("is-collapsed", "is-hovered", "is-pinned");
-    // scroll lock coerente
-    setBodyScrollLocked(sidebar.classList.contains("active"));
-  } else {
-    // Desktop: .active é só mobile
-    sidebar.classList.remove("active");
-    setBodyScrollLocked(false);
-
-    if (!sidebar.classList.contains("is-pinned")) {
-      sidebar.classList.add("is-collapsed");
-      sidebar.classList.remove("is-hovered");
-    }
-  }
-}
-
-// ==========================
-// Boot
-// ==========================
-document.addEventListener("DOMContentLoaded", () => {
-  const sidebar = getSidebar();
-  const toggleBtn = getToggleBtn();
-  if (!sidebar) return;
-
-  applyMode();
-
-  // Hamburger: mobile abre/fecha; desktop pin/unpin
-  if (toggleBtn) {
-    toggleBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isMobile()) toggleMobileSidebar();
-      else toggleDesktopPin();
-    });
+    sidebar.classList.add("is-pinned");
+    body.classList.remove("sidebar-collapsed");
+    desktopExpanded = true;
   }
 
-  // Clique fora fecha sidebar no mobile
-  window.addEventListener("click", (e) => {
+  // =========================================================
+  // MOBILE SIDEBAR
+  // =========================================================
+  function openMobileSidebar() {
     if (!isMobile()) return;
-    if (!sidebar.classList.contains("active")) return;
 
-    const clickedInsideSidebar = sidebar.contains(e.target);
-    const clickedToggle = e.target.closest(".toggle-btn");
-    if (!clickedInsideSidebar && !clickedToggle) closeMobileSidebar();
-  });
+    sidebar.classList.add("is-mobile-open");
+    overlay?.classList.add("is-visible");
+    lockBodyScroll(true);
+  }
 
-  // ESC: fecha mobile e recolhe desktop (se não pinned) + fecha submenus
-  window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
+  function closeMobileSidebar() {
+    sidebar.classList.remove("is-mobile-open");
+    overlay?.classList.remove("is-visible");
+    lockBodyScroll(false);
 
-    if (isMobile() && sidebar.classList.contains("active")) {
-      closeMobileSidebar();
+    // opcional: fecha submenus ao sair do mobile
+    getMenuGroups().forEach((group) => setMenuState(group, false));
+  }
+
+  function toggleMobileSidebar(force) {
+    const shouldOpen =
+      typeof force === "boolean"
+        ? force
+        : !sidebar.classList.contains("is-mobile-open");
+
+    if (shouldOpen) openMobileSidebar();
+    else closeMobileSidebar();
+  }
+
+  // =========================================================
+  // SUBMENUS
+  // =========================================================
+  function getMenuGroups() {
+    return $$(".menu-group", sidebar);
+  }
+
+  function setMenuState(group, open) {
+    if (!group) return;
+
+    const toggle = $(".menu-toggle", group);
+    const submenu = $(".submenu", group);
+
+    if (!toggle || !submenu) return;
+
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.classList.toggle("is-open", !!open);
+    group.classList.toggle("is-open", !!open);
+    submenu.classList.toggle("open", !!open);
+
+    if (open) {
+      submenu.removeAttribute("hidden");
+      submenu.style.maxHeight = submenu.scrollHeight + "px";
+      submenu.style.opacity = "1";
+    } else {
+      submenu.setAttribute("hidden", "");
+      submenu.style.maxHeight = "0px";
+      submenu.style.opacity = "0";
     }
+  }
 
-    if (!isMobile() && !sidebar.classList.contains("is-pinned")) {
-      sidebar.classList.remove("is-hovered");
-      sidebar.classList.add("is-collapsed");
-    }
-
-    document
-      .querySelectorAll(".has-sub.open, .has-sub[aria-expanded='true']")
-      .forEach((li) => {
-        const { toggleBtn, panel } = resolveSubmenuElements(li);
-        if (toggleBtn && panel) setSubmenuState(li, toggleBtn, panel, false);
-      });
-  });
-
-  // Mobile: clicar em link fecha sidebar
-  sidebar.addEventListener("click", (e) => {
-    const link = e.target.closest("a");
-    if (link && isMobile() && sidebar.classList.contains("active")) {
-      closeMobileSidebar();
-    }
-  });
-
-  // Desktop: hover expande e idle recolhe
-  sidebar.addEventListener("mouseenter", () => {
-    if (isMobile()) return;
-
-    if (!sidebar.classList.contains("is-pinned")) {
-      sidebar.classList.add("is-hovered");
-      sidebar.classList.remove("is-collapsed");
-    }
-    clearIdleTimer();
-  });
-
-  sidebar.addEventListener("mouseleave", () => {
-    if (isMobile()) return;
-
-    if (!sidebar.classList.contains("is-pinned")) {
-      startIdleTimer();
-    }
-  });
-
-  ["mousemove", "click", "keydown", "wheel"].forEach((evt) => {
-    sidebar.addEventListener(evt, () => {
-      if (isMobile()) return;
-      if (!sidebar.classList.contains("is-pinned")) {
-        if (sidebar.classList.contains("is-hovered")) startIdleTimer();
+  function closeSiblingMenus(currentGroup) {
+    getMenuGroups().forEach((group) => {
+      if (group !== currentGroup) {
+        setMenuState(group, false);
       }
     });
-  });
-
-  // Resize: aplica modo correto
-  window.addEventListener("resize", applyMode);
-
-  // Submenus
-  initAllSubmenus();
-});
-
-/* =========================================================================
-   Submenus (compatível com .submenu/.sub + acessibilidade + teclado)
-   ========================================================================= */
-
-function resolveSubmenuElements(li) {
-  if (!li) return { toggleBtn: null, panel: null };
-
-  let toggleBtn =
-    li.querySelector(":scope > .submenu-toggle") ||
-    li.querySelector(":scope > a[href^='javascript']") ||
-    li.querySelector(":scope > a:not([href])") ||
-    li.querySelector(":scope > a");
-
-  let panel =
-    li.querySelector(":scope > .submenu") ||
-    li.querySelector(":scope > .sub") ||
-    li.querySelector(":scope > ul");
-
-  if (panel && panel.tagName !== "UL") {
-    const ul = li.querySelector(":scope > ul");
-    if (ul) panel = ul;
   }
 
-  return { toggleBtn, panel };
-}
+  function initMenus() {
+    const currentPath = normalizePath(window.location.pathname);
 
-function setSubmenuState(li, toggleBtn, panel, expanded) {
-  const isOpen = !!expanded;
+    getMenuGroups().forEach((group) => {
+      const toggle = $(".menu-toggle", group);
+      const submenu = $(".submenu", group);
+      if (!toggle || !submenu) return;
 
-  li.classList.toggle("open", isOpen);
+      const submenuLinks = $$("a[href]", submenu);
 
-  toggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  li.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      const hasActiveChild = submenuLinks.some((link) => {
+        const href = link.getAttribute("href");
+        if (!href || href === "#") return false;
 
-  if (isOpen) panel.removeAttribute("hidden");
-  else panel.setAttribute("hidden", "");
-}
-
-function initAllSubmenus() {
-  const roots = document.querySelectorAll(".menu, .nav, #sidebar, #sidebar .menu");
-  const seen = new Set();
-
-  roots.forEach((root) => {
-    root.querySelectorAll(".has-sub").forEach((li) => {
-      if (seen.has(li)) return;
-      seen.add(li);
-
-      const { toggleBtn, panel } = resolveSubmenuElements(li);
-      if (!toggleBtn || !panel) return;
-
-      toggleBtn.setAttribute("aria-expanded", "false");
-      li.setAttribute("aria-expanded", "false");
-      panel.setAttribute("hidden", "");
-
-      toggleBtn.addEventListener("click", (e) => {
-        if (toggleBtn.tagName === "A") e.preventDefault();
-
-        // Se clicar em submenu no desktop enquanto colapsado, expande “no hover”
-        const sidebar = getSidebar();
-        if (sidebar && !isMobile() && sidebar.classList.contains("is-collapsed")) {
-          sidebar.classList.add("is-hovered");
-          sidebar.classList.remove("is-collapsed");
-          startIdleTimer();
+        try {
+          const url = new URL(href, window.location.origin);
+          return normalizePath(url.pathname) === currentPath;
+        } catch (_) {
+          return false;
         }
-
-        const currentlyOpen = toggleBtn.getAttribute("aria-expanded") === "true";
-        const wantOpen = !currentlyOpen;
-
-        closeSiblings(li);
-        setSubmenuState(li, toggleBtn, panel, wantOpen);
       });
 
-      toggleBtn.addEventListener("keydown", (e) => {
-        const currentlyOpen = toggleBtn.getAttribute("aria-expanded") === "true";
+      setMenuState(group, hasActiveChild);
+
+      toggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // no desktop, ao clicar submenu, garante que sidebar fique expandida
+        if (!isMobile()) {
+          expandDesktopSidebar();
+        }
+
+        const currentlyOpen = toggle.getAttribute("aria-expanded") === "true";
+        const willOpen = !currentlyOpen;
+
+        closeSiblingMenus(group);
+        setMenuState(group, willOpen);
+      });
+
+      toggle.addEventListener("keydown", (e) => {
+        const currentlyOpen = toggle.getAttribute("aria-expanded") === "true";
 
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          toggleBtn.click();
-        } else if (e.key === "ArrowRight" && !currentlyOpen) {
-          setSubmenuState(li, toggleBtn, panel, true);
-        } else if (e.key === "ArrowLeft" && currentlyOpen) {
-          setSubmenuState(li, toggleBtn, panel, false);
+          toggle.click();
+        }
+
+        if (e.key === "ArrowRight" && !currentlyOpen) {
+          closeSiblingMenus(group);
+          setMenuState(group, true);
+        }
+
+        if (e.key === "ArrowLeft" && currentlyOpen) {
+          setMenuState(group, false);
         }
       });
-
-      const current = panel.querySelector(`a[href="${location.pathname}"]`);
-      if (current) setSubmenuState(li, toggleBtn, panel, true);
     });
-  });
-}
+  }
 
-function closeSiblings(li) {
-  const parent = li.parentElement;
-  if (!parent) return;
+  // =========================================================
+  // LINK ATIVO
+  // =========================================================
+  function markActiveLinks() {
+    const currentPath = normalizePath(window.location.pathname);
+    const links = $$("a[href]", sidebar);
 
-  parent
-    .querySelectorAll(":scope > .has-sub.open, :scope > .has-sub[aria-expanded='true']")
-    .forEach((sib) => {
-      if (sib === li) return;
-      const { toggleBtn, panel } = resolveSubmenuElements(sib);
-      if (toggleBtn && panel) setSubmenuState(sib, toggleBtn, panel, false);
+    links.forEach((link) => {
+      const href = link.getAttribute("href");
+      if (!href || href === "#") return;
+
+      try {
+        const url = new URL(href, window.location.origin);
+        const samePath = normalizePath(url.pathname) === currentPath;
+
+        link.classList.toggle("is-active", samePath);
+
+        if (samePath) {
+          const parentGroup = link.closest(".menu-group");
+          if (parentGroup && !isMobile()) {
+            expandDesktopSidebar();
+            setMenuState(parentGroup, true);
+          }
+        }
+      } catch (_) {}
     });
-}
+  }
+
+  // =========================================================
+  // RESPONSIVO
+  // =========================================================
+  function applyResponsiveMode() {
+    if (isMobile()) {
+      sidebar.classList.remove("is-collapsed", "is-pinned");
+      body.classList.remove("sidebar-collapsed");
+      closeMobileSidebar();
+    } else {
+      closeMobileSidebar();
+      collapseDesktopSidebar();
+    }
+  }
+
+  // =========================================================
+  // EVENTOS
+  // =========================================================
+  function bindGlobalEvents() {
+    mobileBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMobileSidebar();
+    });
+
+    sidebarToggleBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (isMobile()) {
+        toggleMobileSidebar();
+      }
+    });
+
+    overlay?.addEventListener("click", () => {
+      closeMobileSidebar();
+    });
+
+    // desktop: expande no hover e SEGURA aberto
+    sidebar.addEventListener("mouseenter", () => {
+      if (isMobile()) return;
+      if (!desktopExpanded) {
+        expandDesktopSidebar();
+      }
+    });
+
+    // importante:
+    // NÃO fecha no mouseleave
+    // só fecha no clique fora ou ESC
+
+    // clique fora
+    document.addEventListener("click", (e) => {
+      const clickedInsideSidebar = sidebar.contains(e.target);
+      const clickedMobileBtn = mobileBtn?.contains(e.target);
+      const clickedToggleBtn = sidebarToggleBtn?.contains(e.target);
+
+      if (isMobile()) {
+        if (
+          sidebar.classList.contains("is-mobile-open") &&
+          !clickedInsideSidebar &&
+          !clickedMobileBtn &&
+          !clickedToggleBtn
+        ) {
+          closeMobileSidebar();
+        }
+        return;
+      }
+
+      if (!clickedInsideSidebar && !clickedMobileBtn && !clickedToggleBtn) {
+        collapseDesktopSidebar();
+      }
+    });
+
+    // impede que clique interno feche a sidebar
+    sidebar.addEventListener("click", (e) => {
+      e.stopPropagation();
+
+      const link = e.target.closest("a[href]");
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+
+      if (isMobile() && href && href !== "#") {
+        closeMobileSidebar();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+
+      if (isMobile() && sidebar.classList.contains("is-mobile-open")) {
+        closeMobileSidebar();
+        return;
+      }
+
+      if (!isMobile()) {
+        collapseDesktopSidebar();
+      }
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        applyResponsiveMode();
+      }, 120);
+    });
+  }
+
+  // =========================================================
+  // BOOT
+  // =========================================================
+  function boot() {
+    applyResponsiveMode();
+    initMenus();
+    markActiveLinks();
+    bindGlobalEvents();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();

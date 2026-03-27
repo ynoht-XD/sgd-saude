@@ -1,0 +1,565 @@
+{% extends "layout.html" %}
+
+{% block title %}Comercial{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/comercial.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="com-page">
+  <div class="com-shell">
+
+    <!-- HERO -->
+    <header class="com-card com-hero">
+      <div class="com-hero-main">
+        <div class="com-kicker">SGD · Comercial</div>
+        <h1>Planos, combos e vínculo com pacientes</h1>
+        <p>
+          Controle comercial mais seguro, com sessões vinculadas aos atendimentos,
+          visão clara do saldo e acesso rápido aos pacientes que ainda estão sem combo ou plano.
+        </p>
+
+        <div class="com-hero-chips">
+          <span class="com-chip com-chip--blue">Combos</span>
+          <span class="com-chip com-chip--green">Planos</span>
+          <span class="com-chip com-chip--gold">Pacientes</span>
+          <span class="com-chip com-chip--soft">Sessões</span>
+        </div>
+      </div>
+
+      <div class="com-hero-stats">
+        <div class="com-stat">
+          <span class="com-stat-label">Combos ativos</span>
+          <strong id="statCombos">0</strong>
+        </div>
+
+        <div class="com-stat">
+          <span class="com-stat-label">Planos ativos</span>
+          <strong id="statPlanos">0</strong>
+        </div>
+
+        <div class="com-stat">
+          <span class="com-stat-label">Vínculos</span>
+          <strong id="statVinculos">0</strong>
+        </div>
+
+        <div class="com-stat com-stat--alert">
+          <span class="com-stat-label">Perto de acabar</span>
+          <strong id="statPertoAcabar">0</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- SEÇÃO 1 · COMBOS -->
+    <section class="com-card com-section">
+      <div class="com-head">
+        <div>
+          <span class="com-eyebrow">Combos</span>
+          <h2>Cadastro e gestão de combos</h2>
+          <p>
+            Cadastre, edite e mantenha os combos organizados para uso rápido no vínculo com pacientes.
+          </p>
+        </div>
+      </div>
+
+      <div class="com-actions">
+        <button
+          type="button"
+          class="com-btn com-btn--primary"
+          id="btnToggleCadastroCombo"
+          data-target="#painelCadastroCombo"
+          aria-expanded="false">
+          + Cadastrar combo
+        </button>
+
+        <button
+          type="button"
+          class="com-btn com-btn--ghost"
+          id="btnToggleGestaoCombos"
+          data-target="#painelGestaoCombos"
+          aria-expanded="false">
+          Gerenciar combos
+        </button>
+      </div>
+
+      <!-- PAINEL CADASTRO -->
+      <section class="com-card com-section" id="painelCadastroCombo" hidden>
+        <div class="com-head">
+          <div>
+            <span class="com-eyebrow">Cadastro</span>
+            <h2>Novo combo</h2>
+            <p>Cadastre nome, quantidade de sessões e valor do combo.</p>
+          </div>
+        </div>
+
+        <form id="formCombo" class="com-form-grid com-form-grid--combo">
+          <input type="hidden" id="comboId" name="id">
+
+          <div class="com-field com-field--lg">
+            <label class="com-label" for="comboNome">Nome do combo</label>
+            <input class="com-input" id="comboNome" name="nome" type="text" placeholder="Ex: Combo 2x por semana" required>
+          </div>
+
+          <div class="com-field com-field--md">
+            <label class="com-label" for="comboSessoes">Sessões</label>
+            <input class="com-input" id="comboSessoes" name="sessoes" type="number" min="1" step="1" placeholder="8" required>
+          </div>
+
+          <div class="com-field com-field--md">
+            <label class="com-label" for="comboPreco">Preço</label>
+            <input class="com-input" id="comboPreco" name="preco" type="number" min="0" step="0.01" placeholder="0,00" required>
+          </div>
+
+          <div class="com-field com-field--full">
+            <label class="com-label" for="comboDescricao">Observações</label>
+            <textarea class="com-textarea" id="comboDescricao" name="descricao" rows="3" placeholder="Observações do combo"></textarea>
+          </div>
+
+          <div class="com-field com-field--full">
+            <label class="com-switch">
+              <input id="comboAtivo" name="ativo" type="checkbox" checked>
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Combo ativo</span>
+            </label>
+          </div>
+
+          <div class="com-field com-field--full">
+            <div class="com-actions">
+              <button type="submit" class="com-btn com-btn--primary" id="btnSalvarCombo">
+                Salvar combo
+              </button>
+              <button type="button" class="com-btn com-btn--ghost" id="btnLimparCombo">
+                Limpar
+              </button>
+              <button type="button" class="com-btn com-btn--ghost" id="btnFecharCadastroCombo">
+                Fechar
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <!-- PAINEL GESTÃO -->
+      <section class="com-card com-section" id="painelGestaoCombos" hidden>
+        <div class="com-head">
+          <div>
+            <span class="com-eyebrow">Gestão</span>
+            <h2>Combos cadastrados</h2>
+            <p>
+              Edição direta e objetiva para deixar o comercial rápido de manter.
+            </p>
+          </div>
+        </div>
+
+        <div class="com-toolbar">
+          <div class="com-field">
+            <label class="com-label" for="filtroComboBusca">Pesquisar combo</label>
+            <input class="com-input" id="filtroComboBusca" type="text" placeholder="Nome ou observação">
+          </div>
+
+          <div class="com-field">
+            <label class="com-label" for="filtroComboAtivo">Status</label>
+            <select class="com-select" id="filtroComboAtivo">
+              <option value="">Todos</option>
+              <option value="1">Ativos</option>
+              <option value="0">Inativos</option>
+            </select>
+          </div>
+
+          <div class="com-toolbar-actions">
+            <button type="button" class="com-btn com-btn--ghost" id="btnAtualizarCombos">Atualizar</button>
+          </div>
+        </div>
+
+        <div class="com-actions" style="margin-bottom:14px;">
+          <button type="button" class="com-btn com-btn--primary" id="btnSalvarGestaoCombos">
+            Salvar alterações
+          </button>
+          <button type="button" class="com-btn com-btn--ghost" id="btnFecharGestaoCombos">
+            Fechar
+          </button>
+        </div>
+
+        <div id="listaCombos" class="combo-grid">
+          <div class="com-empty">
+            <strong>Nenhum combo carregado.</strong>
+            <span>A gestão será exibida aqui com campos abertos para edição.</span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- SEÇÃO 2 · PACIENTE -->
+    <section class="com-card com-section">
+      <div class="com-head">
+        <div>
+          <span class="com-eyebrow">Paciente</span>
+          <h2>Designar combo ou plano</h2>
+          <p>
+            Vincule o paciente ao combo ou plano e deixe o consumo das sessões amarrado aos atendimentos.
+          </p>
+        </div>
+      </div>
+
+      <div class="com-patient-search">
+        <div class="com-field">
+          <label class="com-label" for="pacienteBusca">Pesquisar paciente</label>
+          <input class="com-input" id="pacienteBusca" type="text" placeholder="Nome, CPF ou CNS">
+          <div id="pacienteResultados" class="com-search-results" hidden></div>
+        </div>
+
+        <div class="com-patient-box" id="pacienteSelecionadoBox">
+          <div class="com-patient-empty">Nenhum paciente selecionado.</div>
+        </div>
+      </div>
+
+      <form id="formVinculo" class="com-form-grid com-form-grid--vinculo">
+        <input type="hidden" id="vinculoId" name="id">
+        <input type="hidden" id="pacienteId" name="paciente_id">
+
+        <div class="com-field">
+          <label class="com-label" for="tipoVinculo">Tipo</label>
+          <select class="com-select" id="tipoVinculo" name="tipo" required>
+            <option value="combo">Combo</option>
+            <option value="plano">Plano</option>
+          </select>
+        </div>
+
+        <div class="com-field" id="fieldComboSelect">
+          <label class="com-label" for="comboSelect">Combo cadastrado</label>
+          <select class="com-select" id="comboSelect" name="combo_id">
+            <option value="">Selecione...</option>
+          </select>
+        </div>
+
+        <div class="com-field" id="fieldNomePlano" hidden>
+          <label class="com-label" for="nomePlano">Nome do plano</label>
+          <input class="com-input" id="nomePlano" name="nome_plano" type="text" placeholder="Ex: Plano mensal">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="sessoesContratadas">Sessões contratadas</label>
+          <input class="com-input" id="sessoesContratadas" name="sessoes_contratadas" type="number" min="0" step="1" placeholder="0">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="valorTotal">Valor total</label>
+          <input class="com-input" id="valorTotal" name="valor_total" type="number" min="0" step="0.01" placeholder="0,00">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="formaPagamento">Forma de pagamento</label>
+          <select class="com-select" id="formaPagamento" name="forma_pagamento">
+            <option value="">Selecione...</option>
+            <option value="pix">Pix</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão de crédito</option>
+            <option value="cartao_debito">Cartão de débito</option>
+            <option value="transferencia">Transferência</option>
+            <option value="boleto">Boleto</option>
+          </select>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="dataInicioVinculo">Data de início</label>
+          <input class="com-input" id="dataInicioVinculo" name="data_inicio" type="date">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="dataFimVinculo">Data de fim</label>
+          <input class="com-input" id="dataFimVinculo" name="data_fim" type="date">
+        </div>
+
+        <div class="com-field com-field--full">
+          <div class="com-inline-checks">
+            <label class="com-switch">
+              <input id="vinculoRecorrente" name="recorrente" type="checkbox">
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Plano recorrente</span>
+            </label>
+
+            <label class="com-switch">
+              <input id="vinculoRenovacao" name="renovacao_automatica" type="checkbox">
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Renovação automática</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="com-field com-field--full">
+          <label class="com-label" for="observacoesVinculo">Observações</label>
+          <textarea class="com-textarea" id="observacoesVinculo" name="observacoes" rows="3" placeholder="Parcelamento, observações administrativas ou anotações rápidas"></textarea>
+        </div>
+
+        <div class="com-field com-field--full">
+          <div class="com-actions">
+            <button type="submit" class="com-btn com-btn--primary" id="btnSalvarVinculo">
+              Salvar vínculo
+            </button>
+            <button type="button" class="com-btn com-btn--ghost" id="btnLimparVinculo">
+              Limpar
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- SEÇÃO 3 · CONTROLE -->
+    <section class="com-card com-section">
+      <div class="com-head">
+        <div>
+          <span class="com-eyebrow">Controle</span>
+          <h2>Vínculos, sessões e pacientes sem vínculo</h2>
+          <p>
+            Visualize quem está vinculado, quem está perto de acabar e quem ainda precisa entrar no fluxo comercial.
+          </p>
+        </div>
+      </div>
+
+      <div class="com-segment" role="tablist" aria-label="Modo de controle comercial">
+        <button
+          type="button"
+          class="com-segment-btn is-active"
+          id="abaVinculos"
+          data-mode="vinculos"
+          aria-selected="true">
+          Vínculos
+        </button>
+
+        <button
+          type="button"
+          class="com-segment-btn"
+          id="abaSemVinculo"
+          data-mode="sem-vinculo"
+          aria-selected="false">
+          Pacientes sem vínculo
+        </button>
+      </div>
+
+      <!-- PAINEL VÍNCULOS -->
+      <section id="painelVinculos" class="com-panel-mode">
+        <div class="com-toolbar com-toolbar--vinculos">
+          <div class="com-field">
+            <label class="com-label" for="filtroVinculoBusca">Pesquisar</label>
+            <input class="com-input" id="filtroVinculoBusca" type="text" placeholder="Paciente, combo, CPF...">
+          </div>
+
+          <div class="com-field">
+            <label class="com-label" for="filtroVinculoTipo">Tipo</label>
+            <select class="com-select" id="filtroVinculoTipo">
+              <option value="">Todos</option>
+              <option value="combo">Combo</option>
+              <option value="plano">Plano</option>
+            </select>
+          </div>
+
+          <div class="com-field">
+            <label class="com-label" for="filtroVinculoStatus">Status</label>
+            <select class="com-select" id="filtroVinculoStatus">
+              <option value="">Todos</option>
+              <option value="ativo">Ativo</option>
+              <option value="encerrado">Encerrado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </div>
+
+          <div class="com-field com-field--check">
+            <label class="com-switch">
+              <input id="filtroPertoAcabar" type="checkbox">
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Só perto de acabar</span>
+            </label>
+          </div>
+
+          <div class="com-toolbar-actions">
+            <button type="button" class="com-btn com-btn--ghost" id="btnAtualizarVinculos">Atualizar</button>
+          </div>
+        </div>
+
+        <div id="cardsVinculos" class="com-cards-vinculos">
+          <div class="com-empty">
+            <strong>Nenhum vínculo carregado.</strong>
+            <span>Os pacientes vinculados aparecerão aqui em formato de cards.</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- PAINEL SEM VÍNCULO -->
+      <section id="painelSemVinculo" class="com-panel-mode" hidden>
+        <div class="com-toolbar com-toolbar--semvinculo">
+          <div class="com-field">
+            <label class="com-label" for="filtroSemVinculoBusca">Pesquisar paciente</label>
+            <input class="com-input" id="filtroSemVinculoBusca" type="text" placeholder="Nome, CPF ou CNS">
+          </div>
+
+          <div class="com-field com-field--check">
+            <label class="com-switch">
+              <input id="filtroSemVinculoAtendimento" type="checkbox" checked>
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Somente com atendimento</span>
+            </label>
+          </div>
+
+          <div class="com-toolbar-actions">
+            <button type="button" class="com-btn com-btn--ghost" id="btnAtualizarSemVinculo">Atualizar</button>
+          </div>
+        </div>
+
+        <div id="cardsSemVinculo" class="com-cards-vinculos">
+          <div class="com-empty">
+            <strong>Nenhum paciente carregado.</strong>
+            <span>Os pacientes sem combo ou plano aparecerão aqui.</span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+  </div>
+</section>
+
+<!-- MODAL VÍNCULO -->
+<dialog id="modalVinculo" class="com-dialog">
+  <form method="dialog" class="com-dialog-card" id="formModalVinculo">
+    <header class="com-dialog-head">
+      <div>
+        <h3>Editar vínculo</h3>
+        <p>Atualize, desvincule atendimentos ou remova o combo/plano do paciente.</p>
+      </div>
+      <button class="com-dialog-close" value="cancel" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="com-dialog-body">
+      <div class="com-form-grid com-form-grid--vinculo">
+        <input type="hidden" id="mvId">
+
+        <div class="com-field com-field--full">
+          <label class="com-label">Paciente</label>
+          <div class="com-readonly" id="mvPacienteNome">—</div>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvTipo">Tipo</label>
+          <select class="com-select" id="mvTipo">
+            <option value="combo">Combo</option>
+            <option value="plano">Plano</option>
+          </select>
+        </div>
+
+        <div class="com-field" id="mvFieldCombo">
+          <label class="com-label" for="mvComboId">Combo</label>
+          <select class="com-select" id="mvComboId">
+            <option value="">Selecione...</option>
+          </select>
+        </div>
+
+        <div class="com-field" id="mvFieldNomePlano" hidden>
+          <label class="com-label" for="mvNomePlano">Nome do plano</label>
+          <input class="com-input" id="mvNomePlano" type="text" placeholder="Nome do plano">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvSessoesContratadas">Sessões contratadas</label>
+          <input class="com-input" id="mvSessoesContratadas" type="number" min="0" step="1">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvSessoesUsadas">Sessões usadas</label>
+          <input class="com-input" id="mvSessoesUsadas" type="number" min="0" step="1" readonly>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvSessoesRestantes">Sessões restantes</label>
+          <input class="com-input" id="mvSessoesRestantes" type="number" min="0" step="1" readonly>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvValorTotal">Valor total</label>
+          <input class="com-input" id="mvValorTotal" type="number" min="0" step="0.01">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvFormaPagamento">Forma de pagamento</label>
+          <select class="com-select" id="mvFormaPagamento">
+            <option value="">Selecione...</option>
+            <option value="pix">Pix</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão de crédito</option>
+            <option value="cartao_debito">Cartão de débito</option>
+            <option value="transferencia">Transferência</option>
+            <option value="boleto">Boleto</option>
+          </select>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvStatus">Status</label>
+          <select class="com-select" id="mvStatus">
+            <option value="ativo">Ativo</option>
+            <option value="encerrado">Encerrado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvDataInicio">Data de início</label>
+          <input class="com-input" id="mvDataInicio" type="date">
+        </div>
+
+        <div class="com-field">
+          <label class="com-label" for="mvDataFim">Data de fim</label>
+          <input class="com-input" id="mvDataFim" type="date">
+        </div>
+
+        <div class="com-field com-field--full">
+          <div class="com-inline-checks">
+            <label class="com-switch">
+              <input id="mvRecorrente" type="checkbox">
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Recorrente</span>
+            </label>
+
+            <label class="com-switch">
+              <input id="mvRenovacaoAutomatica" type="checkbox">
+              <span class="com-switch-ui"></span>
+              <span class="com-switch-text">Renovação automática</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="com-field com-field--full">
+          <div class="com-status-strip" id="mvResumoConsumo">
+            <span class="com-badge com-badge--soft" id="mvBadgeTipo">—</span>
+            <span class="com-badge com-badge--info" id="mvBadgeConsumo">0 / 0</span>
+            <span class="com-badge com-badge--warn" id="mvBadgeAlerta" hidden>Perto de acabar</span>
+          </div>
+        </div>
+
+        <div class="com-field com-field--full">
+          <label class="com-label" for="mvObservacoes">Observações</label>
+          <textarea class="com-textarea" id="mvObservacoes" rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <footer class="com-dialog-actions">
+      <div class="com-dialog-actions-left">
+        <button type="button" class="com-btn com-btn--warning" id="btnDesvincularAtendimentosModal">
+          Desvincular atendimentos
+        </button>
+        <button type="button" class="com-btn com-btn--danger" id="btnExcluirVinculoModal">
+          Excluir
+        </button>
+      </div>
+
+      <div class="com-dialog-actions-right">
+        <button type="button" class="com-btn com-btn--ghost" id="btnFecharVinculoModal">Fechar</button>
+        <button type="submit" class="com-btn com-btn--primary">Salvar alterações</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('financeiro.static', filename='js/comercial.js') }}"></script>
+{% endblock %}

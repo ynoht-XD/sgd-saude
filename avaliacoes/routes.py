@@ -157,11 +157,77 @@ def api_buscar_pacientes():
 
 
 # ============================================================
-# HUB / LISTAGEM
+# LISTAGEM
+# ============================================================
+
+@avaliacoes_bp.route("/lista")
+def lista():
+    conn = conectar_db()
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_avaliacoes_schema(conn)
+
+        busca = (request.args.get("q") or "").strip()
+        tipo = (request.args.get("tipo") or "").strip()
+
+        sql = """
+            SELECT id, tipo, paciente_nome, paciente_prontuario, paciente_cpf,
+                   usuario_nome, usuario_cbo, criado_em
+            FROM avaliacoes
+            WHERE 1=1
+        """
+        params = []
+
+        if busca:
+            sql += """
+                AND (
+                    paciente_nome LIKE ?
+                    OR paciente_prontuario LIKE ?
+                    OR paciente_cpf LIKE ?
+                    OR usuario_nome LIKE ?
+                )
+            """
+            like = f"%{busca}%"
+            params.extend([like, like, like, like])
+
+        if tipo and tipo in TIPOS_AVALIACAO:
+            sql += " AND tipo = ? "
+            params.append(tipo)
+
+        sql += " ORDER BY id DESC "
+
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        avaliacoes = cur.fetchall()
+
+        return render_template(
+            "avaliacoes.html",
+            avaliacoes=avaliacoes,
+            busca=busca,
+            tipo=tipo,
+            tipos=TIPOS_AVALIACAO,
+        )
+    finally:
+        conn.close()
+
+
+
+# ============================================================
+# HOME
 # ============================================================
 
 @avaliacoes_bp.route("/")
 def index():
+    return redirect(url_for("avaliacoes.lista"))
+
+
+
+# ============================================================
+# VISUALIZAÇÃO / PDF
+# ============================================================
+
+@avaliacoes_bp.route("/visualizar/<int:id>", endpoint="visualizar")
+def visualizar(id):
     conn = conectar_db()
     try:
         conn.row_factory = sqlite3.Row
@@ -169,35 +235,150 @@ def index():
 
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, tipo, paciente_nome, paciente_prontuario,
-                   usuario_nome, usuario_cbo, criado_em
+            SELECT *
             FROM avaliacoes
-            ORDER BY criado_em DESC
-            LIMIT 500
-        """)
+            WHERE id = ?
+        """, (id,))
+        av = cur.fetchone()
 
-        cards = [
-            {
-                "key": k,
-                "label": v,
-                "route": FORM_ROUTES.get(k)
-            }
-            for k, v in TIPOS_AVALIACAO.items()
-        ]
+        if not av:
+            flash("Avaliação não encontrada.", "warning")
+            return redirect(url_for("avaliacoes.lista"))
+
+        dados = {}
+        try:
+            dados = json.loads(av["dados_json"] or "{}")
+        except Exception:
+            dados = {}
+
+        itens = montar_itens_visualizacao(dados)
 
         return render_template(
-            "avaliacoes.html",
-            avaliacoes=cur.fetchall(),
-            tipos=TIPOS_AVALIACAO,
-            cards=cards
+            "avaliacao_visualizar.html",
+            avaliacao=av,
+            tipo_label=TIPOS_AVALIACAO.get(av["tipo"], av["tipo"]),
+            itens=itens,
+            dados=dados,
         )
     finally:
         conn.close()
 
 
-@avaliacoes_bp.route("/lista")
-def lista():
-    return index()
+@avaliacoes_bp.route("/pdf/<int:id>", endpoint="exportar_pdf")
+def exportar_pdf(id):
+    conn = conectar_db()
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_avaliacoes_schema(conn)
+
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT *
+            FROM avaliacoes
+            WHERE id = ?
+        """, (id,))
+        av = cur.fetchone()
+
+        if not av:
+            flash("Avaliação não encontrada.", "warning")
+            return redirect(url_for("avaliacoes.lista"))
+
+        dados = {}
+        try:
+            dados = json.loads(av["dados_json"] or "{}")
+        except Exception:
+            dados = {}
+
+        itens = montar_itens_visualizacao(dados)
+
+        buffer = io.BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        largura, altura = A4
+
+        margem_x = 40
+        y = altura - 40
+
+        def nova_pagina():
+            nonlocal y
+            pdf.showPage()
+            y = altura - 40
+
+        pdf.setTitle(f"Avaliacao_{id}")
+
+        # Cabeçalho
+        pdf.setFont("Helvetica-Bold", 15)
+        pdf.drawString(margem_x, y, "Avaliação")
+        y -= 24
+
+        pdf.setFont("Helvetica", 10)
+        pdf.drawString(margem_x, y, f"Tipo: {TIPOS_AVALIACAO.get(av['tipo'], av['tipo'])}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"Paciente: {av['paciente_nome'] or '-'}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"Prontuário: {av['paciente_prontuario'] or '-'}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"CPF: {av['paciente_cpf'] or '-'}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"Profissional: {av['usuario_nome'] or '-'}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"CBO: {av['usuario_cbo'] or '-'}")
+        y -= 16
+        pdf.drawString(margem_x, y, f"Criado em: {av['criado_em'] or '-'}")
+        y -= 28
+
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(margem_x, y, "Dados da avaliação")
+        y -= 20
+
+        pdf.setFont("Helvetica", 10)
+
+        for item in itens:
+            texto = f"{item['label']}: {item['valor']}"
+            linhas = quebrar_texto_pdf(texto, 95)
+
+            for linha in linhas:
+                if y < 50:
+                    nova_pagina()
+                    pdf.setFont("Helvetica", 10)
+                pdf.drawString(margem_x, y, linha)
+                y -= 14
+
+            y -= 4
+
+        pdf.save()
+        buffer.seek(0)
+
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=f"avaliacao_{id}.pdf",
+            mimetype="application/pdf"
+        )
+    finally:
+        conn.close()
+
+
+def quebrar_texto_pdf(texto: str, limite: int = 95):
+    palavras = (texto or "").split()
+    if not palavras:
+        return [""]
+
+    linhas = []
+    atual = ""
+
+    for palavra in palavras:
+        teste = f"{atual} {palavra}".strip()
+        if len(teste) <= limite:
+            atual = teste
+        else:
+            if atual:
+                linhas.append(atual)
+            atual = palavra
+
+    if atual:
+        linhas.append(atual)
+
+    return linhas
 
 
 # ============================================================
@@ -208,22 +389,28 @@ def lista():
 def nova():
     tipo = request.form.get("tipo")
     if tipo not in TIPOS_AVALIACAO:
-        flash("Tipo inválido", "danger")
+        flash("Tipo inválido.", "danger")
         return redirect(url_for("avaliacoes.index"))
 
     paciente_nome = (request.form.get("paciente_nome") or "").strip()
     if not paciente_nome:
-        flash("Informe o paciente", "warning")
+        flash("Informe o paciente.", "warning")
         return redirect(url_for("avaliacoes.index"))
 
     usuario_id = session.get("user_id")
     if not usuario_id:
-        flash("Sessão expirada", "danger")
+        flash("Sessão expirada.", "danger")
         return redirect(url_for("auth.login"))
 
     dados = request.form.to_dict(flat=True)
-    for k in ("tipo", "paciente_nome", "paciente_id",
-              "paciente_prontuario", "paciente_cpf"):
+
+    for k in (
+        "tipo",
+        "paciente_nome",
+        "paciente_id",
+        "paciente_prontuario",
+        "paciente_cpf",
+    ):
         dados.pop(k, None)
 
     conn = conectar_db()
@@ -233,28 +420,39 @@ def nova():
 
         cur.execute("""
             INSERT INTO avaliacoes (
-                tipo, paciente_nome, paciente_prontuario, paciente_cpf,
-                usuario_id, usuario_nome, usuario_cbo,
-                dados_json, criado_em
+                tipo,
+                paciente_nome,
+                paciente_prontuario,
+                paciente_cpf,
+                usuario_id,
+                usuario_nome,
+                usuario_cbo,
+                dados_json,
+                criado_em
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             tipo,
             paciente_nome,
-            request.form.get("paciente_prontuario"),
-            request.form.get("paciente_cpf"),
+            (request.form.get("paciente_prontuario") or "").strip(),
+            (request.form.get("paciente_cpf") or "").strip(),
             usuario_id,
             session.get("nome"),
             session.get("cbo"),
             json.dumps(dados, ensure_ascii=False),
-            datetime.now().isoformat(timespec="seconds")
+            datetime.now().isoformat(timespec="seconds"),
         ))
 
         conn.commit()
         flash("Avaliação registrada com sucesso ✅", "success")
         return redirect(url_for("avaliacoes.lista"))
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao registrar avaliação: {e}", "danger")
+        return redirect(url_for("avaliacoes.index"))
+
     finally:
         conn.close()
-
 
 # ============================================================
 # TELAS (ENDPOINTS EXPLÍCITOS)

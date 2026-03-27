@@ -915,17 +915,479 @@ def modulos():
     )
 
 
+
+import os
+import io
+import json
+import time
+import sqlite3
+import zipfile
+import tempfile
+from pathlib import Path
+from datetime import datetime
+from flask import (
+    render_template, request, redirect, url_for, flash,
+    current_app, send_file, abort
+)
 # =============================================================================
-# BACKUP (FRONT)
+# BACKUP / RESTAURAÇÃO (COMPLETO)
+# - Salva em data_base/backups
+# - Mantém apenas os 5 mais recentes
+# - Faz download automático do arquivo gerado
+# - Permite baixar backups antigos
+# - Permite excluir backup
+# - Permite restaurar backup via upload .zip
+# - Possui rotina para backup automático semanal (sexta-feira)
 # =============================================================================
+
+MAX_BACKUPS = 5
+
+
+def _resolve_sqlite_path() -> str | None:
+    """
+    Descobre o caminho real do banco SQLite principal.
+    """
+    db_cfg = current_app.config.get("DATABASE")
+    if db_cfg:
+        return str(db_cfg)
+
+    conn = None
+    try:
+        conn = conectar_db()
+        cur = conn.cursor()
+        cur.execute("PRAGMA database_list;")
+        rows = cur.fetchall()
+        for row in rows:
+            # formato esperado: (seq, name, file)
+            if len(row) >= 3 and row[1] == "main" and row[2]:
+                return row[2]
+    except Exception:
+        return None
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return None
+
+
+def _backup_dir() -> Path:
+    """
+    Cria/retorna a pasta: data_base/backups
+    com base no caminho do banco principal.
+    """
+    db_path = _resolve_sqlite_path()
+    if db_path:
+        db_dir = Path(db_path).parent
+    else:
+        # fallback
+        db_dir = Path(current_app.root_path).parent / "data_base"
+
+    pasta = db_dir / "backups"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta
+
+
+def _format_bytes(num: int) -> str:
+    """
+    Formata bytes em KB/MB/GB.
+    """
+    if not isinstance(num, (int, float)) or num < 0:
+        return "0 B"
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+    size = float(num)
+    idx = 0
+
+    while size >= 1024 and idx < len(units) - 1:
+        size /= 1024.0
+        idx += 1
+
+    if idx == 0:
+        return f"{int(size)} {units[idx]}"
+    return f"{size:.2f} {units[idx]}"
+
+
+def _listar_backups():
+    pasta = _backup_dir()
+    arquivos = []
+
+    for f in sorted(pasta.glob("*.zip"), key=lambda x: x.stat().st_mtime, reverse=True):
+        st = f.stat()
+        arquivos.append({
+            "nome": f.name,
+            "caminho": str(f),
+            "tamanho": st.st_size,
+            "tamanho_fmt": _format_bytes(st.st_size),
+            "criado_em": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m/%Y %H:%M"),
+            "timestamp": st.st_mtime,
+        })
+
+    return arquivos
+
+
+def _podar_backups():
+    """
+    Mantém apenas os MAX_BACKUPS mais recentes.
+    Remove os mais antigos.
+    """
+    backups = _listar_backups()
+    excedentes = backups[MAX_BACKUPS:]
+
+    for item in excedentes:
+        try:
+            Path(item["caminho"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _gerar_backup_zip(*, origem_manual: bool = True) -> tuple[Path, str]:
+    """
+    Gera backup consistente do SQLite, compacta em .zip, salva em data_base/backups
+    e retorna (zip_path, nome_arquivo).
+    """
+    db_path = _resolve_sqlite_path()
+    if not db_path:
+        raise RuntimeError("Não foi possível localizar o banco de dados configurado.")
+
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"Banco de dados não encontrado: {db_file}")
+
+    pasta = _backup_dir()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    origem = "manual" if origem_manual else "auto"
+
+    nome_base = f"sgd_backup_{origem}_{timestamp}"
+    temp_db = pasta / f"{nome_base}.db"
+    zip_path = pasta / f"{nome_base}.zip"
+    meta_path = pasta / f"{nome_base}_info.txt"
+
+    src = None
+    dst = None
+
+    try:
+        # abre origem e destino
+        src = sqlite3.connect(str(db_file))
+        dst = sqlite3.connect(str(temp_db))
+
+        # copia o banco para o arquivo temporário
+        src.backup(dst)
+        dst.commit()
+
+        # MUITO IMPORTANTE NO WINDOWS:
+        # fechar as conexões antes de compactar ou excluir o arquivo
+        dst.close()
+        dst = None
+
+        src.close()
+        src = None
+
+        # cria metadados
+        meta_path.write_text(
+            "\n".join([
+                "SGD - Backup do banco SQLite",
+                f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+                f"Tipo: {'Manual' if origem_manual else 'Automático'}",
+                f"Banco de origem: {db_file}",
+                f"Arquivo gerado: {temp_db.name}",
+            ]),
+            encoding="utf-8"
+        )
+
+        # compacta
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.write(temp_db, arcname=temp_db.name)
+            zf.write(meta_path, arcname=meta_path.name)
+
+        # remove arquivos temporários
+        if temp_db.exists():
+            temp_db.unlink()
+        if meta_path.exists():
+            meta_path.unlink()
+
+        # mantém só os 5 mais recentes
+        _podar_backups()
+
+        return zip_path, zip_path.name
+
+    except Exception:
+        # limpa temporários se algo falhar
+        try:
+            if dst:
+                dst.close()
+        except Exception:
+            pass
+
+        try:
+            if src:
+                src.close()
+        except Exception:
+            pass
+
+        try:
+            if temp_db.exists():
+                temp_db.unlink()
+        except Exception:
+            pass
+
+        try:
+            if meta_path.exists():
+                meta_path.unlink()
+        except Exception:
+            pass
+
+        raise
+
+def _extrair_db_de_zip(zip_file_path: Path, destino_tmp: Path) -> Path:
+    """
+    Extrai o primeiro .db encontrado dentro do zip.
+    """
+    with zipfile.ZipFile(zip_file_path, "r") as zf:
+        nomes = zf.namelist()
+        dbs = [n for n in nomes if n.lower().endswith(".db")]
+
+        if not dbs:
+            raise ValueError("O arquivo .zip não contém nenhum banco .db válido.")
+
+        alvo = dbs[0]
+        zf.extract(alvo, path=destino_tmp)
+        return destino_tmp / alvo
+
+
+def _restaurar_backup_de_arquivo(zip_path: Path) -> None:
+    """
+    Restaura o banco principal a partir de um .zip contendo um .db.
+    Antes de restaurar, gera um backup de segurança automático.
+    """
+    db_path = _resolve_sqlite_path()
+    if not db_path:
+        raise RuntimeError("Não foi possível localizar o banco de dados principal.")
+
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"Banco principal não encontrado: {db_file}")
+
+    # backup preventivo antes de restaurar
+    _gerar_backup_zip(origem_manual=False)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        restored_db = _extrair_db_de_zip(zip_path, tmpdir_path)
+
+        if not restored_db.exists():
+            raise FileNotFoundError("Não foi possível localizar o .db extraído do backup.")
+
+        src = None
+        dst = None
+        try:
+            src = sqlite3.connect(str(restored_db))
+            dst = sqlite3.connect(str(db_file))
+
+            # sobrescreve o banco principal com o conteúdo do backup
+            src.backup(dst)
+            dst.commit()
+        finally:
+            try:
+                if dst:
+                    dst.close()
+            except Exception:
+                pass
+            try:
+                if src:
+                    src.close()
+            except Exception:
+                pass
+
+
+def _ja_foi_gerado_backup_automatico_hoje() -> bool:
+    """
+    Verifica se já existe backup automático gerado hoje.
+    """
+    hoje = datetime.now().strftime("%Y%m%d")
+    for item in _listar_backups():
+        nome = item["nome"].lower()
+        if f"sgd_backup_auto_{hoje}" in nome:
+            return True
+    return False
+
+
+def verificar_backup_automatico_sexta():
+    """
+    Gera backup automático na sexta-feira, apenas 1 vez por dia.
+    Pode ser chamado em app.py no startup ou em um before_request leve.
+    weekday(): segunda=0 ... sexta=4
+    """
+    try:
+        agora = datetime.now()
+
+        # só sexta
+        if agora.weekday() != 4:
+            return
+
+        # não duplica no mesmo dia
+        if _ja_foi_gerado_backup_automatico_hoje():
+            return
+
+        _gerar_backup_zip(origem_manual=False)
+
+    except Exception as e:
+        # só loga; não quebra sistema
+        print(f"[BACKUP AUTO] Falha ao gerar backup automático: {e}")
+
 
 @admin_bp.route("/backup")
 @admin_required
 def backup():
-    return render_template("admin/backup.html")
+    backups = _listar_backups()
+    ultimo_backup = backups[0]["criado_em"] if backups else None
+
+    return render_template(
+        "backup.html",
+        backups=backups,
+        total_backups=len(backups),
+        ultimo_backup=ultimo_backup,
+        max_backups=MAX_BACKUPS,
+    )
+
 
 @admin_bp.route("/backup/run", methods=["POST"])
 @admin_required
 def backup_run():
-    flash("Backup iniciado (preview). Em breve salvaremos o .db com timestamp e ofereceremos para download.", "info")
+    """
+    Gera backup manual, salva na pasta local e baixa externamente.
+    """
+    try:
+        zip_path, nome = _gerar_backup_zip(origem_manual=True)
+
+        return send_file(
+            str(zip_path),
+            as_attachment=True,
+            download_name=nome,
+            mimetype="application/zip",
+            max_age=0
+        )
+
+    except Exception as e:
+        flash(f"Erro ao gerar backup: {e}", "error")
+        return redirect(url_for("admin.backup"))
+
+
+@admin_bp.route("/backup/download/<path:nome>")
+@admin_required
+def backup_download(nome):
+    pasta = _backup_dir()
+    alvo = (pasta / nome).resolve()
+
+    # proteção simples contra path traversal
+    if pasta.resolve() not in alvo.parents and alvo != pasta.resolve():
+        abort(404)
+
+    if not alvo.exists() or alvo.suffix.lower() != ".zip":
+        abort(404)
+
+    return send_file(
+        str(alvo),
+        as_attachment=True,
+        download_name=alvo.name,
+        mimetype="application/zip",
+        max_age=0
+    )
+
+
+@admin_bp.route("/backup/excluir/<path:nome>", methods=["POST"])
+@admin_required
+def backup_excluir(nome):
+    pasta = _backup_dir()
+    alvo = (pasta / nome).resolve()
+
+    if pasta.resolve() not in alvo.parents and alvo != pasta.resolve():
+        flash("Arquivo inválido.", "error")
+        return redirect(url_for("admin.backup"))
+
+    if not alvo.exists() or alvo.suffix.lower() != ".zip":
+        flash("Arquivo de backup não encontrado.", "error")
+        return redirect(url_for("admin.backup"))
+
+    try:
+        alvo.unlink()
+        flash(f"Backup '{alvo.name}' removido com sucesso.", "success")
+    except Exception as e:
+        flash(f"Não foi possível excluir o backup: {e}", "error")
+
+    return redirect(url_for("admin.backup"))
+
+
+@admin_bp.route("/backup/restaurar", methods=["POST"])
+@admin_required
+def backup_restaurar():
+    """
+    Restaura o banco principal a partir de um .zip enviado pelo usuário.
+    Espera um input file com name='arquivo_backup'.
+    """
+    arquivo = request.files.get("arquivo_backup")
+
+    if not arquivo or not arquivo.filename:
+        flash("Selecione um arquivo .zip de backup para restaurar.", "error")
+        return redirect(url_for("admin.backup"))
+
+    nome_original = arquivo.filename.strip()
+    if not nome_original.lower().endswith(".zip"):
+        flash("Envie um arquivo .zip válido.", "error")
+        return redirect(url_for("admin.backup"))
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        zip_tmp = tmpdir_path / nome_original
+
+        try:
+            arquivo.save(str(zip_tmp))
+            _restaurar_backup_de_arquivo(zip_tmp)
+            flash("Backup restaurado com sucesso.", "success")
+        except Exception as e:
+            flash(f"Erro ao restaurar backup: {e}", "error")
+
+    return redirect(url_for("admin.backup"))
+
+
+@admin_bp.route("/backup/restaurar/<path:nome>", methods=["POST"])
+@admin_required
+def backup_restaurar_salvo(nome):
+    """
+    Restaura usando um backup já salvo na pasta local.
+    """
+    pasta = _backup_dir()
+    alvo = (pasta / nome).resolve()
+
+    if pasta.resolve() not in alvo.parents and alvo != pasta.resolve():
+        flash("Arquivo inválido.", "error")
+        return redirect(url_for("admin.backup"))
+
+    if not alvo.exists() or alvo.suffix.lower() != ".zip":
+        flash("Backup não encontrado.", "error")
+        return redirect(url_for("admin.backup"))
+
+    try:
+        _restaurar_backup_de_arquivo(alvo)
+        flash(f"Backup '{alvo.name}' restaurado com sucesso.", "success")
+    except Exception as e:
+        flash(f"Erro ao restaurar backup salvo: {e}", "error")
+
+    return redirect(url_for("admin.backup"))
+
+
+@admin_bp.route("/backup/run-auto", methods=["POST"])
+@admin_required
+def backup_run_auto():
+    """
+    Rota opcional para testar manualmente a rotina automática.
+    """
+    try:
+        zip_path, nome = _gerar_backup_zip(origem_manual=False)
+        flash(f"Backup automático gerado com sucesso: {nome}", "success")
+    except Exception as e:
+        flash(f"Erro ao gerar backup automático: {e}", "error")
+
     return redirect(url_for("admin.backup"))

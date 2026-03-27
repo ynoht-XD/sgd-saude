@@ -819,59 +819,119 @@ def editar_paciente(id):
 
 
 @pacientes_bp.route("/atualizar/<int:id>", methods=["POST"])
-def atualizar_paciente(id):
+def atualizar_paciente(id: int):
     ensure_pacientes_schema()
 
     dados_raw = request.form.to_dict(flat=True)
     dados = _upperize_payload(dados_raw)
 
     cols = _get_table_columns("pacientes")
-    pairs: List[Tuple[str, Any]] = []
+    pairs: list[tuple[str, Any]] = []
 
     def add_if_exists(col: str, val: Any):
         if col in cols:
-            pairs.append((col, val))
+            # normaliza None -> "" pra não quebrar visual
+            pairs.append((col, "" if val is None else val))
 
+    # --------- principais ----------
     add_if_exists("status", dados.get("status"))
     add_if_exists("mod", dados.get("mod"))
     add_if_exists("nome", dados.get("nome"))
     add_if_exists("nascimento", dados.get("nascimento"))
-    add_if_exists("idade", dados.get("idade"))
     add_if_exists("sexo", (dados.get("sexo") or "").strip().upper())
     add_if_exists("cid", dados.get("cid"))
     add_if_exists("cid2", dados.get("cid2"))
+    add_if_exists("admissao", dados.get("admissao"))
+    add_if_exists("raca", dados.get("raca"))
 
-    add_if_exists("telefone", dados.get("telefone"))
-    add_if_exists("telefone1", dados.get("telefone1"))
-    add_if_exists("rua", dados.get("rua"))
+    # idade: recalcula (não confia em readonly)
+    nasc = (dados.get("nascimento") or "").strip()
+    idade_calc = _calc_idade(nasc) if nasc else None
+    if "idade" in cols:
+        pairs.append(("idade", idade_calc))
+
+    # --------- endereço ----------
     add_if_exists("logradouro", dados.get("logradouro"))
     add_if_exists("bairro", dados.get("bairro"))
-    add_if_exists("numero", dados.get("numero"))
     add_if_exists("numero_casa", dados.get("numero_casa"))
+    add_if_exists("complemento", dados.get("complemento"))
     add_if_exists("cep", dados.get("cep"))
-    add_if_exists("cidade", dados.get("cidade"))
     add_if_exists("municipio", dados.get("municipio"))
-    add_if_exists("uf", dados.get("uf"))
+    add_if_exists("codigo_logradouro", dados.get("codigo_logradouro"))
 
-    add_if_exists("end_prontuario", (dados.get("end_prontuario") or "").strip())
-    add_if_exists("alergias", (dados.get("alergias") or "").strip())
-    add_if_exists("aviso", (dados.get("aviso") or "").strip())
+    # compat (se teus templates usam rua/numero/cidade em algum lugar)
+    # mantém sincronizado quando existir
+    if "rua" in cols and not (dados.get("rua") or "").strip():
+        pairs.append(("rua", dados.get("logradouro") or ""))
+    if "numero" in cols and not (dados.get("numero") or "").strip():
+        pairs.append(("numero", dados.get("numero_casa") or ""))
+    if "cidade" in cols and not (dados.get("cidade") or "").strip():
+        pairs.append(("cidade", dados.get("municipio") or ""))
 
-    if "comorbidades_json" in cols and dados.get("comorbidades_json") is not None:
-        arr = _json_list(dados.get("comorbidades_json"))
-        add_if_exists("comorbidades_json", json.dumps(arr, ensure_ascii=False))
+    # --------- documentos ----------
+    add_if_exists("cpf", dados.get("cpf"))
+    add_if_exists("cns", dados.get("cns"))
+    add_if_exists("estado_civil", dados.get("estado_civil"))
+    add_if_exists("rg", dados.get("rg"))
+    add_if_exists("orgao_rg", dados.get("orgao_rg"))
+    add_if_exists("nis", dados.get("nis"))
 
+    # --------- contatos ----------
+    add_if_exists("telefone1", dados.get("telefone1"))
+    add_if_exists("telefone2", dados.get("telefone2"))
+    add_if_exists("telefone3", dados.get("telefone3"))
+    add_if_exists("email", dados.get("email"))
+
+    # compat telefone (se algum lugar usa "telefone")
+    if "telefone" in cols and not (dados.get("telefone") or "").strip():
+        pairs.append(("telefone", dados.get("telefone1") or ""))
+
+    # --------- familiares ----------
+    add_if_exists("mae", dados.get("mae"))
+    add_if_exists("cpf_mae", dados.get("cpf_mae"))
+    add_if_exists("rg_mae", dados.get("rg_mae"))
+    add_if_exists("rg_ssp_mae", dados.get("rg_ssp_mae"))
+    add_if_exists("nis_mae", dados.get("nis_mae"))
+
+    add_if_exists("pai", dados.get("pai"))
+    add_if_exists("cpf_pai", dados.get("cpf_pai"))
+    add_if_exists("rg_pai", dados.get("rg_pai"))
+    add_if_exists("rg_ssp_pai", dados.get("rg_ssp_pai"))
+
+    # --------- responsável ----------
+    add_if_exists("responsavel", dados.get("responsavel"))
+    add_if_exists("cpf_responsavel", dados.get("cpf_responsavel"))
+    add_if_exists("rg_responsavel", dados.get("rg_responsavel"))
+    add_if_exists("orgao_rg_responsavel", dados.get("orgao_rg_responsavel"))
+
+    # se nada pra atualizar, volta
     if not pairs:
         return redirect(url_for("pacientes.visualizar_paciente", id=id))
+
+    # remove duplicados (mantém o último valor se repetir)
+    dedup = {}
+    for k, v in pairs:
+        dedup[k] = v
+    pairs = list(dedup.items())
 
     set_sql = ", ".join([f"{c} = ?" for c, _ in pairs])
     vals = [v for _, v in pairs] + [id]
 
     try:
         with conectar_db() as conn:
-            conn.execute(f"UPDATE pacientes SET {set_sql} WHERE id = ?", vals)
+            # debug: confirma qual banco está sendo usado
+            # print("DB =>", conn.execute("PRAGMA database_list").fetchall())
+
+            cur = conn.cursor()
+            cur.execute(f"UPDATE pacientes SET {set_sql} WHERE id = ?", vals)
             conn.commit()
+
+            # se rowcount = 0, ou id não existe, ou valores iguais
+            # (ainda assim é útil saber)
+            # print("UPDATE rowcount:", cur.rowcount)
+
         return redirect(url_for("pacientes.visualizar_paciente", id=id))
+
     except Exception as e:
         return f"Erro ao atualizar paciente: {e}", 500
 
@@ -1317,251 +1377,6 @@ def exportar_xls():
 
 
 # =============================================================================
-# SECTION 9 · PDF (PRONTUÁRIO INDIVIDUAL)
-# =============================================================================
-
-def _fmt(v: Any) -> str:
-    s = "" if v is None else str(v).strip()
-    return s if s else "—"
-
-def _join_addr(p: dict) -> str:
-    parts = []
-    # tenta ambos (rua/logradouro, cidade/municipio, numero/numero_casa)
-    rua = (p.get("rua") or p.get("logradouro") or "").strip()
-    num = (p.get("numero") or p.get("numero_casa") or "").strip()
-    bairro = (p.get("bairro") or "").strip()
-    cep = (p.get("cep") or "").strip()
-    cid = (p.get("cidade") or p.get("municipio") or "").strip()
-    uf = (p.get("uf") or "").strip()
-
-    if rua: parts.append(rua)
-    if num: parts.append(f"Nº {num}")
-    if bairro: parts.append(bairro)
-    if cep: parts.append(f"CEP {cep}")
-    if cid: parts.append(cid)
-    if uf: parts.append(uf)
-
-    return " • ".join(parts) if parts else "—"
-
-def _tags_human(p: dict) -> str:
-    # comorbidades_json é JSON list de keys (diabetico,bpc,...)
-    raw = p.get("comorbidades_json")
-    keys = _json_list(raw)
-    if not keys:
-        return "—"
-
-    mapa = dict(DEFAULT_TAGS)  # [("diabetico","Diabético"),...]
-    labels = [mapa.get(k, k) for k in keys]
-    return ", ".join(labels) if labels else "—"
-
-
-
-    """
-    Exporta PDF do prontuário INDIVIDUAL do paciente.
-    """
-    ensure_pacientes_schema()
-
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.units import mm
-    except ImportError:
-        return ("⚠️ Para exportar PDF, instale o pacote 'reportlab' (pip install reportlab).", 501)
-
-    # ----- carrega paciente -----
-    conn = conectar_db()
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM pacientes WHERE id = ? LIMIT 1", (id,))
-    row = cur.fetchone()
-    conn.close()
-
-    if not row:
-        return ("Paciente não encontrado.", 404)
-
-    p = dict(row)
-
-    # compat do teu card
-    if not (p.get("telefone") or "").strip():
-        p["telefone"] = (p.get("telefone1") or "").strip()
-    if not (p.get("nome_mae") or "").strip():
-        p["nome_mae"] = (p.get("mae") or "").strip()
-    if not (p.get("nome_pai") or "").strip():
-        p["nome_pai"] = (p.get("pai") or "").strip()
-
-    # idade calculada (se precisar)
-    if p.get("idade") is None:
-        p["idade"] = _calc_idade(p.get("nascimento"))
-
-    # ----- agendamentos/enriquecimento (pra puxar terapeuta/cbo/resumo) -----
-    # usa teu motor existente (por nome)
-    ag_map = _get_primeiro_agendamento_por_paciente()
-    info_ag = ag_map.get((p.get("nome") or "").strip().upper(), {}) if p.get("nome") else {}
-
-    terapeuta = (info_ag.get("terapeuta_str") or "").strip()
-    cbo_str   = (info_ag.get("cbo_str") or "").strip()
-    ag_resumo = (info_ag.get("agenda_str") or "").strip()
-
-    # opcional: lista de próximos agendamentos (mais “prontuário completo”)
-    agds = _fetch_agendamentos_por_paciente(p.get("nome") or "")
-    agds_upcoming = agds.get("agds_upcoming", [])
-
-    # ----- helpers de desenho -----
-    bio = io.BytesIO()
-    c = canvas.Canvas(bio, pagesize=A4)
-    W, H = A4
-
-    margin = 16 * mm
-    x0 = margin
-    y = H - margin
-
-    def hr(ypos, pad=6):
-        c.setLineWidth(0.6)
-        c.line(x0, ypos, W - margin, ypos)
-        return ypos - pad
-
-    def wrap_text(text: str, max_w: float, font="Helvetica", size=10) -> list[str]:
-        c.setFont(font, size)
-        words = (text or "").split()
-        if not words:
-            return ["—"]
-        lines = []
-        cur = words[0]
-        for w in words[1:]:
-            test = cur + " " + w
-            if c.stringWidth(test, font, size) <= max_w:
-                cur = test
-            else:
-                lines.append(cur)
-                cur = w
-        lines.append(cur)
-        return lines
-
-    def draw_title(txt: str):
-        nonlocal y
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(x0, y, txt)
-        y -= 6 * mm
-
-    def draw_subtitle(txt: str):
-        nonlocal y
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(x0, y, txt)
-        y -= 5 * mm
-
-    def draw_kv(label: str, value: str, col_w: float):
-        """
-        Desenha label+value em uma coluna. Retorna o quanto consumiu em altura.
-        """
-        nonlocal y
-        c.setFont("Helvetica", 8)
-        c.drawString(x0, y, label.upper())
-        y -= 4 * mm
-
-        lines = wrap_text(value, col_w, font="Helvetica", size=10)
-        c.setFont("Helvetica", 10)
-        for ln in lines:
-            c.drawString(x0, y, ln)
-            y -= 4.5 * mm
-        y -= 2 * mm
-
-    def ensure_space(min_mm: float):
-        nonlocal y
-        if y < margin + (min_mm * mm):
-            c.showPage()
-            y = H - margin
-
-    # ----- PDF -----
-    draw_title("Prontuário do Paciente")
-    c.setFont("Helvetica", 9)
-    c.drawString(x0, y, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    y -= 6 * mm
-    y = hr(y, pad=8)
-
-    # 1) Identificação
-    ensure_space(40)
-    draw_subtitle("Identificação")
-    col_w = (W - 2*margin)
-    draw_kv("Prontuário", _fmt(p.get("prontuario")), col_w)
-    draw_kv("Nome", _fmt(p.get("nome")), col_w)
-    draw_kv("Nascimento", _fmt(p.get("nascimento")), col_w)
-    draw_kv("Idade", _fmt(p.get("idade")), col_w)
-    draw_kv("Sexo", _fmt(p.get("sexo")), col_w)
-    draw_kv("CPF", _fmt(p.get("cpf")), col_w)
-    draw_kv("CNS", _fmt(p.get("cns")), col_w)
-    draw_kv("Telefone", _fmt(p.get("telefone")), col_w)
-    y = hr(y, pad=8)
-
-    # 2) Status / Modalidade / CID
-    ensure_space(30)
-    draw_subtitle("Status e Classificação")
-    draw_kv("Status", _fmt(p.get("status")), col_w)
-    draw_kv("Modalidade", _fmt(p.get("mod")), col_w)
-    cid_combo = _fmt(p.get("cid"))
-    if (p.get("cid2") or "").strip():
-        cid_combo = f"{cid_combo} | CID2: {_fmt(p.get('cid2'))}"
-    draw_kv("CID", cid_combo, col_w)
-    y = hr(y, pad=8)
-
-    # 3) Endereço / Responsáveis
-    ensure_space(35)
-    draw_subtitle("Endereço e Família")
-    draw_kv("Endereço", _join_addr(p), col_w)
-    draw_kv("Nome da mãe", _fmt(p.get("nome_mae")), col_w)
-    draw_kv("Nome do pai", _fmt(p.get("nome_pai")), col_w)
-    y = hr(y, pad=8)
-
-    # 4) Prontuário físico + notas
-    ensure_space(40)
-    draw_subtitle("Prontuário físico e Observações")
-    draw_kv("END (Prontuário físico)", _fmt(p.get("end_prontuario")), col_w)
-    draw_kv("Alergias", _fmt(p.get("alergias")), col_w)
-    draw_kv("Aviso / Situação", _fmt(p.get("aviso")), col_w)
-    draw_kv("Comorbidades / Projetos", _tags_human(p), col_w)
-    y = hr(y, pad=8)
-
-    # 5) Agenda / Terapeutas
-    ensure_space(45)
-    draw_subtitle("Agenda / Terapias")
-    draw_kv("Terapeuta(s)", _fmt(terapeuta), col_w)
-    draw_kv("CBO(s)", _fmt(cbo_str), col_w)
-    draw_kv("Resumo do agendamento", _fmt(ag_resumo), col_w)
-
-    # 6) Próximos agendamentos (opcional, mas fica lindo)
-    if agds_upcoming:
-        ensure_space(60)
-        draw_subtitle("Próximos agendamentos (lista)")
-        max_lines = 18  # pra não virar bíblia infinita (a Bíblia fica pro sábado 😄)
-        count = 0
-        c.setFont("Helvetica", 10)
-        for a in agds_upcoming:
-            ensure_space(12)
-            dia = _fmt(a.get("dia_semana"))
-            data_br = _fmt(a.get("data_br"))
-            hi = _fmt(a.get("hora_ini"))
-            hf = (a.get("hora_fim") or "").strip()
-            faixa = f"{hi}–{hf}" if hf else hi
-            prof = _fmt(a.get("profissional"))
-            linha = f"{dia} • {data_br} • {faixa} — {prof}"
-            for ln in wrap_text(linha, col_w, "Helvetica", 10):
-                c.drawString(x0, y, ln)
-                y -= 4.5 * mm
-            y -= 1.5 * mm
-            count += 1
-            if count >= max_lines:
-                c.setFont("Helvetica-Oblique", 9)
-                c.drawString(x0, y, "… (lista cortada para manter o PDF leve)")
-                y -= 5 * mm
-                break
-
-    c.showPage()
-    c.save()
-    bio.seek(0)
-
-    nome_slug = re.sub(r"[^A-Za-z0-9]+", "_", (p.get("nome") or "paciente").strip()).strip("_")
-    filename = f"prontuario_{nome_slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    return send_file(bio, as_attachment=True, download_name=filename, mimetype="application/pdf")
-# =============================================================================
 # SECTION 9 · PDF (PRONTUÁRIO INDIVIDUAL) — LAYOUT TURBO
 # =============================================================================
 
@@ -1594,7 +1409,8 @@ def _tags_human(p: dict) -> str:
         return "—"
     mapa = dict(DEFAULT_TAGS)
     labels = [mapa.get(k, k) for k in keys]
-    return ", ".join([x for x in labels if x]) if labels else "—"
+    labels = [x for x in labels if str(x).strip()]
+    return ", ".join(labels) if labels else "—"
 
 
 @pacientes_bp.route("/exportar_prontuario_pdf/<int:id>")
@@ -1685,20 +1501,19 @@ def exportar_prontuario_pdf(id: int):
             return ["—"]
         words = text.split()
         lines = []
-        cur = words[0]
+        curw = words[0]
         for w in words[1:]:
-            test = cur + " " + w
+            test = curw + " " + w
             if c.stringWidth(test, font, size) <= max_w:
-                cur = test
+                curw = test
             else:
-                lines.append(cur)
-                cur = w
-        lines.append(cur)
+                lines.append(curw)
+                curw = w
+        lines.append(curw)
         return lines
 
     def draw_header():
         nonlocal y
-        # topo
         c.setFillColor(C_TEXT)
         c.setFont("Helvetica-Bold", 14)
         c.drawString(x0, y, "Prontuário do Paciente")
@@ -1707,7 +1522,6 @@ def exportar_prontuario_pdf(id: int):
         c.drawRightString(W - margin, y, f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
         y -= 7 * mm
 
-        # “tag” do nome grande
         c.setFillColor(C_TEXT)
         c.setFont("Helvetica-Bold", 12)
         c.drawString(x0, y, _fmt(p.get("nome")))
@@ -1716,41 +1530,35 @@ def exportar_prontuario_pdf(id: int):
         c.drawRightString(W - margin, y, f"Página {page_no}")
         y -= 6 * mm
 
-        # linha
         c.setStrokeColor(C_BORDER)
         c.setLineWidth(0.8)
         c.line(x0, y, W - margin, y)
         y -= 8 * mm
 
     def card_box(title: str, mm_h: float):
-        """Desenha um box (fundo leve + borda) e retorna (x, y_top, w, h)."""
         nonlocal y
         ensure_space(mm_h + 10)
         w = W - 2 * margin
         h = mm_h * mm
         y_top = y
 
-        # fundo + borda
         c.setFillColor(C_SOFT)
         c.setStrokeColor(C_BORDER)
         c.setLineWidth(0.8)
         c.roundRect(x0, y_top - h, w, h, 10, stroke=1, fill=1)
 
-        # título
         c.setFillColor(C_TEXT)
         c.setFont("Helvetica-Bold", 11)
         c.drawString(x0 + 10, y_top - 16, title)
 
-        # ajuste cursor para dentro do box
         y = y_top - 26
         return (x0 + 10, y, w - 20, h - 26)
 
-    def draw_chip(x, y, label: str, value: str, max_w: float):
-        """Chip (label + valor) com fundo mais forte."""
+    def draw_chip(x, y, label: str, value: Any, max_w: float):
         lab = (label or "").upper()
         val = _fmt(value)
-
         text = f"{lab}: {val}"
+
         c.setFont("Helvetica", 9)
         w = min(max_w, c.stringWidth(text, "Helvetica", 9) + 16)
 
@@ -1760,10 +1568,9 @@ def exportar_prontuario_pdf(id: int):
 
         c.setFillColor(C_TEXT)
         c.drawString(x + 8, y, text)
-        return w + 6  # próximo x
+        return w + 6
 
-    def draw_kv(x, y, label: str, value: str, col_w: float):
-        """KV compacto (label pequeno em cima, valor embaixo). Retorna altura consumida."""
+    def draw_kv(x, y, label: str, value: Any, col_w: float):
         c.setFillColor(C_MUTED)
         c.setFont("Helvetica", 8)
         c.drawString(x, y, (label or "").upper())
@@ -1778,8 +1585,7 @@ def exportar_prontuario_pdf(id: int):
 
         return (y - y2) + (1.5 * mm)
 
-    def draw_note_box(x, y, w, title: str, text: str):
-        """Estilo evolução: título + parágrafo com wrap."""
+    def draw_note_box(x, y, w, title: str, text: Any):
         c.setFillColor(C_SOFT2)
         c.setStrokeColor(C_BORDER)
         c.roundRect(x, y - 70, w, 70, 10, stroke=1, fill=1)
@@ -1798,20 +1604,19 @@ def exportar_prontuario_pdf(id: int):
             c.setFont("Helvetica-Oblique", 9)
             c.setFillColor(C_MUTED)
             c.drawString(x + 10, yy, "… (texto cortado)")
-        return 75  # altura consumida aprox
+        return 75
 
     # ---------------- Start ----------------
     draw_header()
 
-    # 1) Identificação (2 colunas + chips)
-    x, y_in, w_in, h_in = card_box("Identificação", mm_h=56)
+    # 1) Identificação
+    x, y_in, w_in, _ = card_box("Identificação", mm_h=56)
 
     col_gap = 12
     col_w = (w_in - col_gap) / 2
     left_x = x
     right_x = x + col_w + col_gap
 
-    # linha de chips: CPF/CNS (lado a lado) + Sexo/Idade
     yy = y_in
     used = 0
     used += draw_chip(left_x, yy, "CPF", p.get("cpf"), col_w)
@@ -1822,8 +1627,6 @@ def exportar_prontuario_pdf(id: int):
     used2 += draw_chip(right_x + used2, yy, "Idade", p.get("idade"), col_w - used2)
 
     yy -= 10 * mm
-
-    # Prontuário / Sexo / Telefone / Prontuário físico (2 colunas)
     h1 = draw_kv(left_x, yy, "Prontuário (código)", p.get("prontuario"), col_w)
     h2 = draw_kv(right_x, yy, "Sexo", p.get("sexo"), col_w)
     yy -= max(h1, h2)
@@ -1832,10 +1635,10 @@ def exportar_prontuario_pdf(id: int):
     h2 = draw_kv(right_x, yy, "END (Prontuário físico)", p.get("end_prontuario"), col_w)
     yy -= max(h1, h2)
 
-    y = (y_in - (56 * mm)) - 10  # fecha box
+    y = (y_in - (56 * mm)) - 10
 
-    # 2) Status e Classificação (chips + CID)
-    x, y_in, w_in, h_in = card_box("Status e Classificação", mm_h=44)
+    # 2) Status e Classificação
+    x, y_in, w_in, _ = card_box("Status e Classificação", mm_h=44)
 
     yy = y_in
     used = 0
@@ -1851,14 +1654,13 @@ def exportar_prontuario_pdf(id: int):
 
     y = (y_in - (44 * mm)) - 10
 
-    # 3) Endereço e Família (2 colunas)
-    x, y_in, w_in, h_in = card_box("Endereço e Família", mm_h=52)
+    # 3) Endereço e Família
+    x, y_in, w_in, _ = card_box("Endereço e Família", mm_h=52)
 
     yy = y_in
     h1 = draw_kv(x, yy, "Endereço", _join_addr(p), w_in)
     yy -= h1
 
-    # mãe / pai lado a lado
     col_gap = 12
     col_w = (w_in - col_gap) / 2
     left_x = x
@@ -1870,23 +1672,22 @@ def exportar_prontuario_pdf(id: int):
 
     y = (y_in - (52 * mm)) - 10
 
-    # 4) Observações (estilo evolução bonito)
-    x, y_in, w_in, h_in = card_box("Evolução / Observações", mm_h=78)
+    # 4) Evolução / Observações
+    x, y_in, w_in, _ = card_box("Evolução / Observações", mm_h=78)
 
     col_gap = 12
     col_w = (w_in - col_gap) / 2
     left_x = x
     right_x = x + col_w + col_gap
-    yy = y_in + 6  # sobe um pouco dentro do box
+    yy = y_in + 6
 
-    # caixas “evolução”
     draw_note_box(left_x, yy, col_w, "Alergias", p.get("alergias"))
     draw_note_box(right_x, yy, col_w, "Aviso / Situação", p.get("aviso"))
 
-    yy -= 78  # desce para a próxima linha dentro do mesmo box
+    yy -= 78
     c.setFillColor(C_MUTED)
     c.setFont("Helvetica", 8)
-    c.drawString(left_x, yy, "COMORBIDADES / PROJETOS".upper())
+    c.drawString(left_x, yy, "COMORBIDADES / PROJETOS")
     c.setFillColor(C_TEXT)
     c.setFont("Helvetica", 10)
     for ln in wrap_text(_tags_human(p), w_in, "Helvetica", 10)[:2]:
@@ -1895,27 +1696,25 @@ def exportar_prontuario_pdf(id: int):
 
     y = (y_in - (78 * mm)) - 10
 
-    # 5) Agenda / Terapias (chips + resumo)
-    x, y_in, w_in, h_in = card_box("Agenda / Terapias", mm_h=60)
+    # 5) Agenda / Terapias
+    x, y_in, w_in, _ = card_box("Agenda / Terapias", mm_h=60)
 
     yy = y_in
-    # chips de terapeuta/cbo (se tiver)
-    used = 0
     if terapeuta:
-        used += draw_chip(x, yy, "Terapeuta(s)", terapeuta, w_in)
+        draw_chip(x, yy, "Terapeuta(s)", terapeuta, w_in)
+
     if cbo_str:
-        used2 = 0
         yy -= 10 * mm
-        used2 += draw_chip(x, yy, "CBO(s)", cbo_str, w_in)
+        draw_chip(x, yy, "CBO(s)", cbo_str, w_in)
 
     yy -= 12 * mm
     draw_kv(x, yy, "Resumo do agendamento", _fmt(ag_resumo), w_in)
 
     y = (y_in - (60 * mm)) - 10
 
-    # 6) Próximos agendamentos (lista)
+    # 6) Próximos agendamentos
     if agds_upcoming:
-        x, y_in, w_in, h_in = card_box("Próximos agendamentos", mm_h=80)
+        x, y_in, w_in, _ = card_box("Próximos agendamentos", mm_h=80)
         yy = y_in
 
         c.setFont("Helvetica", 10)
@@ -1940,17 +1739,14 @@ def exportar_prontuario_pdf(id: int):
 
             linha = f"{dia} • {data_br} • {faixa} — {prof}"
             for ln in wrap_text(linha, w_in, "Helvetica", 10)[:2]:
-                c.setFont("Helvetica", 10)
-                c.setFillColor(C_TEXT)
                 c.drawString(x, yy, ln)
                 yy -= 5 * mm
             yy -= 1.5 * mm
 
             count += 1
             if yy < (y_in - (80 * mm) + 18):
-                # acabou o box -> nova página e reabre a seção
                 new_page()
-                x, y_in, w_in, h_in = card_box("Próximos agendamentos (continuação)", mm_h=80)
+                x, y_in, w_in, _ = card_box("Próximos agendamentos (continuação)", mm_h=80)
                 yy = y_in
 
         y = (y_in - (80 * mm)) - 10
@@ -1962,6 +1758,8 @@ def exportar_prontuario_pdf(id: int):
     nome_slug = re.sub(r"[^A-Za-z0-9]+", "_", (p.get("nome") or "paciente").strip()).strip("_")
     filename = f"prontuario_{nome_slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     return send_file(bio, as_attachment=True, download_name=filename, mimetype="application/pdf")
+
+
 
 # =============================================================================
 # SECTION 10 · EXCLUSÃO

@@ -1,16 +1,23 @@
 // sgd/atendimentos/static/js/atendimentos.js
-// ✅ Procedimentos sugeridos via DB (CBO logado + CID paciente)
-// ✅ Autocomplete paciente + cards + último atendimento
-// ✅ Dropdown custom de procedimentos (CSS real)
-// ✅ FIX: ao salvar -> remove da fila (se tiver fila_id) e redireciona /atendimentos
+// ==========================================================
+// Atendimento
+// - Autocomplete de paciente
+// - Resumo do paciente
+// - Último atendimento
+// - Combo/plano ativo + toggle para consumir sessão
+// - Procedimentos sugeridos (CBO logado + CID paciente)
+// - Salvar via fetch JSON
+// - Remove da fila só se salvou de verdade
+// ==========================================================
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("📦 [atendimentos.js] carregado!");
 
   inicializarAutocompletePaciente();
   prefFillPacienteFromURL();
-  inicializarProcedimentosSugestao(); // ⭐ dropdown custom
-  inicializarSalvarERedirecionar();   // ⭐ FIX salvar + remover fila + redirect
+  inicializarProcedimentosSugestao();
+  inicializarSalvarERedirecionar();
+  inicializarComboToggleWatch();
 });
 
 /* ===========================================
@@ -35,15 +42,60 @@ function debounce(fn, wait = 250) {
   };
 }
 
-function getFilaId() {
-  // prioridade: hidden do form (mais confiável)
-  const hid = document.getElementById("fila_id");
-  const v1 = (hid?.value || "").trim();
-  if (v1) return v1;
+function escapeHTML(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-  // fallback: querystring
-  const v2 = (getQueryParam("fila_id") || "").trim();
-  return v2 || "";
+function getFilaId() {
+  const hid = document.getElementById("fila_id");
+  const hiddenVal = (hid?.value || "").trim();
+  if (hiddenVal) return hiddenVal;
+
+  const qsVal = (getQueryParam("fila_id") || "").trim();
+  if (qsVal) return qsVal;
+
+  return "";
+}
+
+function calcIdadeFromISO(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "—";
+
+  const hoje = new Date();
+  const nasc = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(nasc.getTime())) return "—";
+
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
+    idade--;
+  }
+
+  return `${idade} ano(s)`;
+}
+
+function setText(id, value, fallback = "—") {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value || fallback;
+}
+
+function setValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value ?? "";
+}
+
+function setHidden(el, hidden) {
+  if (!el) return;
+  el.hidden = !!hidden;
+}
+
+function normalizeText(s) {
+  return String(s || "").trim().toLowerCase();
 }
 
 /* ===========================================
@@ -76,6 +128,19 @@ async function fetchUltimoAtendimento(pacienteId) {
   }
 }
 
+async function fetchComboAtivo(pacienteId) {
+  if (!pacienteId) return { ok: true, item: null };
+  try {
+    const resp = await fetch(`/atendimentos/api/paciente/${encodeURIComponent(pacienteId)}/combo`);
+    if (!resp.ok) return { ok: false, item: null };
+    const j = await resp.json();
+    return j || { ok: false, item: null };
+  } catch (e) {
+    console.error("❌ Erro ao carregar combo ativo:", e);
+    return { ok: false, item: null };
+  }
+}
+
 async function fetchProcedimentosSugeridos(pacienteId) {
   if (!pacienteId) return { ok: true, items: [] };
   try {
@@ -90,47 +155,44 @@ async function fetchProcedimentosSugeridos(pacienteId) {
 }
 
 /* ===========================================
-   Preencher cards (paciente + último atendimento)
+   Resumo do paciente
    =========================================== */
 function preencherBlocoPaciente(dados) {
   if (!dados) return;
 
-  const spanNome = document.getElementById("info-nome");
-  const spanProntuario = document.getElementById("info-prontuario");
-  const spanStatus = document.getElementById("info-status");
-  const spanMod = document.getElementById("info-mod");
-  const spanNascimento = document.getElementById("info-nascimento");
-  const spanCid = document.getElementById("info-cid");
+  setText("info-nome", dados.nome || "—");
+  setText("info-prontuario", dados.prontuario || "—");
+  setText("info-mod", dados.mod || "—");
 
-  if (spanNome) spanNome.textContent = dados.nome || "";
-  if (spanProntuario) spanProntuario.textContent = dados.prontuario || "";
-  if (spanStatus) spanStatus.textContent = dados.status || "";
-  if (spanMod) spanMod.textContent = dados.mod || "";
+  const nascFmt = /^\d{4}-\d{2}-\d{2}$/.test(dados.nascimento || "")
+    ? fmtISOToBR(dados.nascimento)
+    : (dados.nascimento || "—");
 
-  if (spanNascimento) {
-    const nasc = dados.nascimento;
-    spanNascimento.textContent = /^\d{4}-\d{2}-\d{2}$/.test(nasc || "") ? fmtISOToBR(nasc) : (nasc || "");
-  }
-
-  if (spanCid) spanCid.textContent = dados.cid || "-";
+  setText("info-nascimento", nascFmt);
+  setText("info-idade", calcIdadeFromISO(dados.nascimento));
+  setText("info-cid", dados.cid || "-");
 }
 
+/* ===========================================
+   Último atendimento
+   =========================================== */
 function preencherUltimoAtendimento(info) {
-  const spanData = document.getElementById("ua-data");
-  const spanProf = document.getElementById("ua-profissional");
   const btnVer = document.getElementById("btnVerUltimo");
-
-  if (!spanData || !spanProf || !btnVer) return;
+  if (!btnVer) return;
 
   let ultimoAtendimentoId = null;
 
   if (info && info.ok && info.found) {
-    spanData.textContent = fmtISOToBR(info.data);
-    spanProf.textContent = info.profissional || "-";
+    setText("ua-data", fmtISOToBR(info.data));
+    setText("ua-profissional", info.profissional || "-");
+    setText("ua-procedimento", info.procedimento || "-");
+    setText("ua-codigo", info.codigo_sigtap || "-");
     ultimoAtendimentoId = info.id || null;
   } else {
-    spanData.textContent = "—";
-    spanProf.textContent = "—";
+    setText("ua-data", "—");
+    setText("ua-profissional", "—");
+    setText("ua-procedimento", "—");
+    setText("ua-codigo", "—");
     ultimoAtendimentoId = null;
   }
 
@@ -140,6 +202,7 @@ function preencherUltimoAtendimento(info) {
       alert("Nenhum atendimento encontrado para este paciente.");
       return;
     }
+
     try {
       const r = await fetch(`/atendimentos/${ultimoAtendimentoId}.json`);
       if (!r.ok) throw new Error("Falha ao carregar atendimento");
@@ -159,7 +222,125 @@ function preencherUltimoAtendimento(info) {
 }
 
 /* ===========================================
-   Autocomplete Paciente
+   Combo / plano ativo
+   =========================================== */
+function resetComboCard() {
+  const comboCard = document.getElementById("comboCard");
+  const comboEmptyCard = document.getElementById("comboEmptyCard");
+  const toggle = document.getElementById("toggleUsarCombo");
+
+  setHidden(comboCard, true);
+  setHidden(comboEmptyCard, false);
+
+  setText("comboNome", "—");
+  setText("comboContratadas", "0");
+  setText("comboUsadas", "0");
+  setText("comboRestantes", "0");
+  setText("comboTipoBadge", "Combo");
+  setText("comboStatusBadge", "Ativo");
+  setValue("combo_plano_id", "");
+  setValue("combo_plano_nome", "");
+
+  const restantesCard = document.getElementById("comboRestantesCard");
+  if (restantesCard) {
+    restantesCard.classList.remove("is-zero");
+  }
+
+  if (toggle) {
+    toggle.checked = false;
+    toggle.disabled = true;
+  }
+
+  atualizarTextoToggleCombo();
+}
+
+function atualizarTextoToggleCombo() {
+  const toggle = document.getElementById("toggleUsarCombo");
+  const help = document.getElementById("comboHelpText");
+  const restantes = Number(document.getElementById("comboRestantes")?.textContent || 0);
+
+  if (!help) return;
+
+  if (!toggle || toggle.disabled) {
+    help.textContent = "Sem combo/plano ativo vinculado para consumo automático de sessão.";
+    return;
+  }
+
+  if (restantes <= 0) {
+    help.textContent = "Este combo/plano não possui sessões restantes. O consumo automático foi bloqueado.";
+    return;
+  }
+
+  if (toggle.checked) {
+    help.textContent = "Ao salvar o atendimento, 1 sessão será consumida deste combo/plano.";
+  } else {
+    help.textContent = "Este atendimento será salvo sem consumir sessão do combo/plano.";
+  }
+}
+
+function preencherComboCard(resp) {
+  const comboCard = document.getElementById("comboCard");
+  const comboEmptyCard = document.getElementById("comboEmptyCard");
+  const toggle = document.getElementById("toggleUsarCombo");
+  const restantesCard = document.getElementById("comboRestantesCard");
+  const statusBadge = document.getElementById("comboStatusBadge");
+
+  const item = resp?.item || null;
+  if (!item || !item.id) {
+    resetComboCard();
+    return;
+  }
+
+  setHidden(comboCard, false);
+  setHidden(comboEmptyCard, true);
+
+  const nome = item.combo_nome || item.nome_plano || "Combo/Plano";
+  const tipo = item.tipo === "plano" ? "Plano" : "Combo";
+  const status = item.status || "Ativo";
+  const contratadas = Number(item.sessoes_contratadas || 0);
+  const usadas = Number(item.sessoes_usadas || 0);
+  const restantes = Number(item.sessoes_restantes || 0);
+
+  setText("comboNome", nome);
+  setText("comboContratadas", String(contratadas));
+  setText("comboUsadas", String(usadas));
+  setText("comboRestantes", String(restantes));
+  setText("comboTipoBadge", tipo);
+  setText("comboStatusBadge", status);
+
+  setValue("combo_plano_id", item.id);
+  setValue("combo_plano_nome", nome);
+
+  if (statusBadge) {
+    statusBadge.className = "atd-badge atd-badge--soft";
+    if (normalizeText(status) === "encerrado" || restantes <= 0) {
+      statusBadge.classList.add("is-zero");
+    }
+  }
+
+  if (restantesCard) {
+    restantesCard.classList.toggle("is-zero", restantes <= 0);
+  }
+
+  if (toggle) {
+    toggle.disabled = restantes <= 0;
+    toggle.checked = restantes > 0; // ligado por padrão se houver saldo
+  }
+
+  atualizarTextoToggleCombo();
+}
+
+function inicializarComboToggleWatch() {
+  const toggle = document.getElementById("toggleUsarCombo");
+  if (!toggle) return;
+
+  toggle.addEventListener("change", () => {
+    atualizarTextoToggleCombo();
+  });
+}
+
+/* ===========================================
+   Autocomplete paciente
    =========================================== */
 function inicializarAutocompletePaciente() {
   const input = document.getElementById("nomePaciente");
@@ -193,8 +374,10 @@ function inicializarAutocompletePaciente() {
     return li;
   }
 
-  async function aplicarProcedimentosSugeridos(pacienteId) {
-    document.dispatchEvent(new CustomEvent("paciente:selecionado", { detail: { pacienteId } }));
+  async function aplicarCargaCompletaPaciente(pacienteId) {
+    document.dispatchEvent(
+      new CustomEvent("paciente:selecionado", { detail: { pacienteId } })
+    );
   }
 
   async function selectPaciente(paciente) {
@@ -211,7 +394,13 @@ function inicializarAutocompletePaciente() {
       const infoUlt = await fetchUltimoAtendimento(paciente.id);
       preencherUltimoAtendimento(infoUlt);
 
-      await aplicarProcedimentosSugeridos(paciente.id);
+      const comboResp = await fetchComboAtivo(paciente.id);
+      preencherComboCard(comboResp);
+
+      await aplicarCargaCompletaPaciente(paciente.id);
+    } else {
+      resetComboCard();
+      preencherUltimoAtendimento({ ok: true, found: false });
     }
   }
 
@@ -222,7 +411,10 @@ function inicializarAutocompletePaciente() {
       campoHidden.value = "";
       clearList();
 
-      if (termo.length < 2) return;
+      if (termo.length < 2) {
+        resetComboCard();
+        return;
+      }
 
       if (lastFetchCtl) lastFetchCtl.abort();
       lastFetchCtl = new AbortController();
@@ -232,6 +424,7 @@ function inicializarAutocompletePaciente() {
           `/atendimentos/api/sugestoes_pacientes?termo=${encodeURIComponent(termo)}`,
           { signal: lastFetchCtl.signal }
         );
+
         if (!res.ok) throw new Error("HTTP " + res.status);
 
         const sugestoes = await res.json();
@@ -244,7 +437,9 @@ function inicializarAutocompletePaciente() {
         lista.hidden = false;
         lista.style.display = "block";
       } catch (err) {
-        if (err.name !== "AbortError") console.error("❌ Erro ao buscar sugestões:", err);
+        if (err.name !== "AbortError") {
+          console.error("❌ Erro ao buscar sugestões:", err);
+        }
       }
     }, 220)
   );
@@ -260,18 +455,24 @@ function inicializarAutocompletePaciente() {
   });
 
   document.addEventListener("click", (e) => {
-    if (!lista.contains(e.target) && e.target !== input) clearList();
+    if (!lista.contains(e.target) && e.target !== input) {
+      clearList();
+    }
   });
 }
 
 /* ===========================================
-   Prefill vindo da fila
+   Prefill paciente vindo da fila
    =========================================== */
 function prefFillPacienteFromURL() {
   const pid = getQueryParam("paciente_id") || "";
   const nome = getQueryParam("paciente_nome") || "";
 
-  if (!pid && !nome) return;
+  if (!pid && !nome) {
+    resetComboCard();
+    preencherUltimoAtendimento({ ok: true, found: false });
+    return;
+  }
 
   const input = document.getElementById("nomePaciente");
   const campoHidden = document.getElementById("nomePacienteId");
@@ -289,13 +490,21 @@ function prefFillPacienteFromURL() {
       const infoUlt = await fetchUltimoAtendimento(pid);
       preencherUltimoAtendimento(infoUlt);
 
-      document.dispatchEvent(new CustomEvent("paciente:selecionado", { detail: { pacienteId: pid } }));
+      const comboResp = await fetchComboAtivo(pid);
+      preencherComboCard(comboResp);
+
+      document.dispatchEvent(
+        new CustomEvent("paciente:selecionado", { detail: { pacienteId: pid } })
+      );
+    } else {
+      resetComboCard();
+      preencherUltimoAtendimento({ ok: true, found: false });
     }
   })();
 }
 
 /* ===========================================
-   ⭐ Dropdown de Procedimentos sugeridos (custom)
+   Procedimentos sugeridos (dropdown custom)
    =========================================== */
 function inicializarProcedimentosSugestao() {
   const wrap = document.getElementById("procedimentosWrap");
@@ -308,8 +517,20 @@ function inicializarProcedimentosSugestao() {
   let currentPacienteId = "";
   let activeDropdown = null;
 
+  function loadHintContainer() {
+    let hint = document.getElementById("hint-procs");
+    if (!hint) {
+      hint = document.createElement("p");
+      hint.id = "hint-procs";
+      hint.className = "atd-section-sub";
+      const head = document.querySelector(".atd-section-head > div");
+      if (head) head.appendChild(hint);
+    }
+    return hint;
+  }
+
   function setHint(text) {
-    const el = document.getElementById("hint-procs");
+    const el = loadHintContainer();
     if (el) el.textContent = text || "";
   }
 
@@ -317,14 +538,17 @@ function inicializarProcedimentosSugestao() {
     currentPacienteId = pacienteId || "";
 
     if (!pacienteId) {
-      setHint("");
+      setHint("Procedimentos opcionais. Se desejar, escolha conforme as sugestões disponíveis para o paciente.");
       return { ok: true, items: [] };
     }
-    if (cache.has(pacienteId)) return cache.get(pacienteId);
+
+    if (cache.has(pacienteId)) {
+      return cache.get(pacienteId);
+    }
 
     setHint("Carregando procedimentos compatíveis…");
-    const j = await fetchProcedimentosSugeridos(pacienteId);
 
+    const j = await fetchProcedimentosSugeridos(pacienteId);
     if (!j || !j.ok) {
       setHint("Não foi possível carregar procedimentos sugeridos.");
       const empty = { ok: false, items: [] };
@@ -334,7 +558,7 @@ function inicializarProcedimentosSugestao() {
 
     cache.set(pacienteId, j);
     const cids = (j.paciente_cids || []).join(", ") || "—";
-    setHint(`Sugestões filtradas por CBO ${j.cbo || "—"} e CID(s) ${cids}`);
+    setHint(`Sugestões filtradas por CBO ${j.cbo || "—"} e CID(s) ${cids}.`);
     return j;
   }
 
@@ -343,6 +567,7 @@ function inicializarProcedimentosSugestao() {
     dd.remove();
     if (activeDropdown === dd) activeDropdown = null;
   }
+
   function closeAnyDropdown() {
     if (activeDropdown) closeDropdown(activeDropdown);
   }
@@ -364,10 +589,12 @@ function inicializarProcedimentosSugestao() {
 
   function mkDropdown(host) {
     closeAnyDropdown();
+
     const dd = document.createElement("div");
     dd.className = "proc-sug-list";
     dd.setAttribute("role", "listbox");
     host.appendChild(dd);
+
     activeDropdown = dd;
     return dd;
   }
@@ -379,18 +606,12 @@ function inicializarProcedimentosSugestao() {
   function filterItems(items, term) {
     const t = normalize(term);
     if (!t) return items.slice(0, 80);
-    return items
-      .filter((x) => normalize(x.descricao).includes(t) || normalize(x.codigo).includes(t))
-      .slice(0, 80);
-  }
 
-  function escapeHTML(s) {
-    return String(s || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    return items
+      .filter((x) =>
+        normalize(x.descricao).includes(t) || normalize(x.codigo).includes(t)
+      )
+      .slice(0, 80);
   }
 
   function renderDropdown(dd, items, onPick) {
@@ -427,6 +648,7 @@ function inicializarProcedimentosSugestao() {
   function setActiveItem(dd, idx) {
     const items = Array.from(dd.querySelectorAll(".proc-sug-item"));
     items.forEach((el) => el.classList.remove("is-active"));
+
     const el = items[idx];
     if (el) {
       el.classList.add("is-active");
@@ -438,10 +660,10 @@ function inicializarProcedimentosSugestao() {
     if (!row) return;
 
     const inpProc = row.querySelector('input[name="procedimento[]"]');
-    const inpCod  = row.querySelector('input[name="codigoProcedimento[]"]');
+    const inpCod = row.querySelector('input[name="codigoProcedimento[]"]');
     if (!inpProc || !inpCod) return;
 
-    inpProc.removeAttribute("list"); // mata datalist nativo
+    inpProc.removeAttribute("list");
 
     const host = ensureHost(inpProc);
 
@@ -453,11 +675,13 @@ function inicializarProcedimentosSugestao() {
       itemsBase: [],
     };
 
+    if (inpProc.dataset.boundProc === "1") return;
+    inpProc.dataset.boundProc = "1";
+
     async function open(term = "") {
       const pid = (currentPacienteId || campoPacienteId?.value || "").trim();
       const bag = await loadProcedimentos(pid);
       state.itemsBase = bag?.items || [];
-
       state.filtered = filterItems(state.itemsBase, term);
       state.activeIndex = 0;
 
@@ -466,7 +690,7 @@ function inicializarProcedimentosSugestao() {
 
       renderDropdown(state.dd, state.filtered, (p) => {
         inpProc.value = (p.descricao || "").trim();
-        inpCod.value  = (p.codigo || "").trim();
+        inpCod.value = (p.codigo || "").trim();
         closeDropdown(state.dd);
         state.dd = null;
         state.open = false;
@@ -481,8 +705,16 @@ function inicializarProcedimentosSugestao() {
       state.open = false;
     }
 
-    inpProc.addEventListener("focus", async () => open(inpProc.value || ""));
-    inpProc.addEventListener("input", async () => open(inpProc.value || ""));
+    inpProc.addEventListener("focus", async () => {
+      await open(inpProc.value || "");
+    });
+
+    inpProc.addEventListener(
+      "input",
+      debounce(async () => {
+        await open(inpProc.value || "");
+      }, 120)
+    );
 
     inpProc.addEventListener("keydown", (e) => {
       if (!state.open || !state.dd) return;
@@ -502,7 +734,7 @@ function inicializarProcedimentosSugestao() {
         const pick = state.filtered[state.activeIndex];
         if (pick) {
           inpProc.value = (pick.descricao || "").trim();
-          inpCod.value  = (pick.codigo || "").trim();
+          inpCod.value = (pick.codigo || "").trim();
         }
         close();
       } else if (e.key === "Escape") {
@@ -527,7 +759,9 @@ function inicializarProcedimentosSugestao() {
     bindAllRows();
   });
 
-  btnAdd?.addEventListener("click", () => setTimeout(() => bindAllRows(), 0));
+  btnAdd?.addEventListener("click", () => {
+    setTimeout(() => bindAllRows(), 0);
+  });
 
   wrap.addEventListener("click", (e) => {
     const btn = e.target.closest(".btnRemoveProc");
@@ -539,67 +773,81 @@ function inicializarProcedimentosSugestao() {
 
   const initialPid = (campoPacienteId?.value || "").trim();
   if (initialPid) loadProcedimentos(initialPid);
+  else {
+    setHint("Procedimentos opcionais. Se desejar, escolha conforme as sugestões disponíveis para o paciente.");
+  }
 }
 
 /* ===========================================
-   ⭐ FIX: Salvar atendimento -> remover da fila -> redirect
+   Salvar -> remover da fila -> redirect
    =========================================== */
 function inicializarSalvarERedirecionar() {
   const form = document.getElementById("form-atendimento") || document.getElementById("formAtendimento");
   if (!form) return;
 
-  const btnSubmit = form.querySelector('[type="submit"]');
-
-  // evita bind duplicado caso o script seja incluído 2x
   if (form.dataset.bindSave === "1") return;
   form.dataset.bindSave = "1";
 
+  const btnSubmit = form.querySelector('[type="submit"]');
+  const toggleCombo = document.getElementById("toggleUsarCombo");
+  const comboPlanoId = document.getElementById("combo_plano_id");
+
   form.addEventListener("submit", async (ev) => {
-    // Fazemos via fetch para controlar a remoção da fila antes do redirect
     ev.preventDefault();
 
     if (btnSubmit) btnSubmit.disabled = true;
 
     try {
       const fd = new FormData(form);
-
-      // garante fila_id no POST também (caso backend use)
       const filaId = getFilaId();
-      if (filaId && !fd.get("fila_id")) fd.set("fila_id", filaId);
+
+      if (filaId && !fd.get("fila_id")) {
+        fd.set("fila_id", filaId);
+      }
+
+      // garante contabilização consistente
+      if (comboPlanoId?.value) {
+        fd.set("combo_plano_id", comboPlanoId.value);
+
+        if (toggleCombo?.checked && !toggleCombo?.disabled) {
+          fd.set("contabiliza_sessao", "1");
+        } else {
+          fd.set("contabiliza_sessao", "0");
+        }
+      } else {
+        fd.set("combo_plano_id", "");
+        fd.set("contabiliza_sessao", "0");
+      }
 
       const resp = await fetch(form.action || window.location.pathname, {
         method: "POST",
         body: fd,
+        headers: {
+          "X-Requested-With": "XMLHttpRequest"
+        }
       });
 
-      if (!resp.ok) {
-        // tenta extrair mensagem
-        let msg = "Falha ao salvar o atendimento.";
-        try {
-          const ct = resp.headers.get("content-type") || "";
-          if (ct.includes("application/json")) {
-            const j = await resp.json();
-            msg = j?.message || j?.error || msg;
-          } else {
-            const t = await resp.text();
-            if (t && t.length < 300) msg = t;
-          }
-        } catch (_) {}
-        throw new Error(msg);
+      const data = await resp.json().catch(() => null);
+
+      if (!resp.ok || !data || data.ok !== true) {
+        throw new Error(data?.error || "Falha ao salvar o atendimento.");
       }
 
-      // ✅ remove da fila (se existir fila_id)
+      // remove da fila só se o save foi realmente ok
       if (filaId) {
         try {
-          await fetch(`/atendimentos/api/fila/${encodeURIComponent(filaId)}`, { method: "DELETE" });
-          try { localStorage.setItem(`fila:removida:${filaId}`, String(Date.now())); } catch (_) {}
+          await fetch(`/atendimentos/api/fila/${encodeURIComponent(filaId)}`, {
+            method: "DELETE"
+          });
+          try {
+            localStorage.setItem(`fila:removida:${filaId}`, String(Date.now()));
+          } catch (_) {}
         } catch (e) {
           console.warn("⚠️ Não foi possível remover da fila:", e);
         }
       }
 
-      // ✅ redirect final
-      window.location.href = "/atendimentos";
+      window.location.href = data.redirect || "/atendimentos/";
     } catch (err) {
       console.error(err);
       alert(err.message || "Erro ao finalizar atendimento.");

@@ -10,8 +10,8 @@
   const inpBusca   = $("#f_busca");
 
   // ⚠️ compat: pode ser <select> (legado) OU <input> (autocomplete)
-  const selProf    = $("#f_prof");         // SELECT ou INPUT
-  const inpProfId  = $("#f_prof_id");      // hidden (novo)
+  const selProf    = $("#f_prof");          // SELECT ou INPUT
+  const inpProfId  = $("#f_prof_id");       // hidden (novo)
   const sugBox     = $("#f_prof_sugestoes");// container (novo)
 
   const inpDataIni = $("#f_data_ini");
@@ -23,8 +23,8 @@
 
   const btnFiltrar        = $("#btnFiltrar");
   const btnLimpar         = $("#btnLimpar");
-  const btnExportar       = $("#btnExportar");        // XLSX
-  const btnExportarEvoPdf = $("#btnExportarEvoPdf");  // PDF evoluções ✅
+  const btnExportar       = $("#btnExportar");
+  const btnExportarEvoPdf = $("#btnExportarEvoPdf");
 
   // =========================
   // Tabela
@@ -53,7 +53,7 @@
   // =========================
   const dlg = $("#modal-registro");
 
-  // header “novo”
+  // header
   const mrSubtitle    = $("#mr_subtitle");
   const mrBadgeData   = $("#mr_badge_data");
   const mrBadgeStatus = $("#mr_badge_status");
@@ -73,7 +73,7 @@
   const mrEvolucao     = $("#mr_evolucao");
   const mrKV           = $("#mr_kv");
 
-  // paciente (aba paciente)
+  // paciente
   const mrPaciente    = $("#mr_paciente");
   const mrProntuario  = $("#mr_prontuario");
   const mrPacIdade    = $("#mr_paciente_idade");
@@ -86,10 +86,9 @@
   const mrPacCidade   = $("#mr_pac_cidade");
   const mrPacEndereco = $("#mr_pac_endereco");
 
-  // Guarda o último registro aberto no modal (pra exportar PDF por paciente)
   let lastModalRowObj = null;
 
-  // Fallback estático (se o endpoint de profissionais falhar)
+  // Fallback estático
   const PROFISSIONAIS = {
     "101": "Dr. João (Clínico)",
     "102": "Dra. Maria (Psicologia)",
@@ -112,16 +111,25 @@
 
   const fmtDataBR = (d) => {
     if (!d) return "—";
-    const s = String(d);
+    const s = String(d).trim();
+    if (!s) return "—";
+
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
       const [y, m, dia] = s.split("-");
       return `${dia}/${m}/${y}`;
     }
-    // tenta ISO datetime: 2025-12-18 10:00 / 2025-12-18T10:00
+
     if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
-      const y = s.slice(0, 4), m = s.slice(5, 7), dia = s.slice(8, 10);
+      const y = s.slice(0, 4);
+      const m = s.slice(5, 7);
+      const dia = s.slice(8, 10);
       return `${dia}/${m}/${y}`;
     }
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      return s;
+    }
+
     return s;
   };
 
@@ -152,7 +160,7 @@
       ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario"],
       ""
     );
-    if (direct) return direct;
+    if (direct && direct !== "—") return direct;
 
     const pid =
       obj["profissional_id"] ??
@@ -171,7 +179,7 @@
     const low = v.toLowerCase();
 
     if (low.includes("pres") || low === "ok" || low === "compareceu") return "Presente";
-    if (low.includes("falta") || low.includes("falt") || low === "nao compareceu") return "Faltoso";
+    if (low.includes("falta") || low.includes("falt") || low === "nao compareceu" || low === "não compareceu") return "Faltoso";
     if (low.includes("just")) return "Justificado";
 
     return v;
@@ -187,30 +195,34 @@
 
   function formatTelefones(obj) {
     const tels = [];
-    const t1 = pick(obj, ["paciente_telefone1", "telefone1", "telefone", "telefone_paciente"], "");
-    const t2 = pick(obj, ["paciente_telefone2", "telefone2"], "");
-    const t3 = pick(obj, ["paciente_telefone3", "telefone3", "celular", "celular_paciente"], "");
+
+    const t1 = pick(obj, ["pac__telefone", "paciente_telefone1", "telefone1", "telefone", "telefone_paciente"], "");
+    const t2 = pick(obj, ["pac__telefone2", "paciente_telefone2", "telefone2"], "");
+    const t3 = pick(obj, ["pac__telefone3", "paciente_telefone3", "telefone3", "celular", "celular_paciente"], "");
+
     [t1, t2, t3].forEach((t) => {
       const st = String(t || "").trim();
-      if (st) tels.push(st);
+      if (st && !tels.includes(st)) tels.push(st);
     });
+
     return tels.length ? tels.join(" • ") : "—";
   }
 
   function formatEndereco(obj) {
-    const lograd  = pick(obj, ["paciente_logradouro", "logradouro", "rua"], "");
-    const num     = pick(obj, ["paciente_numero_casa", "numero_casa", "numero"], "");
-    const compl   = pick(obj, ["paciente_complemento", "complemento"], "");
-    const bairro  = pick(obj, ["paciente_bairro", "bairro", "bairro_paciente"], "");
-    const cidade2 = pick(obj, ["paciente_municipio", "paciente_cidade", "municipio", "cidade"], "");
-    const cep     = pick(obj, ["paciente_cep", "cep"], "");
+    const lograd  = pick(obj, ["pac__logradouro", "paciente_logradouro", "logradouro", "rua"], "");
+    const num     = pick(obj, ["pac__numero", "paciente_numero_casa", "numero_casa", "numero"], "");
+    const compl   = pick(obj, ["pac__complemento", "paciente_complemento", "complemento"], "");
+    const bairro  = pick(obj, ["pac__bairro", "paciente_bairro", "bairro", "bairro_paciente"], "");
+    const cidade2 = pick(obj, ["pac__municipio", "pac__cidade", "paciente_municipio", "paciente_cidade", "municipio", "cidade"], "");
+    const uf      = pick(obj, ["pac__uf", "uf"], "");
+    const cep     = pick(obj, ["pac__cep", "paciente_cep", "cep"], "");
 
     const partes = [];
     if (lograd) partes.push(lograd);
     if (num) partes.push(`Nº ${num}`);
     if (compl) partes.push(compl);
     if (bairro) partes.push(bairro);
-    if (cidade2) partes.push(cidade2);
+    if (cidade2) partes.push(uf ? `${cidade2}/${uf}` : cidade2);
     if (cep) partes.push(`CEP ${cep}`);
 
     return partes.length ? partes.join(", ") : "—";
@@ -227,6 +239,7 @@
   function isSelect(el) {
     return !!el && String(el.tagName || "").toUpperCase() === "SELECT";
   }
+
   function isInput(el) {
     const tag = String(el?.tagName || "").toUpperCase();
     return tag === "INPUT" || tag === "TEXTAREA";
@@ -242,17 +255,18 @@
     if (!sugBox) return;
     sugBox.classList.remove("hide");
   }
+
   function acHide() {
     if (!sugBox) return;
     sugBox.classList.add("hide");
     sugBox.innerHTML = "";
   }
+
   function acClearSelected() {
     if (inpProfId) inpProfId.value = "";
   }
 
   async function acFetch(q) {
-    // ✅ backend deve buscar em usuarios.nome e usuarios.cbo (e retornar id/nome/cbo)
     const url = `/atendimentos/api/profissionais_sugestao?q=${encodeURIComponent(q)}`;
     const resp = await fetch(url);
     const data = await resp.json();
@@ -281,7 +295,6 @@
       if (cbo) meta.push(`CBO ${cbo}`);
       const metaTxt = meta.length ? ` <span class="muted">(${meta.join(" · ")})</span>` : "";
 
-      // data-label: o que vai entrar no input ao clicar
       const label = cbo ? `${nome} (${cbo})` : nome;
 
       return `
@@ -321,14 +334,10 @@
   }, 220);
 
   function initProfAutocomplete() {
-    // liga APENAS se:
-    // - #f_prof for input (novo)
-    // - existir #f_prof_id (hidden) e #f_prof_sugestoes
     if (selProf && isInput(selProf) && inpProfId && sugBox) {
       profACEnabled = true;
 
       selProf.addEventListener("input", () => {
-        // digitou na mão = invalida seleção
         acClearSelected();
         acOnInput();
       });
@@ -338,7 +347,6 @@
           acHide();
         }
         if (e.key === "Enter") {
-          // Enter = aplicar filtro
           e.preventDefault();
           acHide();
           listar();
@@ -352,18 +360,17 @@
         const id    = btn.getAttribute("data-id") || "";
         const label = btn.getAttribute("data-label") || btn.textContent.trim();
 
-        selProf.value   = label;  // agora pode vir "Nome (CBO)"
+        selProf.value   = label;
         inpProfId.value = id;
 
         acHide();
-        listar(); // escolheu = filtra
+        listar();
       });
 
       document.addEventListener("click", (e) => {
         if (!profACEnabled) return;
         if (!sugBox || !selProf) return;
 
-        // clique dentro do wrap não fecha
         const wrap = document.getElementById("f_prof_wrap");
         if (wrap && wrap.contains(e.target)) return;
 
@@ -377,16 +384,15 @@
     return false;
   }
 
-  // ✅ monta params de filtros (reutilizado por listagem, XLSX e PDF)
+  // =========================
+  // Filtros / URLs
+  // =========================
   function buildFilterParams() {
     const p = new URLSearchParams();
 
     const qVal = valFiltro(inpBusca?.value);
     if (qVal) p.set("q", qVal);
 
-    // PROF:
-    // - se autocomplete ativo: usa #f_prof_id
-    // - senão: usa select antigo (#f_prof)
     if (profACEnabled) {
       const profIdVal = valFiltro(inpProfId?.value);
       if (profIdVal) p.set("prof", profIdVal);
@@ -443,14 +449,13 @@
     }
 
     tbody.innerHTML = rows.map((r) => {
-      const paciente = pick(r, ["paciente_nome", "nome_paciente", "nome"], "—");
-      const cns      = pick(r, ["paciente_cns", "cns", "cartao_sus"], "—");
+      const paciente = pick(r, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "—");
+      const cns      = pick(r, ["pac__cns", "paciente_cns", "cns", "cartao_sus"], "—");
 
       const dtRaw = pick(r, ["data_atendimento", "data", "data_iso", "created_at"], "—");
       const dt    = dtRaw === "—" ? "—" : fmtDataBR(dtRaw);
 
       const prof  = profNameFrom(r);
-
       const dataRow = JSON.stringify(r).replaceAll('"', "&quot;");
 
       return `
@@ -522,10 +527,18 @@
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
     switch (where) {
-      case "first": currentPage = 1; break;
-      case "prev":  currentPage = Math.max(1, currentPage - 1); break;
-      case "next":  currentPage = Math.min(totalPages, currentPage + 1); break;
-      case "last":  currentPage = totalPages; break;
+      case "first":
+        currentPage = 1;
+        break;
+      case "prev":
+        currentPage = Math.max(1, currentPage - 1);
+        break;
+      case "next":
+        currentPage = Math.min(totalPages, currentPage + 1);
+        break;
+      case "last":
+        currentPage = totalPages;
+        break;
     }
     renderPagina();
   }
@@ -534,13 +547,13 @@
   // Modal
   // =========================
   function fillModalHeaderBadges(obj) {
-    const nome  = pick(obj, ["paciente_nome", "nome_paciente", "nome"], "");
-    const pront = pick(obj, ["paciente_prontuario", "prontuario", "prontuario_num"], "");
-    const cpf   = pick(obj, ["paciente_cpf", "cpf"], "");
+    const nome  = pick(obj, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "");
+    const pront = pick(obj, ["pac__prontuario", "paciente_prontuario", "prontuario", "prontuario_num"], "");
+    const cpf   = pick(obj, ["pac__cpf", "paciente_cpf", "cpf"], "");
 
     const parts = [];
-    if (nome)  parts.push(`Paciente: ${nome}`);
-    if (cpf)   parts.push(`CPF: ${cpf}`);
+    if (nome) parts.push(`Paciente: ${nome}`);
+    if (cpf) parts.push(`CPF: ${cpf}`);
     if (pront) parts.push(`Prontuário: ${pront}`);
 
     if (mrSubtitle) setText(mrSubtitle, parts.length ? parts.join(" · ") : "—");
@@ -549,11 +562,11 @@
     const dt    = dtRaw ? fmtDataBR(dtRaw) : "—";
     if (mrBadgeData) setText(mrBadgeData, `📅 ${dt}`);
 
-    const statusRaw = pick(obj, ["status", "situacao", "comparecimento", "paciente_status"], "");
+    const statusRaw = pick(obj, ["pac__status", "status", "situacao", "comparecimento", "paciente_status"], "");
     const label = normalizeStatusLabel(statusRaw);
     if (mrBadgeStatus) setText(mrBadgeStatus, `${statusEmoji(label)} ${label}`);
 
-    const cbo = pick(obj, ["profissional_cbo", "cbo_profissional", "cbo"], "");
+    const cbo = pick(obj, ["profissional_cbo", "cbo_profissional", "cbo", "ag__prof_cbo"], "");
     if (mrBadgeCbo) setText(mrBadgeCbo, `🧩 ${cbo ? `CBO ${cbo}` : "CBO —"}`);
   }
 
@@ -594,71 +607,107 @@
     fillModalHeaderBadges(obj);
 
     mapFill(obj, [
-      { el: mrProf,         keys: ["profissional_nome","profissional","nome_profissional","usuario_nome","nome_usuario"], fmt: (_, o) => profNameFrom(o) },
-      { el: mrProfCns,      keys: ["profissional_cns","cns_profissional"] },
-      { el: mrProfCbo,      keys: ["profissional_cbo","cbo_profissional","cbo"] },
+      { el: mrProf,         keys: ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario", "ag__profissional"], fmt: (_, o) => profNameFrom(o) },
+      { el: mrProfCns,      keys: ["profissional_cns", "cns_profissional"] },
+      { el: mrProfCbo,      keys: ["profissional_cbo", "cbo_profissional", "cbo", "ag__prof_cbo"] },
 
-      { el: mrProcedimento, keys: ["procedimento","procedimento_nome","procedimento_desc","ap_procedimento"] },
-      { el: mrSigtap,       keys: ["codigo_sigtap","cod_sigtap","sigtap","ap_codigo_sigtap"] },
+      { el: mrProcedimento, keys: ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"] },
+      { el: mrSigtap,       keys: ["codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap"] },
 
-      { el: mrCid,          keys: ["paciente_cid","cid","cid_principal","cid10"] },
+      { el: mrCid,          keys: ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"] },
 
-      { el: mrData,         keys: ["data_atendimento","data","data_iso","created_at"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
+      { el: mrData,         keys: ["data_atendimento", "data", "data_iso", "created_at"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
 
-      { el: mrStatus,       keys: ["status","situacao","comparecimento","paciente_status"], fmt: (v) => normalizeStatusLabel(v) },
-      { el: mrStatusJust,   keys: ["status_justificativa","justificativa","motivo"] },
+      { el: mrStatus,       keys: ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], fmt: (v) => normalizeStatusLabel(v) },
+      { el: mrStatusJust,   keys: ["status_justificativa", "justificativa", "motivo"] },
 
-      { el: mrEvolucao,     keys: ["evolucao","evolucao_texto","observacao","observacoes"] },
+      { el: mrEvolucao,     keys: ["evolucao", "evolucao_texto", "observacao", "observacoes"] },
     ]);
 
     mapFill(obj, [
-      { el: mrPaciente,   keys: ["paciente_nome","nome_paciente","nome"] },
-      { el: mrProntuario, keys: ["paciente_prontuario","prontuario","prontuario_num"] },
-      { el: mrPacIdade,   keys: ["paciente_idade","idade"] },
-      { el: mrPacMod,     keys: ["paciente_mod","mod","modalidade"] },
+      { el: mrPaciente,   keys: ["pac__nome", "paciente_nome", "nome_paciente", "nome"] },
+      { el: mrProntuario, keys: ["pac__prontuario", "paciente_prontuario", "prontuario", "prontuario_num"] },
+      { el: mrPacIdade,   keys: ["pac__idade", "paciente_idade", "idade"] },
+      { el: mrPacMod,     keys: ["pac__mod", "paciente_mod", "mod", "modalidade"] },
 
-      { el: mrPacCPF,     keys: ["paciente_cpf","cpf"] },
-      { el: mrPacCNS,     keys: ["paciente_cns","cns","cartao_sus"] },
+      { el: mrPacCPF,     keys: ["pac__cpf", "paciente_cpf", "cpf"] },
+      { el: mrPacCNS,     keys: ["pac__cns", "paciente_cns", "cns", "cartao_sus"] },
 
-      { el: mrPacNasc,    keys: ["paciente_nascimento","nascimento","data_nascimento","dt_nasc"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
-      { el: mrPacSexo,    keys: ["paciente_sexo","sexo","sex"] },
+      { el: mrPacNasc,    keys: ["pac__nascimento", "paciente_nascimento", "nascimento", "data_nascimento", "dt_nasc"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
+      { el: mrPacSexo,    keys: ["pac__sexo", "paciente_sexo", "sexo", "sex"] },
 
-      { el: mrPacCidade,  keys: ["paciente_cidade","paciente_municipio","cidade","municipio","cidade_paciente","municipio_paciente"] },
+      { el: mrPacCidade,  keys: ["pac__municipio", "pac__cidade", "paciente_cidade", "paciente_municipio", "cidade", "municipio", "cidade_paciente", "municipio_paciente"] },
       { el: mrPacTel,     keys: ["__tel__"], fmt: (_, o) => formatTelefones(o) },
       { el: mrPacEndereco,keys: ["__end__"], fmt: (_, o) => formatEndereco(o) },
     ]);
 
     const ignoreKeys = new Set([
-      "paciente_nome","nome_paciente","nome",
-      "paciente_cpf","cpf","paciente_cns","cns","cartao_sus",
-      "paciente_prontuario","prontuario","prontuario_num",
-      "paciente_idade","idade","paciente_mod","mod","modalidade",
-      "paciente_nascimento","nascimento","data_nascimento","dt_nasc",
-      "paciente_sexo","sexo","sex",
-      "paciente_telefone1","telefone1","telefone","telefone_paciente",
-      "paciente_telefone2","telefone2",
-      "paciente_telefone3","telefone3","celular","celular_paciente",
-      "paciente_logradouro","logradouro","rua",
-      "paciente_numero_casa","numero_casa","numero",
-      "paciente_complemento","complemento",
-      "paciente_bairro","bairro","bairro_paciente",
-      "paciente_municipio","paciente_cidade","municipio","cidade","cidade_paciente","municipio_paciente",
-      "paciente_cep","cep",
-      "profissional_nome","profissional","nome_profissional","usuario_nome","nome_usuario",
-      "profissional_id","prof_id","id_profissional","usuario_id",
-      "profissional_cns","cns_profissional",
-      "profissional_cbo","cbo_profissional","cbo",
-      "procedimento","procedimento_nome","procedimento_desc","ap_procedimento",
-      "codigo_sigtap","cod_sigtap","sigtap","ap_codigo_sigtap",
-      "paciente_cid","cid","cid_principal","cid10",
-      "data_atendimento","data","data_iso","created_at",
-      "status","situacao","comparecimento","paciente_status",
-      "status_justificativa","justificativa","motivo",
-      "evolucao","evolucao_texto","observacao","observacoes",
+      "pac__id",
+      "pac__nome",
+      "pac__prontuario",
+      "pac__idade",
+      "pac__mod",
+      "pac__cpf",
+      "pac__cns",
+      "pac__nascimento",
+      "pac__sexo",
+      "pac__telefone",
+      "pac__telefone2",
+      "pac__telefone3",
+      "pac__email",
+      "pac__status",
+      "pac__cid",
+      "pac__cid2",
+      "pac__logradouro",
+      "pac__numero",
+      "pac__complemento",
+      "pac__bairro",
+      "pac__municipio",
+      "pac__cidade",
+      "pac__uf",
+      "pac__cep",
+      "pac__mae",
+      "pac__pai",
+      "pac__responsavel",
+      "pac__alergias",
+      "pac__aviso",
+      "pac__comorbidades_json",
+      "pac__raca",
+      "pac__estado_civil",
+
+      "paciente_nome", "nome_paciente", "nome",
+      "paciente_cpf", "cpf", "paciente_cns", "cns", "cartao_sus",
+      "paciente_prontuario", "prontuario", "prontuario_num",
+      "paciente_idade", "idade", "paciente_mod", "mod", "modalidade",
+      "paciente_nascimento", "nascimento", "data_nascimento", "dt_nasc",
+      "paciente_sexo", "sexo", "sex",
+      "paciente_telefone1", "telefone1", "telefone", "telefone_paciente",
+      "paciente_telefone2", "telefone2",
+      "paciente_telefone3", "telefone3", "celular", "celular_paciente",
+      "paciente_logradouro", "logradouro", "rua",
+      "paciente_numero_casa", "numero_casa", "numero",
+      "paciente_complemento", "complemento",
+      "paciente_bairro", "bairro", "bairro_paciente",
+      "paciente_municipio", "paciente_cidade", "municipio", "cidade", "cidade_paciente", "municipio_paciente",
+      "paciente_cep", "cep",
+
+      "profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario",
+      "profissional_id", "prof_id", "id_profissional", "usuario_id",
+      "profissional_cns", "cns_profissional",
+      "profissional_cbo", "cbo_profissional", "cbo",
+
+      "ag__inicio", "ag__hora", "ag__profissional", "ag__profissional_id", "ag__prof_cbo",
+
+      "procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento",
+      "codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap",
+      "paciente_cid", "cid", "cid_principal", "cid10",
+      "data_atendimento", "data", "data_iso", "created_at",
+      "status", "situacao", "comparecimento", "paciente_status",
+      "status_justificativa", "justificativa", "motivo",
+      "evolucao", "evolucao_texto", "observacao", "observacoes",
     ]);
     buildKV(obj, ignoreKeys);
 
-    // reseta abas (volta para atendimento)
     if (dlg) {
       const tabs   = dlg.querySelectorAll(".mr-tab");
       const panels = dlg.querySelectorAll(".mr-panel");
@@ -740,7 +789,7 @@
       console.error("[registros] Erro ao listar:", err);
       allRows = [];
       tbody.innerHTML = `<tr><td colspan="5">Erro ao carregar registros.</td></tr>`;
-      lblResumo && (lblResumo.textContent = "Erro ao carregar registros.");
+      if (lblResumo) lblResumo.textContent = "Erro ao carregar registros.";
       updatePaginationUI(0, 1, 0, 0);
     }
   }
@@ -748,12 +797,10 @@
   function limpar() {
     frm && frm.reset();
 
-    // limpa selects
     if (!profACEnabled && selProf && isSelect(selProf)) selProf.value = "";
-    selStatus && (selStatus.value = "");
-    selSexo   && (selSexo.value = "");
+    if (selStatus) selStatus.value = "";
+    if (selSexo) selSexo.value = "";
 
-    // limpa autocomplete
     if (profACEnabled && selProf && isInput(selProf)) selProf.value = "";
     if (inpProfId) inpProfId.value = "";
     acHide();
@@ -789,7 +836,7 @@
   }
 
   // =========================
-  // Profissionais dinâmicos (legado select)
+  // Profissionais dinâmicos (select legado)
   // =========================
   async function carregarProfissionaisSelectLegado() {
     if (!selProf || !isSelect(selProf)) return;
@@ -850,18 +897,15 @@
     exportarEvolucoesPDF();
   });
 
-  // selects e datas: ao mudar, filtra
   [selStatus, selSexo, inpDataIni, inpDataFim].forEach((el) => {
     if (!el) return;
     el.addEventListener("change", () => listar());
   });
 
-  // select de prof (legado) filtra ao mudar
   if (selProf && isSelect(selProf)) {
     selProf.addEventListener("change", () => listar());
   }
 
-  // busca: Enter filtra
   inpBusca?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -907,7 +951,6 @@
     initModalTabs();
     initCopyEvolucao();
 
-    // tenta ligar autocomplete; se não der, cai no select legado
     const okAC = initProfAutocomplete();
     if (!okAC) {
       await carregarProfissionaisSelectLegado();
@@ -915,4 +958,14 @@
 
     listar();
   })();
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const btn = document.getElementById("btnExportBPAI");
+    if (!btn) return;
+
+    btn.addEventListener("click", () => {
+      const qs = window.location.search || "";
+      window.location.href = `/registros/exportar_bpai_xlsx${qs}`;
+    });
+  });
 })();

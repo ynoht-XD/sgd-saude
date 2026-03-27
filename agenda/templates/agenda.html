@@ -5,205 +5,222 @@
 {% endblock %}
 
 {% block content %}
-<h2>Agendamento</h2>
+<section class="page-agenda">
 
-{# CPF e NOME do profissional logado, para o JS filtrar por padrão #}
-{% if current_user is defined and current_user.is_authenticated %}
-  <meta name="current-prof-cpf" content="{{ current_user.cpf }}">
-  <meta name="current-prof-nome" content="{{ current_user.nome }}">
-{% endif %}
+  {% if current_user is defined and current_user.is_authenticated %}
+    <meta name="current-prof-cpf" content="{{ current_user.cpf }}">
+    <meta name="current-prof-nome" content="{{ current_user.nome }}">
+  {% endif %}
 
-<!-- endpoints p/ JS -->
-<meta name="agenda-save-endpoint" content="{{ url_for('agenda.agenda_salvar') }}">
-<meta name="pacientes-suggest-endpoint" content="{{ url_for('pacientes.api_sugestoes_nomes') }}">
-<meta name="profissionais-endpoint" content="{{ url_for('agenda.api_profissionais') }}">
-<meta name="agregados-endpoint" content="{{ url_for('agenda.api_agregados') }}">
-<meta name="agregados-export-endpoint" content="{{ url_for('agenda.api_agregados_export') }}">
+  <!-- endpoints p/ JS -->
+  <meta name="agenda-save-endpoint" content="{{ url_for('agenda.agenda_salvar') }}">
+  <meta name="pacientes-suggest-endpoint" content="{{ url_for('pacientes.api_sugestoes_nomes') }}">
+  <meta name="profissionais-endpoint" content="{{ url_for('agenda.api_profissionais') }}">
+  <meta name="agregados-endpoint" content="{{ url_for('agenda.api_agregados') }}">
+  <meta name="agregados-export-endpoint" content="{{ url_for('agenda.api_agregados_export') }}">
 
-{# ===== Daqui pra baixo deixa exatamente como já estava ===== #}
+  <!-- HERO -->
+  <header class="ag-hero card">
+    <div class="ag-hero__content">
+      <div class="ag-kicker">SGD · Agenda</div>
+      <h2>Agendamento</h2>
 
-{# ================= Formulário simples para cadastrar sessões ================= #}
-<div class="card card-agenda-form">
-  <div class="grid">
+      <div class="ag-hero__chips">
+        <span class="ag-chip ag-chip--blue">Paciente</span>
+        <span class="ag-chip ag-chip--green">Profissional</span>
+        <span class="ag-chip ag-chip--gold">Dia de referência</span>
+        <span class="ag-chip ag-chip--soft">Operacional</span>
+      </div>
+    </div>
+  </header>
 
-    <div class="col-3">
-      <label for="paciente_busca">Paciente</label>
-      <input id="paciente_busca" placeholder="Digite 3+ letras para buscar…">
-      <input id="paciente_nome" type="hidden">
-      <div id="sugestoes" class="suggest hidden"></div>
-      <div class="muted" id="paciente_helper">
-        Digite para buscar. Mostraremos nome, idade e CPF.
+  <!-- FORMULÁRIO -->
+  <section class="card card-agenda-form ag-card">
+    <div class="ag-section-head">
+      <div>
+        <span class="ag-eyebrow">Cadastro</span>
+        <h3>Novo agendamento</h3>
       </div>
     </div>
 
-    <div class="col-2">
-      <label for="profissional_select">
-        Profissional <span style="color:#ef4444">*</span>
-      </label>
-      <select id="profissional_select" required>
-        <option value="">Selecione…</option>
-      </select>
-    </div>
+    <div class="grid ag-grid-form">
 
-    <div class="col-1">
-      <label for="dia">Dia</label>
-      <select id="dia">
-        {% for code, label in dow_labels %}
-          <option value="{{ code }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
+      <div class="col-4">
+        <label for="paciente_busca">Paciente</label>
+        <input id="paciente_busca" placeholder="Digite 3+ letras para buscar…">
+        <input id="paciente_nome" type="hidden">
+        <div id="sugestoes" class="suggest hidden"></div>
 
-    <div class="col-1">
-      <label for="hora_de">Horário (de)</label>
-      <input id="hora_de" type="time" value="08:00" step="300">
-    </div>
+      </div>
 
-    <div class="col-1">
-      <label for="hora_ate">
-        Horário (até) <span class="muted">(opcional)</span>
-      </label>
-      <input id="hora_ate" type="time" placeholder="08:30" step="300">
-    </div>
+      <div class="col-3">
+        <label for="profissional_select">
+          Profissional <span style="color:#ef4444">*</span>
+        </label>
+        <select id="profissional_select" required>
+          <option value="">Selecione…</option>
+        </select>
+      </div>
 
-    <div class="col-1">
-      <label for="qtd">Qtd. sessões</label>
-      <input id="qtd" type="number" min="1" value="8">
-    </div>
+      <div class="col-2">
+        <label for="dia">Dia de referência</label>
+        <select id="dia">
+          {% for code, label in dow_labels %}
+            <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="col-1">
-      <label for="valor">Valor por sessão</label>
-      <input id="valor" type="number" step="0.01" placeholder="0,00">
-    </div>
+      <div class="col-1">
+        <label for="hora_de">De</label>
+        <input id="hora_de" type="time" value="08:00" step="300">
+      </div>
 
-    <div class="col-6">
-      <div class="row" style="align-items:center; gap:8px; flex-wrap:wrap;">
-        <button id="btnSalvar" class="btn" type="button">
-          Salvar agendamento
-        </button>
+      <div class="col-1">
+        <label for="hora_ate">Até</label>
+        <input id="hora_ate" type="time" placeholder="08:30" step="300">
+      </div>
 
-        <button id="btnSalvarVago" class="btn ghost" type="button">
-          Marcar horário VAGO
-        </button>
+      <div class="col-12">
+        <div class="ag-form-actions">
+          <button id="btnSalvar" class="btn" type="button">
+            Salvar agendamento
+          </button>
 
-        <span class="muted" id="msg"></span>
+          <button id="btnSalvarVago" class="btn ghost" type="button">
+            Marcar horário VAGO
+          </button>
+
+          <span class="muted" id="msg"></span>
+        </div>
       </div>
     </div>
 
-  </div>
-</div>
+    <!-- Compatibilidade temporária com JS antigo -->
+    <input id="qtd" type="hidden" value="1">
+    <input id="valor" type="hidden" value="">
+  </section>
 
-{# ================= Seção de Filtros ================= #}
-<div class="card card-agenda-filtros" style="margin-top:16px;">
-  <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-    <h3 style="margin:0;">Filtros</h3>
-    <div class="muted">Use os filtros abaixo para refinar a listagem</div>
-  </div>
-
-  <div class="grid" style="margin-top:10px;">
-    <div class="col-2">
-      <label for="f_profissional">Usuário / Profissional</label>
-      <select id="f_profissional">
-        <option value="">Todos</option>
-      </select>
+  <!-- FILTROS -->
+  <section class="card card-agenda-filtros ag-card">
+    <div class="ag-section-head ag-section-head--row">
+      <div>
+        <span class="ag-eyebrow">Filtro</span>
+        <h3>Refinar listagem</h3>
+      </div>
+      <div class="muted">Busca operacional</div>
     </div>
 
-    <div class="col-1">
-      <label for="f_dia">Dia</label>
-      <select id="f_dia">
-        <option value="">Todos</option>
-        {% for code, label in dow_labels %}
-          <option value="{{ code }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
+    <div class="grid ag-grid-filtros">
+      <div class="col-3">
+        <label for="f_profissional">Usuário / Profissional</label>
+        <select id="f_profissional">
+          <option value="">Todos</option>
+        </select>
+      </div>
 
-    <div class="col-1">
-      <label for="f_hora_de">Horário (de)</label>
-      <input id="f_hora_de" type="time" step="300">
-    </div>
+      <div class="col-2">
+        <label for="f_dia">Dia</label>
+        <select id="f_dia">
+          <option value="">Todos</option>
+          {% for code, label in dow_labels %}
+            <option value="{{ code }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="col-1">
-      <label for="f_hora_ate">Horário (até)</label>
-      <input id="f_hora_ate" type="time" step="300">
-    </div>
+      <div class="col-2">
+        <label for="f_hora_de">Horário (de)</label>
+        <input id="f_hora_de" type="time" step="300">
+      </div>
 
-    <div class="col-2">
-      <label for="f_paciente">Paciente</label>
-      <input id="f_paciente" placeholder="Nome do paciente">
-    </div>
+      <div class="col-2">
+        <label for="f_hora_ate">Horário (até)</label>
+        <input id="f_hora_ate" type="time" step="300">
+      </div>
 
-    <div class="col-1">
-      <label for="f_idade_min">Idade mín.</label>
-      <input id="f_idade_min" type="number" min="0" placeholder="0">
-    </div>
+      <div class="col-3">
+        <label for="f_paciente">Paciente</label>
+        <input id="f_paciente" placeholder="Nome do paciente">
+      </div>
 
-    <div class="col-1">
-      <label for="f_idade_max">Idade máx.</label>
-      <input id="f_idade_max" type="number" min="0" placeholder="120">
-    </div>
+      <div class="col-2">
+        <label for="f_idade_min">Idade mín.</label>
+        <input id="f_idade_min" type="number" min="0" placeholder="0">
+      </div>
 
-    <div class="col-2">
-      <label for="f_cid">CID</label>
-      <input id="f_cid" placeholder="CID do paciente">
-    </div>
+      <div class="col-2">
+        <label for="f_idade_max">Idade máx.</label>
+        <input id="f_idade_max" type="number" min="0" placeholder="120">
+      </div>
 
-    <div class="col-6">
-      <div class="row" style="gap:8px; flex-wrap:wrap;">
-        <button id="btnAplicarFiltros" class="btn" type="button" title="Aplicar filtros">
-          Aplicar filtros
-        </button>
-        <button id="btnLimparFiltros" class="btn ghost" type="button" title="Limpar filtros">
-          Limpar
-        </button>
-        <span class="muted" id="filtros_msg"></span>
+      <div class="col-3">
+        <label for="f_cid">CID</label>
+        <input id="f_cid" placeholder="CID do paciente">
+      </div>
+
+      <div class="col-12">
+        <div class="ag-form-actions">
+          <button id="btnAplicarFiltros" class="btn" type="button" title="Aplicar filtros">
+            Aplicar filtros
+          </button>
+          <button id="btnLimparFiltros" class="btn ghost" type="button" title="Limpar filtros">
+            Limpar
+          </button>
+          <span class="muted" id="filtros_msg"></span>
+        </div>
       </div>
     </div>
-  </div>
-</div>
+  </section>
 
-{# ================= Listagem em CARDS + paginação ================= #}
+  <!-- LISTAGEM -->
+  <section class="card card-agenda-list ag-card" data-pagesize="20">
+    <div class="ag-section-head ag-section-head--row">
+      <div>
+        <span class="ag-eyebrow">Controle</span>
+        <h3>
+          Agendamentos cadastrados <span id="agCount" class="muted">(0)</span>
+        </h3>
+      </div>
 
-<div class="card card-agenda-list" style="margin-top:16px;" data-pagesize="20">
-  <div class="row" style="justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-    <h3 style="margin:0;">
-      Agendamentos cadastrados <span id="agCount" class="muted">(0)</span>
-    </h3>
-    <div class="row" style="gap:8px; flex-wrap:wrap;">
-      <button id="btnExport" class="btn ghost" type="button" title="Exportar Excel">
-        📄 Exportar
-      </button>
-      <button id="btnRecarregar" class="btn ghost" type="button" title="Recarregar">
-        🔄 Recarregar
-      </button>
+      <div class="ag-list-actions">
+        <button id="btnExport" class="btn ghost" type="button" title="Exportar Excel">
+          📄 Exportar
+        </button>
+        <button id="btnRecarregar" class="btn ghost" type="button" title="Recarregar">
+          🔄 Recarregar
+        </button>
+      </div>
     </div>
-  </div>
 
-  <div id="agCardsList" class="ag-cards-list"></div>
+    <div id="agCardsList" class="ag-cards-list"></div>
 
-  <div class="muted" id="agregadosHelper" style="margin-top:8px;">Carregando…</div>
+    <div class="muted" id="agregadosHelper" style="margin-top:8px;">Carregando…</div>
 
-  <div class="pagination row" style="justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap;">
-    <div class="muted">
-      <span id="pageInfo">Página 1 de 1</span> • Mostrando até 20 por página
+    <div class="pagination row ag-pagination">
+      <div class="muted">
+        <span id="pageInfo">Página 1 de 1</span> • Mostrando até 20 por página
+      </div>
+
+      <div class="pager ag-pager">
+        <button id="btnFirst" class="icon-btn" title="Primeira página" aria-label="Primeira página">
+          <svg viewBox="0 0 24 24"><path d="M6 12l6-6v12zM18 6v12"/></svg>
+        </button>
+        <button id="btnPrev" class="icon-btn" title="Página anterior" aria-label="Página anterior">
+          <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <input id="pageInput" type="number" min="1" value="1" class="page-input" aria-label="Ir para página">
+        <button id="btnNext" class="icon-btn" title="Próxima página" aria-label="Próxima página">
+          <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button id="btnLast" class="icon-btn" title="Última página" aria-label="Última página">
+          <svg viewBox="0 0 24 24"><path d="M12 6l6 6-6 6M6 6v12"/></svg>
+        </button>
+      </div>
     </div>
-    <div class="pager" style="display:flex; align-items:center; gap:4px;">
-      <button id="btnFirst" class="icon-btn" title="Primeira página" aria-label="Primeira página">
-        <svg viewBox="0 0 24 24"><path d="M6 12l6-6v12zM18 6v12"/></svg>
-      </button>
-      <button id="btnPrev" class="icon-btn" title="Página anterior" aria-label="Página anterior">
-        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <input id="pageInput" type="number" min="1" value="1" class="page-input" aria-label="Ir para página">
-      <button id="btnNext" class="icon-btn" title="Próxima página" aria-label="Próxima página">
-        <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-      </button>
-      <button id="btnLast" class="icon-btn" title="Última página" aria-label="Última página">
-        <svg viewBox="0 0 24 24"><path d="M12 6l6 6-6 6M6 6v12"/></svg>
-      </button>
-    </div>
-  </div>
-</div>
+  </section>
+
+</section>
 
 {% include "_modal_agenda_editar.html" %}
 

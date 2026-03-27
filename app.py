@@ -45,7 +45,6 @@ app.register_blueprint(meus_atendimentos_bp)
 app.register_blueprint(avaliacoes_bp)
 
 
-
 # ============================================================
 #  ENDPOINTS PÚBLICOS (sem login obrigatório)
 # ============================================================

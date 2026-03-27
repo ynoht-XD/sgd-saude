@@ -1,0 +1,1210 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin · Backups{% endblock %}
+
+{% block content %}
+<section class="bk-page">
+
+  <header class="bk-hero">
+    <div class="bk-hero__bg"></div>
+
+    <div class="bk-hero__main">
+      <span class="bk-kicker">🛡️ SGD · Segurança e recuperação</span>
+      <h1>Backups do sistema</h1>
+      <p>
+        Gere cópias de segurança, baixe arquivos externos, restaure versões anteriores
+        e mantenha o banco protegido com um fluxo muito mais confiável.
+      </p>
+
+      <div class="bk-hero__chips">
+        <span class="bk-chip">📦 Download imediato</span>
+        <span class="bk-chip">♻️ Restauração rápida</span>
+        <span class="bk-chip">🗃️ Ciclo automático de {{ max_backups or 5 }} arquivos</span>
+      </div>
+    </div>
+
+    <div class="bk-hero__side">
+      <div class="bk-highlight">
+        <span class="bk-highlight__label">Último backup</span>
+        <strong class="bk-highlight__value">{{ ultimo_backup or "—" }}</strong>
+      </div>
+
+      <div class="bk-highlight">
+        <span class="bk-highlight__label">Arquivos mantidos</span>
+        <strong class="bk-highlight__value">{{ total_backups or 0 }}/{{ max_backups or 5 }}</strong>
+      </div>
+    </div>
+  </header>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="bk-flashes">
+        {% for cat, m in msgs %}
+          <article class="bk-flash {{ cat }}">
+            <span class="bk-flash__icon">
+              {% if cat == 'success' %}✅{% elif cat == 'error' %}⚠️{% else %}ℹ️{% endif %}
+            </span>
+            <div class="bk-flash__content">{{ m }}</div>
+            <button type="button" class="bk-flash__close" data-close-flash aria-label="Fechar">×</button>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="bk-stats">
+    <article class="bk-stat">
+      <div class="bk-stat__icon">📚</div>
+      <div class="bk-stat__body">
+        <span>Total de backups</span>
+        <strong>{{ total_backups or 0 }}</strong>
+        <small>Arquivos atualmente armazenados.</small>
+      </div>
+    </article>
+
+    <article class="bk-stat">
+      <div class="bk-stat__icon">🧰</div>
+      <div class="bk-stat__body">
+        <span>Capacidade de ciclo</span>
+        <strong>{{ max_backups or 5 }}</strong>
+        <small>Quando atingir o limite, o mais antigo sai de cena.</small>
+      </div>
+    </article>
+
+    <article class="bk-stat">
+      <div class="bk-stat__icon">🕒</div>
+      <div class="bk-stat__body">
+        <span>Rotina automática</span>
+        <strong>Sexta-feira</strong>
+        <small>Preparado para geração periódica de backup.</small>
+      </div>
+    </article>
+  </section>
+
+  <section class="bk-actions-grid">
+    <article class="bk-action-card bk-action-card--primary">
+      <div class="bk-action-card__top">
+        <div class="bk-action-card__icon">📦</div>
+        <span class="bk-action-card__tag">Backup manual</span>
+      </div>
+
+      <div class="bk-action-card__body">
+        <h2>Gerar backup agora</h2>
+        <p>
+          Cria uma cópia segura do banco, salva na pasta local e já baixa o arquivo
+          externamente no navegador.
+        </p>
+      </div>
+
+      <form method="post" action="{{ url_for('admin.backup_run') }}" class="bk-form-inline">
+        <button type="submit" class="bk-btn bk-btn--primary bk-btn--full">
+          Gerar e baixar backup
+        </button>
+      </form>
+    </article>
+
+    <article class="bk-action-card">
+      <div class="bk-action-card__top">
+        <div class="bk-action-card__icon">♻️</div>
+        <span class="bk-action-card__tag">Restauração externa</span>
+      </div>
+
+      <div class="bk-action-card__body">
+        <h2>Restaurar por arquivo .zip</h2>
+        <p>
+          Envie um backup salvo externamente para restaurar o banco. Antes da restauração,
+          o sistema pode gerar uma cópia preventiva.
+        </p>
+      </div>
+
+      <form method="post"
+            action="{{ url_for('admin.backup_restaurar') }}"
+            enctype="multipart/form-data"
+            class="bk-restore-form"
+            id="restoreForm">
+
+        <label class="bk-file-picker" for="arquivo_backup">
+          <input type="file"
+                 id="arquivo_backup"
+                 name="arquivo_backup"
+                 accept=".zip"
+                 required>
+          <span class="bk-file-picker__icon">📎</span>
+          <span class="bk-file-picker__text" id="fileLabel">Selecionar arquivo .zip</span>
+        </label>
+
+        <button type="submit" class="bk-btn bk-btn--warn bk-btn--full" id="btnRestoreUpload">
+          Restaurar backup enviado
+        </button>
+      </form>
+    </article>
+  </section>
+
+  <section class="bk-panel">
+    <div class="bk-panel__head">
+      <div>
+        <span class="bk-panel__eyebrow">Biblioteca de backups</span>
+        <h2>Arquivos disponíveis</h2>
+        <p>
+          Baixe novamente, restaure uma versão salva ou remova arquivos antigos quando necessário.
+        </p>
+      </div>
+
+      <div class="bk-panel__tools">
+        <div class="bk-search">
+          <span class="bk-search__icon">🔎</span>
+          <input type="search" id="bkSearch" placeholder="Pesquisar backup..." autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    {% if backups %}
+      <div class="bk-table-wrap">
+        <table class="bk-table">
+          <thead>
+            <tr>
+              <th>Arquivo</th>
+              <th>Criado em</th>
+              <th>Tamanho</th>
+              <th class="bk-th-actions">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="bkTableBody">
+            {% for item in backups %}
+              <tr class="bk-row" data-search="{{ (item.nome ~ ' ' ~ item.criado_em ~ ' ' ~ item.tamanho_fmt)|lower }}">
+                <td data-label="Arquivo">
+                  <div class="bk-file">
+                    <span class="bk-file__icon">🗂️</span>
+                    <div class="bk-file__meta">
+                      <strong class="bk-file__name">{{ item.nome }}</strong>
+                      <small class="bk-file__sub">Backup salvo localmente</small>
+                    </div>
+                  </div>
+                </td>
+
+                <td data-label="Criado em">
+                  <span class="bk-pill bk-pill--date">{{ item.criado_em }}</span>
+                </td>
+
+                <td data-label="Tamanho">
+                  <span class="bk-pill">{{ item.tamanho_fmt or (item.tamanho ~ ' bytes') }}</span>
+                </td>
+
+                <td data-label="Ações" class="bk-actions-cell">
+                  <div class="bk-row-actions">
+                    <a class="bk-btn bk-btn--soft"
+                       href="{{ url_for('admin.backup_download', nome=item.nome) }}">
+                      Baixar
+                    </a>
+
+                    <form method="post"
+                          action="{{ url_for('admin.backup_restaurar_salvo', nome=item.nome) }}"
+                          class="js-confirm-restore">
+                      <button type="submit" class="bk-btn bk-btn--secondary">
+                        Restaurar
+                      </button>
+                    </form>
+
+                    <form method="post"
+                          action="{{ url_for('admin.backup_excluir', nome=item.nome) }}"
+                          class="js-confirm-delete">
+                      <button type="submit" class="bk-btn bk-btn--danger">
+                        Excluir
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bk-empty-search" id="emptySearch" hidden>
+        <div class="bk-empty-search__icon">🫥</div>
+        <h3>Nenhum backup encontrado</h3>
+        <p>Tenta outro nome ou limpa a pesquisa para ver todos os arquivos.</p>
+      </div>
+    {% else %}
+      <div class="bk-empty">
+        <div class="bk-empty__orb"></div>
+        <div class="bk-empty__icon">🫙</div>
+        <h3>Nenhum backup encontrado</h3>
+        <p>
+          Ainda não existe nenhuma cópia salva. Gere o primeiro backup e o sistema
+          já começa a montar o ciclo automático de arquivos.
+        </p>
+      </div>
+    {% endif %}
+  </section>
+
+</section>
+
+<style>
+  :root{
+    --bk-bg: #f5f7fb;
+    --bk-surface: #ffffff;
+    --bk-surface-2: #fbfcff;
+    --bk-text: #0f172a;
+    --bk-muted: #64748b;
+    --bk-border: rgba(148,163,184,.18);
+    --bk-shadow: 0 18px 50px rgba(15,23,42,.07);
+    --bk-shadow-soft: 0 10px 30px rgba(15,23,42,.05);
+
+    --bk-primary: #2563eb;
+    --bk-primary-2: #4f46e5;
+    --bk-success: #059669;
+    --bk-warn: #d97706;
+    --bk-danger: #dc2626;
+    --bk-secondary: #334155;
+
+    --bk-radius-xl: 28px;
+    --bk-radius-lg: 22px;
+    --bk-radius-md: 18px;
+    --bk-radius-sm: 14px;
+  }
+
+  .bk-page{
+    max-width: 1380px;
+    margin: 0 auto;
+    padding: 22px 16px 36px;
+    display: grid;
+    gap: 20px;
+    color: var(--bk-text);
+  }
+
+  .bk-hero{
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(280px, .75fr);
+    gap: 18px;
+    padding: 26px;
+    border-radius: var(--bk-radius-xl);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.82)),
+      linear-gradient(135deg, rgba(37,99,235,.10), rgba(79,70,229,.08));
+    border: 1px solid rgba(255,255,255,.7);
+    box-shadow: var(--bk-shadow);
+    isolation: isolate;
+  }
+
+  .bk-hero__bg{
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at top right, rgba(37,99,235,.12), transparent 28%),
+      radial-gradient(circle at left bottom, rgba(79,70,229,.10), transparent 25%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .bk-hero__main,
+  .bk-hero__side{
+    position: relative;
+    z-index: 1;
+  }
+
+  .bk-kicker{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(37,99,235,.10);
+    color: var(--bk-primary);
+    font-size: .82rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+
+  .bk-hero h1{
+    margin: 0 0 10px;
+    font-size: clamp(1.9rem, 3vw, 2.7rem);
+    line-height: 1.03;
+    letter-spacing: -.03em;
+  }
+
+  .bk-hero p{
+    margin: 0;
+    max-width: 780px;
+    font-size: 1rem;
+    line-height: 1.72;
+    color: var(--bk-muted);
+  }
+
+  .bk-hero__chips{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  .bk-chip{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.86);
+    border: 1px solid rgba(148,163,184,.14);
+    box-shadow: 0 8px 20px rgba(15,23,42,.04);
+    font-size: .92rem;
+    font-weight: 700;
+    color: #1e293b;
+  }
+
+  .bk-hero__side{
+    display: grid;
+    gap: 12px;
+  }
+
+  .bk-highlight{
+    border-radius: 22px;
+    padding: 18px;
+    background: rgba(255,255,255,.78);
+    border: 1px solid rgba(148,163,184,.16);
+    box-shadow: var(--bk-shadow-soft);
+    backdrop-filter: blur(8px);
+  }
+
+  .bk-highlight__label{
+    display: block;
+    margin-bottom: 8px;
+    color: var(--bk-muted);
+    font-size: .85rem;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .bk-highlight__value{
+    display: block;
+    font-size: 1.2rem;
+    line-height: 1.35;
+    letter-spacing: -.02em;
+  }
+
+  .bk-flashes{
+    display: grid;
+    gap: 10px;
+  }
+
+  .bk-flash{
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid transparent;
+    box-shadow: 0 10px 24px rgba(15,23,42,.04);
+    animation: bkFlashIn .28s ease;
+  }
+
+  .bk-flash.success{
+    background: rgba(16,185,129,.10);
+    color: #065f46;
+    border-color: rgba(16,185,129,.18);
+  }
+
+  .bk-flash.error{
+    background: rgba(239,68,68,.10);
+    color: #991b1b;
+    border-color: rgba(239,68,68,.18);
+  }
+
+  .bk-flash.info{
+    background: rgba(37,99,235,.10);
+    color: #1d4ed8;
+    border-color: rgba(37,99,235,.16);
+  }
+
+  .bk-flash__icon{
+    font-size: 1.1rem;
+  }
+
+  .bk-flash__content{
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .bk-flash__close{
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: .72;
+  }
+
+  .bk-flash__close:hover{
+    opacity: 1;
+  }
+
+  .bk-stats{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 16px;
+  }
+
+  .bk-stat{
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    align-items: start;
+    padding: 20px;
+    background: var(--bk-surface);
+    border: 1px solid var(--bk-border);
+    border-radius: 22px;
+    box-shadow: var(--bk-shadow-soft);
+  }
+
+  .bk-stat__icon{
+    width: 54px;
+    height: 54px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    font-size: 1.35rem;
+    background: linear-gradient(135deg, rgba(37,99,235,.12), rgba(79,70,229,.16));
+  }
+
+  .bk-stat__body span{
+    display: block;
+    font-size: .86rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--bk-muted);
+    margin-bottom: 6px;
+  }
+
+  .bk-stat__body strong{
+    display: block;
+    font-size: 1.35rem;
+    line-height: 1.18;
+    letter-spacing: -.02em;
+    margin-bottom: 6px;
+  }
+
+  .bk-stat__body small{
+    color: var(--bk-muted);
+    line-height: 1.55;
+  }
+
+  .bk-actions-grid{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 18px;
+  }
+
+  .bk-action-card{
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 22px;
+    min-height: 260px;
+    background: linear-gradient(180deg, rgba(255,255,255,.97), rgba(248,250,252,.94));
+    border: 1px solid var(--bk-border);
+    border-radius: 24px;
+    box-shadow: var(--bk-shadow-soft);
+  }
+
+  .bk-action-card--primary{
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,255,.92)),
+      linear-gradient(135deg, rgba(37,99,235,.05), rgba(79,70,229,.04));
+  }
+
+  .bk-action-card__top{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .bk-action-card__icon{
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    font-size: 1.45rem;
+    background: linear-gradient(135deg, rgba(37,99,235,.13), rgba(79,70,229,.18));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+  }
+
+  .bk-action-card__tag{
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.86);
+    border: 1px solid rgba(148,163,184,.16);
+    font-size: .76rem;
+    font-weight: 900;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: #334155;
+  }
+
+  .bk-action-card__body h2{
+    margin: 0 0 8px;
+    font-size: 1.28rem;
+    letter-spacing: -.02em;
+  }
+
+  .bk-action-card__body p{
+    margin: 0;
+    color: var(--bk-muted);
+    line-height: 1.68;
+  }
+
+  .bk-form-inline,
+  .bk-restore-form{
+    margin-top: auto;
+  }
+
+  .bk-restore-form{
+    display: grid;
+    gap: 12px;
+  }
+
+  .bk-file-picker{
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 0 16px;
+    border-radius: 16px;
+    border: 1.5px dashed rgba(148,163,184,.35);
+    background: #f8fbff;
+    cursor: pointer;
+    transition: border-color .2s ease, background .2s ease, transform .2s ease;
+  }
+
+  .bk-file-picker:hover{
+    border-color: rgba(37,99,235,.42);
+    background: #f3f8ff;
+    transform: translateY(-1px);
+  }
+
+  .bk-file-picker input[type="file"]{
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .bk-file-picker__icon{
+    font-size: 1.1rem;
+  }
+
+  .bk-file-picker__text{
+    color: #334155;
+    font-weight: 700;
+  }
+
+  .bk-btn{
+    appearance: none;
+    border: 0;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease, background .18s ease;
+    white-space: nowrap;
+  }
+
+  .bk-btn:hover{
+    transform: translateY(-1px);
+  }
+
+  .bk-btn--full{
+    width: 100%;
+  }
+
+  .bk-btn--primary{
+    color: #fff;
+    background: linear-gradient(135deg, var(--bk-primary), var(--bk-primary-2));
+    box-shadow: 0 14px 30px rgba(37,99,235,.22);
+  }
+
+  .bk-btn--warn{
+    color: #fff;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    box-shadow: 0 14px 30px rgba(217,119,6,.20);
+  }
+
+  .bk-btn--soft{
+    color: #3730a3;
+    background: #eef2ff;
+  }
+
+  .bk-btn--secondary{
+    color: #0f172a;
+    background: #e2e8f0;
+  }
+
+  .bk-btn--danger{
+    color: #991b1b;
+    background: #fee2e2;
+  }
+
+  .bk-panel{
+    padding: 22px;
+    background: var(--bk-surface);
+    border-radius: 26px;
+    border: 1px solid var(--bk-border);
+    box-shadow: var(--bk-shadow-soft);
+  }
+
+  .bk-panel__head{
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  .bk-panel__eyebrow{
+    display: inline-block;
+    margin-bottom: 8px;
+    color: var(--bk-primary);
+    font-weight: 800;
+    font-size: .82rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .bk-panel__head h2{
+    margin: 0 0 6px;
+    font-size: 1.25rem;
+    letter-spacing: -.02em;
+  }
+
+  .bk-panel__head p{
+    margin: 0;
+    color: var(--bk-muted);
+    line-height: 1.6;
+  }
+
+  .bk-panel__tools{
+    width: min(100%, 320px);
+  }
+
+  .bk-search{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(148,163,184,.20);
+    background: #f8fafc;
+  }
+
+  .bk-search__icon{
+    opacity: .68;
+  }
+
+  .bk-search input{
+    width: 100%;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--bk-text);
+    font: inherit;
+  }
+
+  .bk-table-wrap{
+    overflow: auto;
+    border-radius: 20px;
+    border: 1px solid #edf2f7;
+  }
+
+  .bk-table{
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+    background: #fff;
+  }
+
+  .bk-table thead th{
+    padding: 14px 16px;
+    text-align: left;
+    background: #f8fafc;
+    color: #475569;
+    font-size: .84rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .bk-th-actions{
+    text-align: right;
+  }
+
+  .bk-table tbody td{
+    padding: 16px;
+    border-bottom: 1px solid #eef2f7;
+    vertical-align: middle;
+  }
+
+  .bk-table tbody tr:hover{
+    background: #fbfdff;
+  }
+
+  .bk-file{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 260px;
+  }
+
+  .bk-file__icon{
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #dbeafe, #e0e7ff);
+    font-size: 1.15rem;
+  }
+
+  .bk-file__name{
+    display: block;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .bk-file__sub{
+    display: block;
+    color: var(--bk-muted);
+    margin-top: 3px;
+  }
+
+  .bk-pill{
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    color: #334155;
+    font-weight: 700;
+    font-size: .9rem;
+  }
+
+  .bk-pill--date{
+    background: #eff6ff;
+    border-color: #dbeafe;
+    color: #1d4ed8;
+  }
+
+  .bk-actions-cell{
+    text-align: right;
+  }
+
+  .bk-row-actions{
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bk-empty,
+  .bk-empty-search{
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    padding: 42px 20px;
+    border-radius: 24px;
+    border: 1px dashed #dbe2ea;
+    background: linear-gradient(180deg, #fbfdff, #f8fbff);
+  }
+
+  .bk-empty__orb{
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(37,99,235,.10), transparent 68%);
+    top: -60px;
+    right: -40px;
+    pointer-events: none;
+  }
+
+  .bk-empty__icon,
+  .bk-empty-search__icon{
+    font-size: 2rem;
+    margin-bottom: 10px;
+  }
+
+  .bk-empty h3,
+  .bk-empty-search h3{
+    margin: 0 0 6px;
+    font-size: 1.15rem;
+  }
+
+  .bk-empty p,
+  .bk-empty-search p{
+    margin: 0;
+    color: var(--bk-muted);
+    max-width: 620px;
+    margin-inline: auto;
+    line-height: 1.65;
+  }
+
+  .bk-row[hidden]{
+    display: none !important;
+  }
+
+  @keyframes bkFlashIn{
+    from{ opacity: 0; transform: translateY(-6px); }
+    to{ opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 1100px){
+    .bk-hero{
+      grid-template-columns: 1fr;
+    }
+
+    .bk-stats{
+      grid-template-columns: 1fr;
+    }
+
+    .bk-actions-grid{
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px){
+    .bk-page{
+      padding: 16px 12px 28px;
+      gap: 16px;
+    }
+
+    .bk-hero{
+      padding: 18px;
+      border-radius: 22px;
+      gap: 14px;
+    }
+
+    .bk-hero h1{
+      font-size: 1.75rem;
+    }
+
+    .bk-hero p{
+      font-size: .96rem;
+      line-height: 1.65;
+    }
+
+    .bk-hero__chips{
+      gap: 8px;
+    }
+
+    .bk-chip{
+      width: 100%;
+      justify-content: flex-start;
+      min-height: 38px;
+      font-size: .88rem;
+    }
+
+    .bk-highlight{
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .bk-flash{
+      grid-template-columns: auto 1fr auto;
+      padding: 12px 14px;
+      border-radius: 16px;
+    }
+
+    .bk-stat{
+      grid-template-columns: auto 1fr;
+      padding: 16px;
+      border-radius: 18px;
+    }
+
+    .bk-stat__icon{
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+    }
+
+    .bk-action-card{
+      min-height: auto;
+      padding: 18px;
+      border-radius: 20px;
+    }
+
+    .bk-action-card__top{
+      align-items: flex-start;
+      flex-direction: row;
+    }
+
+    .bk-action-card__icon{
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+    }
+
+    .bk-panel{
+      padding: 16px;
+      border-radius: 20px;
+    }
+
+    .bk-panel__head{
+      margin-bottom: 14px;
+    }
+
+    .bk-panel__tools{
+      width: 100%;
+    }
+
+    .bk-table-wrap{
+      border: 0;
+      overflow: visible;
+    }
+
+    .bk-table{
+      min-width: 0;
+      display: block;
+      background: transparent;
+    }
+
+    .bk-table thead{
+      display: none;
+    }
+
+    .bk-table tbody{
+      display: grid;
+      gap: 12px;
+    }
+
+    .bk-table tr{
+      display: block;
+      background: #fff;
+      border: 1px solid #e9eef5;
+      border-radius: 18px;
+      box-shadow: 0 10px 26px rgba(15,23,42,.04);
+      overflow: hidden;
+    }
+
+    .bk-table td{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 14px 14px 0;
+      border-bottom: 0 !important;
+    }
+
+    .bk-table td:last-child{
+      padding-bottom: 14px;
+    }
+
+    .bk-table td::before{
+      content: attr(data-label);
+      font-size: .77rem;
+      font-weight: 900;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .bk-file{
+      min-width: 0;
+      width: 100%;
+    }
+
+    .bk-file__meta{
+      min-width: 0;
+    }
+
+    .bk-file__name{
+      overflow-wrap: anywhere;
+    }
+
+    .bk-actions-cell{
+      text-align: left;
+    }
+
+    .bk-row-actions{
+      width: 100%;
+      justify-content: stretch;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .bk-row-actions .bk-btn,
+    .bk-row-actions form{
+      width: 100%;
+    }
+
+    .bk-row-actions form .bk-btn{
+      width: 100%;
+    }
+
+    .bk-empty,
+    .bk-empty-search{
+      padding: 32px 18px;
+      border-radius: 20px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .bk-btn,
+    .bk-file-picker,
+    .bk-flash{
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+</style>
+
+<script>
+  (() => {
+    "use strict";
+
+    const searchInput = document.getElementById("bkSearch");
+    const rows = Array.from(document.querySelectorAll(".bk-row"));
+    const emptySearch = document.getElementById("emptySearch");
+    const fileInput = document.getElementById("arquivo_backup");
+    const fileLabel = document.getElementById("fileLabel");
+    const restoreForm = document.getElementById("restoreForm");
+    const flashCloseButtons = Array.from(document.querySelectorAll("[data-close-flash]"));
+    const deleteForms = Array.from(document.querySelectorAll(".js-confirm-delete"));
+    const restoreForms = Array.from(document.querySelectorAll(".js-confirm-restore"));
+    const uploadRestoreBtn = document.getElementById("btnRestoreUpload");
+
+    if (searchInput && rows.length) {
+      const applyFilter = () => {
+        const q = searchInput.value.trim().toLowerCase();
+        let visible = 0;
+
+        rows.forEach((row) => {
+          const hay = row.dataset.search || "";
+          const match = !q || hay.includes(q);
+          row.hidden = !match;
+          if (match) visible++;
+        });
+
+        if (emptySearch) {
+          emptySearch.hidden = visible !== 0;
+        }
+      };
+
+      searchInput.addEventListener("input", applyFilter);
+    }
+
+    if (fileInput && fileLabel) {
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files && fileInput.files[0];
+        fileLabel.textContent = file ? file.name : "Selecionar arquivo .zip";
+      });
+    }
+
+    if (restoreForm) {
+      restoreForm.addEventListener("submit", (ev) => {
+        const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+        if (!file) {
+          ev.preventDefault();
+          window.alert("Selecione um arquivo .zip para restaurar.");
+          return;
+        }
+
+        const ok = window.confirm(
+          "Tem certeza que deseja restaurar este backup?\n\n" +
+          "Essa ação substituirá os dados atuais do banco."
+        );
+
+        if (!ok) {
+          ev.preventDefault();
+          return;
+        }
+
+        if (uploadRestoreBtn) {
+          uploadRestoreBtn.disabled = true;
+          uploadRestoreBtn.textContent = "Restaurando...";
+        }
+      });
+    }
+
+    deleteForms.forEach((form) => {
+      form.addEventListener("submit", (ev) => {
+        const ok = window.confirm(
+          "Excluir este backup?\n\n" +
+          "Depois disso, ele não poderá mais ser baixado nem restaurado."
+        );
+
+        if (!ok) {
+          ev.preventDefault();
+        }
+      });
+    });
+
+    restoreForms.forEach((form) => {
+      form.addEventListener("submit", (ev) => {
+        const ok = window.confirm(
+          "Restaurar este backup salvo?\n\n" +
+          "Os dados atuais do sistema serão substituídos."
+        );
+
+        if (!ok) {
+          ev.preventDefault();
+          return;
+        }
+
+        const btn = form.querySelector("button[type='submit']");
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = "Restaurando...";
+        }
+      });
+    });
+
+    flashCloseButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const flash = btn.closest(".bk-flash");
+        if (!flash) return;
+        flash.style.opacity = "0";
+        flash.style.transform = "translateY(-6px)";
+        setTimeout(() => flash.remove(), 220);
+      });
+    });
+
+    const autoHideFlashes = Array.from(document.querySelectorAll(".bk-flash"));
+    autoHideFlashes.forEach((flash) => {
+      setTimeout(() => {
+        if (!flash.isConnected) return;
+        flash.style.transition = "opacity .25s ease, transform .25s ease";
+        flash.style.opacity = "0";
+        flash.style.transform = "translateY(-6px)";
+        setTimeout(() => flash.remove(), 250);
+      }, 6000);
+    });
+  })();
+</script>
+{% endblock %}

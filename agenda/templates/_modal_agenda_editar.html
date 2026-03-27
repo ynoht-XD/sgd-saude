@@ -4,7 +4,13 @@
 
   <section class="agenda-modal-panel" aria-modal="true">
     <header class="agenda-modal-head">
-      <h2 id="mae_titulo">Editar agendamento</h2>
+      <div class="agenda-modal-head-text">
+        <h2 id="mae_titulo">Editar agendamento</h2>
+        <p class="mae-sub">
+          Ajuste apenas as informações operacionais da agenda.
+        </p>
+      </div>
+
       <button type="button"
               class="agenda-modal-close"
               data-close="modal-agenda-editar"
@@ -18,22 +24,25 @@
         <input type="hidden" id="ag_edit_id">
 
         <div class="mae-grid">
+
           <div class="mae-col-6">
             <label for="ag_edit_paciente">Paciente</label>
             <input id="ag_edit_paciente" type="text" readonly>
-            <p class="mae-helper">Para horários vagos, o nome será exibido como “VAGO”.</p>
+            <p class="mae-helper">
+              Para horários vagos, o nome será exibido como “VAGO”.
+            </p>
           </div>
 
           <div class="mae-col-3">
             <label for="ag_edit_profissional">Profissional</label>
             <select id="ag_edit_profissional" required>
               <option value="">Selecione…</option>
-              {# será preenchido via JS com /agenda/api/profissionais #}
+              {# preenchido via JS com /agenda/api/profissionais #}
             </select>
           </div>
 
           <div class="mae-col-3">
-            <label for="ag_edit_dia">Dia da semana</label>
+            <label for="ag_edit_dia">Dia de referência</label>
             <select id="ag_edit_dia" required>
               {% for code, label in dow_labels %}
                 <option value="{{ code }}">{{ label }}</option>
@@ -49,18 +58,18 @@
           <div class="mae-col-3">
             <label for="ag_edit_hora_ate">Horário final</label>
             <input id="ag_edit_hora_ate" type="time" step="300">
-            <p class="mae-helper">Se vazio, o sistema pode assumir 30 minutos.</p>
+            <p class="mae-helper">
+              Se vazio, o sistema pode assumir 30 minutos.
+            </p>
           </div>
 
-          <div class="mae-col-3">
-            <label for="ag_edit_qtd">Qtd. de sessões</label>
-            <input id="ag_edit_qtd" type="number" min="1" value="1">
+          <div class="mae-col-6">
+            <label for="ag_edit_resumo">Resumo do vínculo</label>
+            <div id="ag_edit_resumo" class="mae-readonly">
+              A agenda mostra apenas o vínculo operacional. Sessões e valores ficam no comercial.
+            </div>
           </div>
 
-          <div class="mae-col-3">
-            <label for="ag_edit_valor">Valor por sessão</label>
-            <input id="ag_edit_valor" type="number" step="0.01" placeholder="0,00">
-          </div>
         </div>
 
         <p class="mae-msg" id="ag_edit_msg"></p>
@@ -71,6 +80,7 @@
                   data-close="modal-agenda-editar">
             Cancelar
           </button>
+
           <button type="submit" class="btn" id="btnAgendaSalvarEdicao">
             Salvar alterações
           </button>

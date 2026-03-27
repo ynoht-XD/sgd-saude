@@ -6,14 +6,18 @@
 {% endblock %}
 
 {% block content %}
-  <div class="admin-container">
+  <section class="admin-shell">
     <header class="admin-header">
-      <div class="admin-title">Painel Administrativo</div>
+      <h1>Painel Administrativo</h1>
       <nav class="admin-nav">
-        <a class="btn" href="{{ url_for('admin.admin_home') }}">Dashboard</a>
-        <a class="btn" href="{{ url_for('admin.usuarios_listar') }}">Usuários</a>
-        <a class="btn" href="{{ url_for('admin.modulos') }}">Módulos</a>
-        <a class="btn" href="{{ url_for('admin.backup') }}">Backup</a>
+        <a href="{{ url_for('admin.admin_home') }}">Dashboard</a>
+        <a href="{{ url_for('admin.usuarios_listar') }}">Usuários</a>
+        <a href="{{ url_for('admin.modulos') }}">Módulos</a>
+        <a href="{{ url_for('admin.backup') }}">Backup</a>
+        <a href="{{ url_for('auth.logout') }}">Sair</a>
+        <a href="{{ url_for('admin.cbos_listar') }}">CBO</a>
+        <a href="{{ url_for('procedimentos.pagina_base_procedimentos') }}">Procedimentos</a>
+
       </nav>
     </header>
 
@@ -27,9 +31,10 @@
       {% endif %}
     {% endwith %}
 
-    {# Conteúdo específico de cada página do admin #}
-    {% block admin_content %}{% endblock %}
-  </div>
+    <main class="admin-main">
+      {% block admin_content %}{% endblock %}
+    </main>
+  </section>
 {% endblock %}
 
 {% block extra_js %}

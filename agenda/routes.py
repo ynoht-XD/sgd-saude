@@ -1,4 +1,3 @@
-# agenda/routes.py
 from datetime import datetime, timedelta
 import sqlite3, io, csv
 from typing import Optional
@@ -7,12 +6,14 @@ from flask import render_template, request, jsonify, url_for, send_file
 from . import agenda_bp
 from db import conectar_db
 
-# ==================== utilidades mínimas ====================
+# ============================================================
+# UTILIDADES / CONSTANTES
+# ============================================================
 
-# Lista global de labels de dia da semana (0..6)
+# Labels 0..6 no padrão do SQLite (%w): 0=Dom..6=Sáb
 DOW_LABELS_PT = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
 
-# Usado no template (select de dias)
+# Usado no template da agenda
 DOW_LABELS = [(str(i), nome) for i, nome in enumerate(DOW_LABELS_PT)]
 
 
@@ -33,8 +34,13 @@ def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 def _ensure_agendamentos_table(conn: sqlite3.Connection):
     """
-    Garante a tabela 'agendamentos' no mínimo necessário para a agenda funcionar.
-    Não destrói nada, não recria se já existir.
+    Garante a tabela agendamentos com o mínimo necessário
+    para a agenda funcionar.
+
+    Importante:
+    - removemos a dependência funcional de 'recorrente'
+    - removemos a dependência funcional de 'valor_sessao'
+    - mantemos colunas antigas, se já existirem, para não quebrar banco legado
     """
     if _has_table(conn, "agendamentos"):
         return
@@ -69,7 +75,11 @@ def _ensure_agendamentos_table(conn: sqlite3.Connection):
 
 
 def _ensure_valor_col(conn: sqlite3.Connection):
-    """Garante a coluna valor_sessao na tabela agendamentos."""
+    """
+    Mantém compatibilidade com bancos antigos.
+    A agenda não vai mais usar 'valor_sessao' como regra do fluxo,
+    mas a coluna pode continuar existindo no banco sem problema.
+    """
     if not _has_table(conn, "agendamentos"):
         return
     if not _has_column(conn, "agendamentos", "valor_sessao"):
@@ -80,12 +90,8 @@ def _ensure_valor_col(conn: sqlite3.Connection):
 
 def _ensure_dia_col(conn: sqlite3.Connection):
     """
-    Garante a coluna dia na tabela agendamentos.
-
-    IMPORTANTE:
-      - Não faz mais backfill nem converte nada para data.
-      - A partir de agora, a coluna 'dia' será usada apenas para guardar
-        o NOME do dia ("Segunda", "Terça", ...), se você quiser olhar no SQLite.
+    Garante a coluna 'dia' com o nome do dia da semana.
+    Ex.: Segunda, Terça, Quarta...
     """
     if not _has_table(conn, "agendamentos"):
         return
@@ -97,8 +103,8 @@ def _ensure_dia_col(conn: sqlite3.Connection):
 
 def ensure_schema_agenda(conn: sqlite3.Connection):
     """
-    Um ponto único para garantir schema da agenda.
-    Pode ser chamado com segurança várias vezes.
+    Ponto único para garantir schema da agenda.
+    Seguro chamar várias vezes.
     """
     _ensure_agendamentos_table(conn)
     _ensure_valor_col(conn)
@@ -106,19 +112,25 @@ def ensure_schema_agenda(conn: sqlite3.Connection):
 
 
 def _parse_hhmm(s: str) -> Optional[tuple[int, int]]:
+    """
+    Converte HH:MM em tupla (hora, minuto).
+    """
     try:
         hh, mm = s.strip().split(":")
         hh, mm = int(hh), int(mm)
         if 0 <= hh <= 23 and 0 <= mm <= 59:
             return hh, mm
     except Exception:
-        return None
+        pass
     return None
 
 
 def _next_date_for_dow(ref: datetime, dow_dom: int) -> datetime:
-    """Retorna a próxima data (>= hoje) que cai no DOW solicitado. SQLite %w: 0=Dom..6=Sáb."""
-    today_w = (ref.weekday() + 1) % 7  # 0=Dom..6=Sáb
+    """
+    Retorna a próxima data (>= hoje) que cai no DOW solicitado.
+    SQLite %w: 0=Dom..6=Sáb.
+    """
+    today_w = (ref.weekday() + 1) % 7  # converte para 0=Dom..6=Sáb
     delta = (dow_dom - today_w) % 7
     return (ref + timedelta(days=delta)).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -130,7 +142,7 @@ def _combine_date_time(day: datetime, hh: int, mm: int) -> datetime:
 def _usuario_by_cpf(conn: sqlite3.Connection, cpf: str):
     """
     Resolve usuário/profissional pelo CPF.
-    Harden: se tabela usuarios não existir (primeiro boot), retorna None.
+    Se tabela usuarios não existir, retorna None.
     """
     if not _has_table(conn, "usuarios"):
         return None
@@ -149,6 +161,7 @@ def _usuario_by_cpf(conn: sqlite3.Connection, cpf: str):
     r = cur.fetchone()
     if not r:
         return None
+
     try:
         return {"nome": r["nome"], "cpf": r["cpf"]}
     except Exception:
@@ -156,29 +169,35 @@ def _usuario_by_cpf(conn: sqlite3.Connection, cpf: str):
 
 
 def _to_dt(val):
-    """Helper genérico p/ converter valor do SQLite em datetime."""
+    """
+    Converte valores comuns do SQLite para datetime.
+    """
     if val is None:
         return None
     if isinstance(val, datetime):
         return val
+
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
         try:
             return datetime.strptime(str(val), fmt)
         except Exception:
             continue
+
     try:
         return datetime.fromisoformat(str(val))
     except Exception:
         return None
 
 
-# ==================== /agenda (GET): formulário ====================
+# ============================================================
+# /agenda (GET) - PÁGINA
+# ============================================================
 
 @agenda_bp.route("/", methods=["GET"], endpoint="visualizar_agenda")
 def agenda_form():
     pacientes = []
+
     with conectar_db() as conn:
-        # garante schema/colunas (ANTES de qualquer coisa)
         ensure_schema_agenda(conn)
 
         cur = conn.cursor()
@@ -191,40 +210,50 @@ def agenda_form():
     return render_template("agenda.html", pacientes=pacientes, dow_labels=DOW_LABELS)
 
 
-# ==================== /agenda (POST): salvar ====================
+# ============================================================
+# /agenda (POST) - SALVAR AGENDAMENTO
+# ============================================================
 
 @agenda_bp.route("/", methods=["POST"], endpoint="agenda_salvar")
 def agenda_salvar():
     """
-    Salva N sessões semanais a partir do próximo dia escolhido.
+    Salva APENAS UM agendamento por vez.
+
     Espera JSON:
       {
-        "paciente_id": 123,                       // ou "paciente_nome": "FULANO"
-        "dia": "1",                               // 0=Dom..6=Sáb
+        "paciente_id": 123,                // ou "paciente_nome": "FULANO"
+        "dia": "1",                        // 0=Dom..6=Sáb
         "hora_de": "08:00",
-        "hora_ate": "08:30",                      // opcional; se vazio, usa +30min
-        "qtd": 8,                                 // quantidade de sessões (>=1)
-        "valor_sessao": 50.00,                    // opcional (REAL)
-        "profissional_cpf": "000.000.000-00"      // OBRIGATÓRIO (resolverá o nome)
+        "hora_ate": "08:30",               // opcional; se vazio, usa +30min
+        "profissional_cpf": "000.000.000-00"
       }
+
+    Mudança importante:
+    - removemos 'qtd'
+    - removemos a lógica de recorrência
+    - removemos o papel comercial da agenda
     """
     data = request.get_json(silent=True) or {}
+
     pac_id = data.get("paciente_id")
     pac_nome = (data.get("paciente_nome") or "").strip()
     dia = (data.get("dia") or "").strip()
     hora_de = (data.get("hora_de") or "").strip()
     hora_ate = (data.get("hora_ate") or "").strip()
-    qtd = int(data.get("qtd") or 1)
-    valor = data.get("valor_sessao")
     prof_cpf = (data.get("profissional_cpf") or "").strip()
+    observacao = (data.get("observacao") or "").strip()
 
     is_vago = pac_nome.upper() == "VAGO"
 
-    # validações básicas
+    # ------------------------------
+    # VALIDAÇÕES
+    # ------------------------------
     if not pac_id and not pac_nome and not is_vago:
         return jsonify({"error": "Informe o paciente."}), 400
+
     if not prof_cpf:
         return jsonify({"error": "Profissional é obrigatório."}), 400
+
     if not dia.isdigit() or not (0 <= int(dia) <= 6):
         return jsonify({"error": "Dia inválido. Use 0..6 (0=Dom..6=Sáb)."}), 400
 
@@ -233,14 +262,14 @@ def agenda_salvar():
         return jsonify({"error": "Horário inicial inválido. Use HH:MM."}), 400
 
     hhmm_ate = _parse_hhmm(hora_ate) if hora_ate else None
-    if qtd < 1:
-        return jsonify({"error": "Quantidade de sessões deve ser >= 1."}), 400
 
     with conectar_db() as conn:
         ensure_schema_agenda(conn)
         cur = conn.cursor()
 
-        # ================== resolve paciente ==================
+        # ------------------------------
+        # RESOLVE PACIENTE
+        # ------------------------------
         pid = None
         nome = None
 
@@ -269,70 +298,71 @@ def agenda_salvar():
                     return jsonify({"error": "Paciente não encontrado (nome)."}), 404
                 pid, nome = int(r[0]), r[1]
 
-        # ================== resolve profissional por CPF ==================
+        # ------------------------------
+        # RESOLVE PROFISSIONAL
+        # ------------------------------
         u = _usuario_by_cpf(conn, prof_cpf)
         if not u:
             return jsonify({"error": "Profissional (CPF) não encontrado ou inativo."}), 400
+
         prof_nome = u["nome"]
         prof_cpf = u["cpf"]
 
-        # base date (próxima ocorrência do DOW)
-        dow = int(dia)  # 0..6
+        # ------------------------------
+        # MONTA DATA/HORA DO AGENDAMENTO
+        # ------------------------------
+        dow = int(dia)
         today = datetime.now()
         base_day = _next_date_for_dow(today, dow)
 
-        # duração
         if hhmm_ate:
             dur_min = (hhmm_ate[0] - hhmm_de[0]) * 60 + (hhmm_ate[1] - hhmm_de[1])
             if dur_min <= 0:
                 return jsonify({"error": "Horário final deve ser após o inicial."}), 400
         else:
-            dur_min = 30  # padrão
+            dur_min = 30
 
-        # insere N sessões semanais
-        created_ids = []
-        for i in range(qtd):
-            day_i = base_day + timedelta(weeks=i)
-            ini_dt = _combine_date_time(day_i, hhmm_de[0], hhmm_de[1])
-            fim_dt = ini_dt + timedelta(minutes=dur_min)
-            dow_dom_val = ((ini_dt.weekday() + 1) % 7)  # 0=Dom..6=Sáb
+        ini_dt = _combine_date_time(base_day, hhmm_de[0], hhmm_de[1])
+        fim_dt = ini_dt + timedelta(minutes=dur_min)
+        dow_dom_val = ((ini_dt.weekday() + 1) % 7)
 
-            # coluna 'dia' vai receber o NOME do dia
-            try:
-                dia_label = DOW_LABELS_PT[dow_dom_val]
-            except Exception:
-                dia_label = ""
+        try:
+            dia_label = DOW_LABELS_PT[dow_dom_val]
+        except Exception:
+            dia_label = ""
 
-            cur.execute(
-                """
-                INSERT INTO agendamentos
-                   (paciente,
-                    profissional,
-                    profissional_cpf,
-                    inicio,
-                    fim,
-                    dia,
-                    observacao,
-                    status,
-                    recorrente,
-                    serie_uid,
-                    dow_dom,
-                    valor_sessao)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, 'ativo', 0, NULL, ?, ?);
-                """,
-                (
-                    nome,
-                    prof_nome,
-                    prof_cpf,
-                    ini_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    fim_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    dia_label,
-                    dow_dom_val,
-                    valor,
-                ),
-            )
-            created_ids.append(cur.lastrowid)
-
+        # ------------------------------
+        # INSERE UM AGENDAMENTO
+        # ------------------------------
+        cur.execute(
+            """
+            INSERT INTO agendamentos
+               (paciente,
+                profissional,
+                profissional_cpf,
+                inicio,
+                fim,
+                dia,
+                observacao,
+                status,
+                recorrente,
+                serie_uid,
+                dow_dom,
+                valor_sessao)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ativo', 0, NULL, ?, NULL);
+            """,
+            (
+                nome,
+                prof_nome,
+                prof_cpf,
+                ini_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                fim_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                dia_label,
+                observacao or None,
+                dow_dom_val,
+            ),
+        )
+        created_id = cur.lastrowid
         conn.commit()
 
         redirect_url = None
@@ -345,21 +375,25 @@ def agenda_salvar():
     return jsonify(
         {
             "ok": True,
-            "criados": created_ids,
+            "criado": created_id,
             "paciente": {"id": pid, "nome": nome},
             "redirect": redirect_url,
         }
     ), 201
 
 
-# ==================== API: profissionais (para o select) ====================
+# ============================================================
+# API - PROFISSIONAIS
+# ============================================================
 
 @agenda_bp.get("/api/profissionais", endpoint="api_profissionais")
 def api_profissionais():
-    """Retorna [{nome, cpf}] de usuários ativos com CPF."""
+    """
+    Retorna profissionais ativos com CPF:
+    [{nome, cpf}]
+    """
     try:
         with conectar_db() as conn:
-            # padrão: garante schema (não é obrigatório aqui, mas mantém consistência)
             ensure_schema_agenda(conn)
 
             cur = conn.cursor()
@@ -373,27 +407,34 @@ def api_profissionais():
                 """
             )
             rows = cur.fetchall()
+
             out = []
             for r in rows:
                 try:
                     out.append({"nome": r["nome"], "cpf": r["cpf"]})
                 except Exception:
                     out.append({"nome": r[0], "cpf": r[1]})
+
         return jsonify(out)
     except Exception as e:
         return jsonify({"error": "Falha ao listar profissionais", "detail": str(e)}), 500
 
 
-# ==================== API: agregados para listagem da UI ====================
+# ============================================================
+# API - AGREGADOS DA AGENDA
+# ============================================================
 
 @agenda_bp.get("/api/agregados", endpoint="api_agregados")
 def api_agregados():
     """
-    Lista agregada do que há no banco, agrupando por:
-      - dow (0=Dom..6=Sáb)
-      - horário de início (HH:MM)
-      - profissional
-      - paciente
+    Lista agregada da agenda, mas agora puxando a quantidade de sessões
+    do módulo comercial/financeiro e NÃO da contagem de agendamentos.
+
+    Regras:
+    - qtd_agendamentos = quantidade de registros na agenda
+    - qtd_sessoes = sessoes_contratadas do vínculo ativo no financeiro
+    - sessoes_usadas = vindo do financeiro
+    - sessoes_restantes = contratado - usadas
     """
     try:
         qp = request.args
@@ -411,12 +452,16 @@ def api_agregados():
             ensure_schema_agenda(conn)
             cur = conn.cursor()
 
+            # ------------------------------
+            # MAPEIA COLUNAS DISPONÍVEIS
+            # ------------------------------
             cur.execute("PRAGMA table_info(agendamentos);")
             cols_ag = {row[1] for row in cur.fetchall()}
 
             cur.execute("PRAGMA table_info(pacientes);")
             cols_pac = {row[1] for row in cur.fetchall()}
 
+            has_financeiro = _has_table(conn, "financeiro_paciente_planos")
             has_dow = "dow_dom" in cols_ag
             has_prof_cpf = "profissional_cpf" in cols_ag
             has_pront = "prontuario" in cols_pac
@@ -432,6 +477,9 @@ def api_agregados():
 
             dow_expr = "a.dow_dom" if has_dow else "CAST(strftime('%w', a.inicio) AS INTEGER)"
 
+            # ------------------------------
+            # FILTROS
+            # ------------------------------
             where_clauses = [
                 "TRIM(COALESCE(a.paciente,'')) <> ''",
                 "TRIM(COALESCE(a.profissional,'')) <> ''",
@@ -478,23 +526,55 @@ def api_agregados():
 
             where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
+            # ------------------------------
+            # CAMPOS EXTRAS
+            # ------------------------------
             select_pront = ", MIN(p.prontuario) AS prontuario" if has_pront else ""
             select_dia = ", MIN(a.dia) AS dia_data" if has_dia else ""
 
+            # Se existir financeiro, busca as sessões do vínculo ativo
+            select_fin = ""
+            join_fin = ""
+            if has_financeiro:
+                select_fin = """
+                    , MAX(COALESCE(fp.sessoes_contratadas, 0)) AS qtd_sessoes
+                    , MAX(COALESCE(fp.sessoes_usadas, 0)) AS sessoes_usadas
+                    , MAX(COALESCE(fp.combo_nome, fp.nome_plano, '')) AS nome_combo
+                    , MAX(COALESCE(fp.status, '')) AS status_comercial
+                """
+                join_fin = """
+                    LEFT JOIN financeiro_paciente_planos fp
+                           ON fp.paciente_id = p.id
+                          AND COALESCE(fp.status, 'ativo') = 'ativo'
+                """
+            else:
+                select_fin = """
+                    , 0 AS qtd_sessoes
+                    , 0 AS sessoes_usadas
+                    , '' AS nome_combo
+                    , '' AS status_comercial
+                """
+                join_fin = ""
+
+            # ------------------------------
+            # QUERY PRINCIPAL
+            # ------------------------------
             sql = f"""
                 SELECT
                     {dow_expr} AS dow,
                     strftime('%H:%M', a.inicio) AS hora_ini,
                     a.profissional,
                     a.paciente,
-                    COUNT(*) AS qtd,
+                    COUNT(*) AS qtd_agendamentos,
                     MIN(a.id) AS any_id,
                     MIN(p.id) AS paciente_id
                     {select_pront}
                     {select_dia}
+                    {select_fin}
                 FROM agendamentos a
                 LEFT JOIN pacientes p
                        ON TRIM(UPPER(a.paciente)) = TRIM(UPPER(p.nome))
+                {join_fin}
                 WHERE {where_sql}
                 GROUP BY {dow_expr}, strftime('%H:%M', a.inicio), a.profissional, a.paciente
                 ORDER BY dow ASC, hora_ini ASC, a.profissional ASC, a.paciente ASC;
@@ -510,31 +590,26 @@ def api_agregados():
                     hora_ini = r["hora_ini"]
                     prof = r["profissional"]
                     pac = r["paciente"]
-                    qtd = r["qtd"]
+                    qtd_agendamentos = r["qtd_agendamentos"]
                     any_id = r["any_id"]
                     paciente_id = r["paciente_id"]
                     pront = r["prontuario"] if has_pront else None
                     dia_data = r["dia_data"] if has_dia else None
+                    qtd_sessoes = r["qtd_sessoes"]
+                    sessoes_usadas = r["sessoes_usadas"]
+                    nome_combo = r["nome_combo"]
+                    status_comercial = r["status_comercial"]
                 except Exception:
-                    if has_pront and has_dia:
-                        dow, hora_ini, prof, pac, qtd, any_id, paciente_id, pront, dia_data = r
-                    elif has_pront and not has_dia:
-                        dow, hora_ini, prof, pac, qtd, any_id, paciente_id, pront = r
-                        dia_data = None
-                    elif (not has_pront) and has_dia:
-                        dow, hora_ini, prof, pac, qtd, any_id, paciente_id, dia_data = r
-                        pront = None
-                    else:
-                        dow, hora_ini, prof, pac, qtd, any_id, paciente_id = r
-                        pront = None
-                        dia_data = None
+                    continue
 
-                dia_label = "—"
-                if dow is not None:
-                    try:
-                        dia_label = DOW_LABELS_PT[int(dow)]
-                    except Exception:
-                        dia_label = "—"
+                try:
+                    dia_label = DOW_LABELS_PT[int(dow)]
+                except Exception:
+                    dia_label = "—"
+
+                qtd_sessoes = int(qtd_sessoes or 0)
+                sessoes_usadas = int(sessoes_usadas or 0)
+                sessoes_restantes = max(qtd_sessoes - sessoes_usadas, 0)
 
                 out.append(
                     {
@@ -546,28 +621,40 @@ def api_agregados():
                         "paciente": pac or "—",
                         "paciente_id": int(paciente_id) if paciente_id is not None else None,
                         "prontuario": pront,
-                        "qtd": int(qtd or 0),
+                        "qtd_agendamentos": int(qtd_agendamentos or 0),
+
+                        # AQUI está a mudança principal:
+                        "qtd": qtd_sessoes,  # mantém compatibilidade com o front antigo
+                        "qtd_sessoes": qtd_sessoes,
+                        "sessoes_usadas": sessoes_usadas,
+                        "sessoes_restantes": sessoes_restantes,
+
+                        "combo_nome": nome_combo or "",
+                        "status_comercial": status_comercial or "",
                         "any_id": int(any_id or 0),
                         "dia_data": dia_data,
                     }
                 )
 
         return jsonify(out)
+
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Falha ao listar agregados", "detail": str(e)}), 500
 
-
-# ==================== EXPORT: agregados para Excel/CSV ====================
+# ============================================================
+# EXPORT DOS AGREGADOS
+# ============================================================
 
 @agenda_bp.get("/api/agregados/export", endpoint="api_agregados_export")
 def api_agregados_export():
     """
-    Exporta a lista agregada (com os mesmos filtros) em XLSX;
-    se openpyxl não estiver disponível, exporta CSV.
+    Exporta a lista agregada em XLSX.
+    Se openpyxl não estiver disponível, cai para CSV.
     """
     resp = api_agregados()
+
     if isinstance(resp, tuple):
         data, status = resp
         if status != 200:
@@ -584,11 +671,12 @@ def api_agregados_export():
         ws = wb.active
         ws.title = "Agendamentos"
 
-        headers = ["Dia", "Horário", "Profissional", "Paciente", "Qtd. sessões"]
+        headers = ["Dia", "Horário", "Profissional", "Paciente", "Qtd. registros"]
         ws.append(headers)
+
         for cell in ws[1]:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center")
+          cell.font = Font(bold=True)
+          cell.alignment = Alignment(horizontal="center")
 
         for it in items:
             ws.append(
@@ -614,6 +702,7 @@ def api_agregados_export():
         bio = io.BytesIO()
         wb.save(bio)
         bio.seek(0)
+
         fname = f"agendamentos_agregados_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
         return send_file(
             bio,
@@ -621,10 +710,12 @@ def api_agregados_export():
             download_name=fname,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
     except ImportError:
         sio = io.StringIO()
         writer = csv.writer(sio, delimiter=";")
-        writer.writerow(["Dia", "Horário", "Profissional", "Paciente", "Qtd. sessões"])
+        writer.writerow(["Dia", "Horário", "Profissional", "Paciente", "Qtd. registros"])
+
         for it in items:
             writer.writerow(
                 [
@@ -635,17 +726,20 @@ def api_agregados_export():
                     it.get("qtd", 0),
                 ]
             )
+
         bio = io.BytesIO(sio.getvalue().encode("utf-8-sig"))
         fname = f"agendamentos_agregados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
         return send_file(bio, as_attachment=True, download_name=fname, mimetype="text/csv")
 
 
-# ==================== API: obter um agendamento (para edição) ====================
+# ============================================================
+# API - OBTER UM AGENDAMENTO
+# ============================================================
 
 @agenda_bp.get("/api/agendamentos/<int:ag_id>", endpoint="api_get_agendamento")
 def api_get_agendamento(ag_id: int):
     """
-    Retorna os dados de UM agendamento para preencher o modal de edição.
+    Retorna os dados de um agendamento para edição.
     """
     try:
         with conectar_db() as conn:
@@ -679,6 +773,7 @@ def api_get_agendamento(ag_id: int):
                 (ag_id,),
             )
             row = cur.fetchone()
+
             if not row:
                 return jsonify({"error": "Agendamento não encontrado."}), 404
 
@@ -712,10 +807,9 @@ def api_get_agendamento(ag_id: int):
                     "paciente": paciente,
                     "profissional": profissional,
                     "profissional_cpf": profissional_cpf,
-                    "dia": dia,  # 0..6
+                    "dia": dia,
                     "hora_de": hora_de,
                     "hora_ate": hora_ate,
-                    "qtd": 1,
                     "valor_sessao": float(valor_sessao) if valor_sessao is not None else None,
                 }
             )
@@ -725,20 +819,22 @@ def api_get_agendamento(ag_id: int):
         return jsonify({"error": "Falha ao carregar agendamento", "detail": str(e)}), 500
 
 
-# ==================== API: editar um agendamento (individual, por ID) ====================
+# ============================================================
+# API - EDITAR AGENDAMENTO
+# ============================================================
 
 @agenda_bp.put("/api/agendamentos/<int:ag_id>", endpoint="api_editar_agendamento")
 def api_editar_agendamento(ag_id: int):
     """
-    Edita apenas UM agendamento (id = ag_id).
+    Edita apenas UM agendamento.
     """
     data = request.get_json(silent=True) or {}
 
     dia_raw = (data.get("dia") or "").strip()
     hora_de = (data.get("hora_de") or "").strip()
     hora_ate = (data.get("hora_ate") or "").strip()
-    valor_sessao = data.get("valor_sessao", None)
     novo_prof_cpf = (data.get("profissional_cpf") or "").strip()
+    valor_sessao = data.get("valor_sessao", None)
 
     try:
         with conectar_db() as conn:
@@ -773,6 +869,7 @@ def api_editar_agendamento(ag_id: int):
                 (ag_id,),
             )
             row = cur.fetchone()
+
             if not row:
                 return jsonify({"error": "Agendamento não encontrado."}), 404
 
@@ -829,6 +926,7 @@ def api_editar_agendamento(ag_id: int):
 
             novo_prof_nome = profissional
             novo_prof_cpf_resolvido = profissional_cpf_atual
+
             if novo_prof_cpf:
                 u = _usuario_by_cpf(conn, novo_prof_cpf)
                 if not u:
@@ -848,6 +946,7 @@ def api_editar_agendamento(ag_id: int):
 
             set_parts.append("inicio = ?")
             params_up.append(dt_ini_new.strftime("%Y-%m-%d %H:%M:%S"))
+
             set_parts.append("fim = ?")
             params_up.append(dt_fim_new.strftime("%Y-%m-%d %H:%M:%S"))
 
@@ -875,9 +974,6 @@ def api_editar_agendamento(ag_id: int):
                 set_parts.append("profissional = ?")
                 params_up.append(novo_prof_nome)
 
-            if not set_parts:
-                return jsonify({"ok": True, "updated_id": ag_id, "note": "Nada para atualizar."})
-
             sql_up = f"UPDATE agendamentos SET {', '.join(set_parts)} WHERE id = ?;"
             params_up.append(ag_id)
 
@@ -885,13 +981,16 @@ def api_editar_agendamento(ag_id: int):
             conn.commit()
 
         return jsonify({"ok": True, "updated_id": ag_id})
+
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Falha ao editar agendamento", "detail": str(e)}), 500
 
 
-# ==================== API: excluir um agendamento (individual) ====================
+# ============================================================
+# API - EXCLUIR AGENDAMENTO INDIVIDUAL
+# ============================================================
 
 @agenda_bp.delete("/api/agendamentos/<int:ag_id>", endpoint="api_excluir_agendamento")
 def api_excluir_agendamento(ag_id: int):
@@ -903,6 +1002,7 @@ def api_excluir_agendamento(ag_id: int):
             cur.execute("DELETE FROM agendamentos WHERE id = ?;", (ag_id,))
             deleted = cur.rowcount or 0
             conn.commit()
+
         return jsonify({"ok": True, "deleted_id": ag_id, "deleted": deleted})
     except Exception as e:
         import traceback
@@ -910,17 +1010,20 @@ def api_excluir_agendamento(ag_id: int):
         return jsonify({"error": "Falha ao excluir agendamento", "detail": str(e)}), 500
 
 
-# ==================== API: excluir um GRUPO agregado ====================
+# ============================================================
+# API - EXCLUIR GRUPO AGREGADO
+# ============================================================
 
 @agenda_bp.delete("/api/agregados", endpoint="api_excluir_grupo")
 def api_excluir_grupo():
     """
-    Exclui todos os agendamentos que compõem um grupo agregado:
-      Parâmetros (query):
-        - dow (0..6)  [obrigatório]
-        - hora_ini (HH:MM)  [obrigatório]
-        - profissional (nome exato)  [obrigatório]
-        - paciente (nome exato)  [obrigatório]
+    Exclui todos os agendamentos que compõem um grupo agregado.
+
+    Query params:
+      - dow (0..6)  [obrigatório]
+      - hora_ini (HH:MM) [obrigatório]
+      - profissional (nome exato) [obrigatório]
+      - paciente (nome exato) [obrigatório]
     """
     try:
         dow = request.args.get("dow", "").strip()
@@ -930,8 +1033,10 @@ def api_excluir_grupo():
 
         if not (dow.isdigit() and 0 <= int(dow) <= 6):
             return jsonify({"error": "Parâmetro 'dow' inválido (0..6)."}), 400
+
         if len(hora_ini) != 5 or ":" not in hora_ini:
             return jsonify({"error": "Parâmetro 'hora_ini' deve ser HH:MM."}), 400
+
         if not prof or not pac:
             return jsonify({"error": "Parâmetros 'profissional' e 'paciente' são obrigatórios."}), 400
 

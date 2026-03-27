@@ -4,34 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- ============================================================
-       TÍTULO PADRÃO
-       ============================================================ -->
   <title>SGD</title>
 
-  <!-- ============================================================
-       CSS GLOBAL (base do sistema)
-       ============================================================ -->
   <link rel="stylesheet" href="/static/css/base.css">
-
-  {# CSS específico por página #}
   {% block extra_css %}{% endblock %}
 </head>
 
-<body class="has-slim-topbar">
-
-  {# ============================================================
-     CONTROLE CENTRALIZADO DE ROLES / PERMISSÕES
-     ============================================================ #}
+<body class="has-slim-topbar app-shell">
 
   {% set role = (session.get('role') or '')|upper %}
 
-  {# Flags principais #}
   {% set is_admin        = (role == 'ADMIN') %}
   {% set is_recepcao     = (role in ['RECEPCAO', 'RECEPÇÃO']) %}
   {% set is_profissional = (role in ['PROFISSIONAL', 'PROFISSIONAIS']) %}
 
-  {# Permissões por módulo #}
   {% set can_agenda      = is_admin or is_recepcao or is_profissional %}
   {% set can_cadastro    = is_admin or is_recepcao or is_profissional %}
   {% set can_lista       = is_admin or is_recepcao or is_profissional %}
@@ -40,35 +26,30 @@
   {% set can_digitador   = is_admin or is_profissional %}
   {% set can_registros   = is_admin %}
   {% set can_export      = is_admin %}
-
-  {# ============================================================
-     ✅ AVALIAÇÕES
-     - Apenas ADMIN e PROFISSIONAL
-     ============================================================ #}
   {% set can_avaliacoes  = is_admin or is_profissional %}
+  {% set can_comercial   = is_admin or is_recepcao %}
 
-  {# ============================================================
-     URL HOME PADRÃO
-     ============================================================ #}
   {% if is_admin %}
     {% set home_url = url_for('admin.admin_home') %}
   {% else %}
     {% set home_url = url_for('atendimentos.lista_atendimentos') %}
   {% endif %}
 
-  <!-- ============================================================
-       TOPBAR
-       ============================================================ -->
   <div class="topbar-slim">
     <div class="topbar-slim__left">
+      <button class="mobile-menu-btn" type="button" aria-label="Abrir menu" id="mobileMenuBtn">
+        ☰
+      </button>
+
       <a class="topbar-slim__brand" href="{{ home_url }}">
-        Sistema de Gestão de Dados
+        <span class="brand-mark">SGD</span>
+        <span class="brand-text">Sistema de Gestão de Dados</span>
       </a>
     </div>
 
     <div class="topbar-slim__right">
       {% if session.get('user_id') %}
-        <div class="user-info">
+        <div class="user-info modern-user-info">
           <div class="avatar">
             {{ (session.get('nome') or 'U')[:1] }}
           </div>
@@ -84,28 +65,22 @@
     </div>
   </div>
 
-  <!-- ============================================================
-       APP WRAPPER
-       ============================================================ -->
   <div class="app">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-    <!-- ===========================
-         SIDEBAR
-         =========================== -->
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar modern-sidebar is-collapsed" id="sidebar">
       <div class="sidebar-header">
-        <h2>SGD</h2>
-        <button class="toggle-btn" type="button" aria-label="Abrir menu">
-          ☰
+
+
+        <button class="toggle-btn" type="button" aria-label="Fechar menu" id="sidebarToggleBtn">
+          ✕
         </button>
       </div>
 
-      <!-- ===========================
-           MENU PRINCIPAL
-           =========================== -->
+      <div class="sidebar-section-label">Navegação</div>
+
       <ul class="menu">
 
-        <!-- HOME -->
         <li>
           <a href="{{ url_for('index') }}">
             <span class="ico">🏠</span>
@@ -113,7 +88,6 @@
           </a>
         </li>
 
-        <!-- AGENDA -->
         {% if can_agenda %}
         <li>
           <a href="{{ url_for('agenda.visualizar_agenda') }}">
@@ -123,7 +97,6 @@
         </li>
         {% endif %}
 
-        <!-- MEUS ATENDIMENTOS -->
         {% if is_admin or is_profissional %}
         <li>
           <a href="{{ url_for('meus_atendimentos.index') }}">
@@ -133,7 +106,6 @@
         </li>
         {% endif %}
 
-        <!-- CADASTRO -->
         {% if can_cadastro %}
         <li>
           <a href="{{ url_for('cadastro.cadastrar_paciente') }}">
@@ -143,7 +115,6 @@
         </li>
         {% endif %}
 
-        <!-- LISTA DE ATENDIMENTOS -->
         {% if can_lista %}
         <li>
           <a href="{{ url_for('atendimentos.lista_atendimentos') }}">
@@ -153,11 +124,6 @@
         </li>
         {% endif %}
 
-        <!-- ======================================================
-             ✅ AVALIAÇÕES
-             - Hub geral: Anamnese, Social, TO, Psicologia,
-               Enfermagem e Fono
-             ====================================================== -->
         {% if can_avaliacoes %}
         <li>
           <a href="{{ url_for('avaliacoes.index') }}">
@@ -167,7 +133,6 @@
         </li>
         {% endif %}
 
-        <!-- PACIENTES -->
         {% if can_pacientes %}
         <li>
           <a href="{{ url_for('pacientes.listar_pacientes') }}">
@@ -177,7 +142,6 @@
         </li>
         {% endif %}
 
-        <!-- PTS -->
         {% if can_pts %}
         <li>
           <a href="{{ url_for('pts.pts_visualizar') }}">
@@ -187,7 +151,6 @@
         </li>
         {% endif %}
 
-        <!-- REGISTROS -->
         {% if can_registros %}
         <li>
           <a href="{{ url_for('registros.pagina_registros') }}">
@@ -197,7 +160,56 @@
         </li>
         {% endif %}
 
-        <!-- ADMIN -->
+        {% if can_comercial %}
+        <li class="menu-group">
+          <a href="#" class="menu-toggle" data-menu-toggle="comercial" aria-expanded="false">
+            <span class="ico">💼</span>
+            <span class="txt">Comercial</span>
+            <span class="chev">▾</span>
+          </a>
+
+          <ul class="submenu" id="submenu-comercial" hidden>
+            <li>
+              <a href="{{ url_for('financeiro.financeiro_index') }}">
+                <span class="ico">💰</span>
+                <span class="txt">Financeiro</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('financeiro.comercial_index') }}">
+                <span class="ico">🧩</span>
+                <span class="txt">Combos</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+        {% endif %}
+
+        {% if can_export %}
+        <li class="menu-group">
+          <a href="#" class="menu-toggle" data-menu-toggle="exportacoes" aria-expanded="false">
+            <span class="ico">📦</span>
+            <span class="txt">Exportações</span>
+            <span class="chev">▾</span>
+          </a>
+
+          <ul class="submenu" id="submenu-exportacoes" hidden>
+            <li>
+              <a href="{{ url_for('export.bpa_form') }}">
+                <span class="ico">🧾</span>
+                <span class="txt">BPA-i</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('export.apac_atualizar') }}">
+                <span class="ico">📄</span>
+                <span class="txt">APAC</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+        {% endif %}
+
         {% if is_admin %}
         <li>
           <a href="{{ url_for('admin.admin_home') }}">
@@ -206,25 +218,19 @@
           </a>
         </li>
         {% endif %}
-
       </ul>
+
+      <div class="sidebar-footer">
+
+      </div>
     </aside>
 
-    <!-- ===========================
-         CONTEÚDO PRINCIPAL
-         =========================== -->
-    <main class="main-content" id="mainContent">
+    <main class="main-content modern-main-content" id="mainContent">
       {% block content %}{% endblock %}
     </main>
-
   </div>
 
-  <!-- ============================================================
-       JS GLOBAL DO LAYOUT
-       ============================================================ -->
   <script src="/static/js/layout.js"></script>
-
-  {# JS específico por página #}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

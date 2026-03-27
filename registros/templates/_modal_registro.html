@@ -8,7 +8,6 @@
         <h3 id="mr_titulo">Detalhes do atendimento</h3>
         <p class="mr-sub" id="mr_subtitle">—</p>
 
-        <!-- “Meta chips” (preenche via JS se quiser) -->
         <div class="mr-meta">
           <span class="mr-badge" id="mr_badge_data">📅 —</span>
           <span class="mr-badge" id="mr_badge_status">✅ —</span>
@@ -35,11 +34,11 @@
       </nav>
 
       <div class="mr-panels">
+
         <!-- ABA ATENDIMENTO -->
         <div class="mr-panel is-active" data-panel="atendimento" aria-label="Detalhes do atendimento">
           <div class="mr-grid-atend">
 
-            <!-- Cards principais -->
             <div class="mr-cards">
               <div class="mr-card">
                 <div class="mr-k">Profissional</div>
@@ -96,7 +95,6 @@
                   <div class="mr-evo-hint">Texto do atendimento (rolagem interna)</div>
                 </div>
 
-                <!-- opcional: botão de copiar (tu pode ligar via JS) -->
                 <button type="button" class="mr-mini" id="mr_btn_copiar_evo" title="Copiar evolução">
                   📎 Copiar
                 </button>
@@ -105,10 +103,6 @@
               <div class="mr-evolucao" id="mr_evolucao">—</div>
             </section>
 
-            <hr class="mr-sep" />
-
-            <h4 class="mr-subtitle">Outros dados do registro</h4>
-            <div class="mr-kv" id="mr_kv"></div>
           </div>
         </div>
 
@@ -119,14 +113,17 @@
               <div class="mr-k">Nome completo</div>
               <div class="mr-v" id="mr_paciente">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Prontuário</div>
               <div class="mr-v" id="mr_prontuario">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Idade</div>
               <div class="mr-v" id="mr_paciente_idade">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Módulo / Modalidade</div>
               <div class="mr-v" id="mr_paciente_mod">—</div>
@@ -136,31 +133,36 @@
               <div class="mr-k">CPF</div>
               <div class="mr-v" id="mr_pac_cpf">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">CNS</div>
               <div class="mr-v" id="mr_pac_cns">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Data de nascimento</div>
               <div class="mr-v" id="mr_pac_nasc">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Sexo</div>
               <div class="mr-v" id="mr_pac_sexo">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Telefone</div>
               <div class="mr-v" id="mr_pac_tel">—</div>
             </div>
+
             <div class="mr-card">
               <div class="mr-k">Cidade</div>
               <div class="mr-v" id="mr_pac_cidade">—</div>
             </div>
+
             <div class="mr-card mr-card--wide">
               <div class="mr-k">Endereço</div>
               <div class="mr-v" id="mr_pac_endereco">—</div>
             </div>
-
           </div>
         </div>
 

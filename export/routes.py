@@ -233,7 +233,7 @@ def build_body_line(row: pd.Series, competencia_yyyymm: str, folha: int, linha: 
     comp6 = competencia_yyyymm[:6] if competencia_yyyymm else "000000"
     cns_prof15 = _pad_left_zeros(_clean(row.get("prd-cnsmed", "")), 15)
     cbo6  = _pad_left_zeros(_clean(row.get("prd-cbo", "")), 6)
-    dt8 = _date_to_ddmmaaaa(row.get("prd-dtaten", "")) or "00000000"
+    dt8 = _date_to_yyyymmdd(row.get("prd-dtaten", "")) or "00000000"
 
     folha3 = str(int(folha)).zfill(3)
     linha2 = str(int(linha)).zfill(2)
@@ -251,7 +251,8 @@ def build_body_line(row: pd.Series, competencia_yyyymm: str, folha: int, linha: 
     org_val = _upper(_clean(row.get("prd-org", ""))) or "BPA"
     org3 = _pad_right(org_val, 3)[:3]
     nmpac30 = _pad_right(_upper(_clean(row.get("prd-nmpac", ""))), 30)
-    dtnasc8 = _date_to_ddmmaaaa(row.get("prd-dtnasc", "")) or "00000000"
+    dtnasc8 = _date_to_yyyymmdd(row.get("prd-dtnasc", "")) or "00000000"
+
 
     raca2 = _pad_left_zeros(_clean(row.get("prd-raca", "")), 2)
     etnia4 = " " * 4

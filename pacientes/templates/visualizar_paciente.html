@@ -112,15 +112,14 @@
     {% endif %}
 
 
-      {# ---------- Séries / Pacotes (simples) ---------- #}
+      {# ---------- Séries / Pacotes (SIMPLIFICADO) ---------- #}
       <div class="section-sub">Séries / Pacotes</div>
+
       {% if series_resumo and series_resumo|length > 0 %}
         <table class="tabela">
           <thead>
             <tr>
               <th>Profissional</th>
-              <th>Total de sessões</th>
-              <th>Faltam</th>
               <th>Dia</th>
               <th>Horário</th>
             </tr>
@@ -128,11 +127,15 @@
           <tbody>
             {% for s in series_resumo %}
               <tr>
-                <td>{{ s.profissional }}</td>
-                <td><strong>{{ s.total_sessoes }}</strong></td>
-                <td><strong>{{ s.sessoes_futuras }}</strong></td>
-                <td>{{ s.amostra_dia_semana or '—' }}</td>
-                <td>{{ s.amostra_hora or '—' }}</td>
+                <td><strong>{{ s.profissional }}</strong></td>
+                <td>
+                  <span class="badge">
+                    {{ s.amostra_dia_semana or '—' }}
+                  </span>
+                </td>
+                <td>
+                  {{ s.amostra_hora or '—' }}
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -141,40 +144,6 @@
         <p class="muted">Nenhuma série encontrada.</p>
       {% endif %}
 
-      {# ---------- Histórico completo (colapsável) ---------- #}
-      <details style="margin-top:10px;">
-        <summary class="toggle">Ver histórico completo</summary>
-        {% if agds_all and agds_all|length > 0 %}
-          <table class="tabela" style="margin-top:10px;">
-            <thead>
-              <tr>
-                <th>Dia</th>
-                <th>Horário</th>
-                <th>Profissional</th>
-                <th>Status</th>
-                <th>Recorrente</th>
-                <th>Série</th>
-                <th>Obs.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for a in agds_all %}
-                <tr>
-                  <td><span class="badge">{{ a.dia_semana or '—' }}</span> <span class="muted">{{ a.data_br }}</span></td>
-                  <td>{{ a.hora_ini }}{% if a.hora_fim %}–{{ a.hora_fim }}{% endif %}</td>
-                  <td>{{ a.profissional }}</td>
-                  <td>{{ a.status or '—' }}</td>
-                  <td>{{ 'Sim' if a.recorrente else 'Não' }}</td>
-                  <td>{{ a.serie_uid or '—' }}</td>
-                  <td class="muted">{{ a.observacao or '' }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p class="muted">Sem registros de histórico.</p>
-        {% endif %}
-      </details>
     </section>
     {# ================== /Seção: Agendamentos =================== #}
 

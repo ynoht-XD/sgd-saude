@@ -396,6 +396,7 @@ def api_listar_atendimentos():
     sexo     = (request.args.get("sexo") or "").strip()
     cid      = (request.args.get("cid") or "").strip()
     cidade   = (request.args.get("cidade") or "").strip()
+
     try:
         limit = int(request.args.get("limit", 500))
     except ValueError:
@@ -407,18 +408,42 @@ def api_listar_atendimentos():
 
     sql, params = _montar_query_atendimentos(
         conn,
-        q=q, prof=prof,
-        data_ini=data_ini, data_fim=data_fim,
-        status=status, sexo=sexo, cid=cid, cidade=cidade,
+        q=q,
+        prof=prof,
+        data_ini=data_ini,
+        data_fim=data_fim,
+        status=status,
+        sexo=sexo,
+        cid=cid,
+        cidade=cidade,
         limit=limit,
     )
 
     cur.execute(sql, params)
     rows = cur.fetchall()
+
+    data = [_row_to_dict(r) for r in rows]
+
+    # ✅ enriquecer cada linha com dados do paciente e agendamento
+    pac_cache: dict = {}
+    ag_cache: dict = {}
+
+    for r in data:
+        _enrich_with_paciente(conn, r, pac_cache)
+        _enrich_with_agendamento(conn, r, ag_cache)
+
+        # fallback visual útil pra aba paciente
+        r["pac__nome"] = r.get("pac__nome") or r.get("paciente_nome") or r.get("nome") or ""
+        r["pac__cpf"] = r.get("pac__cpf") or r.get("paciente_cpf") or r.get("cpf") or ""
+        r["pac__cns"] = r.get("pac__cns") or r.get("paciente_cns") or r.get("cns") or r.get("cartao_sus") or ""
+        r["pac__nascimento"] = r.get("pac__nascimento") or r.get("paciente_nascimento") or r.get("nascimento") or r.get("data_nascimento") or ""
+        r["pac__status"] = r.get("pac__status") or r.get("status") or ""
+        r["pac__sexo"] = r.get("pac__sexo") or r.get("sexo") or ""
+        r["pac__cid"] = r.get("pac__cid") or r.get("cid") or ""
+        r["pac__municipio"] = r.get("pac__municipio") or r.get("cidade") or r.get("municipio") or ""
+
     conn.close()
-
-    return jsonify([_row_to_dict(r) for r in rows])
-
+    return jsonify(data)
 
 # =============================================================================
 # ✅ XLSX COMPLETÃO: atendimentos + pacientes + agendamentos
@@ -495,7 +520,11 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
     col_cns  = _pick_att_col(pcols, "cns", "paciente_cns", "cns_digits", "cartao_sus")
     col_nasc = _pick_att_col(pcols, "nascimento", "data_nascimento", "dt_nasc", "paciente_nascimento")
 
-    # extras que você pediu “pra vir tudo”
+    # ✅ ESTES DOIS ESTAVAM FALTANDO
+    col_pront = _pick_att_col(pcols, "prontuario", "prontuario_num")
+    col_idade = _pick_att_col(pcols, "idade")
+
+    # extras
     col_sexo = _pick_att_col(pcols, "sexo", "sex")
     col_tel  = _pick_att_col(pcols, "telefone", "telefone1", "paciente_telefone1", "celular")
     col_cep  = _pick_att_col(pcols, "cep", "paciente_cep")
@@ -504,6 +533,19 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
     col_bai  = _pick_att_col(pcols, "bairro", "paciente_bairro")
     col_mun  = _pick_att_col(pcols, "municipio", "cidade", "paciente_municipio", "paciente_cidade")
     col_uf   = _pick_att_col(pcols, "uf")
+    col_mod  = _pick_att_col(pcols, "mod", "modalidade")
+    col_stat = _pick_att_col(pcols, "status", "situacao")
+    col_cid  = _pick_att_col(pcols, "cid", "cid_principal", "cid10")
+    col_cid2 = _pick_att_col(pcols, "cid2")
+    col_mae  = _pick_att_col(pcols, "mae", "nome_mae")
+    col_pai  = _pick_att_col(pcols, "pai", "nome_pai")
+    col_resp = _pick_att_col(pcols, "responsavel")
+    col_alerg = _pick_att_col(pcols, "alergias")
+    col_aviso = _pick_att_col(pcols, "aviso")
+    col_comorb = _pick_att_col(pcols, "comorbidades_json")
+    col_raca = _pick_att_col(pcols, "raca")
+    col_est_civil = _pick_att_col(pcols, "estado_civil")
+    col_compl = _pick_att_col(pcols, "complemento")
 
     if not col_id:
         return
@@ -514,15 +556,13 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
     nome = base_row.get("paciente_nome") or base_row.get("nome_paciente") or base_row.get("nome") or ""
     nasc = base_row.get("paciente_nascimento") or base_row.get("nascimento") or base_row.get("data_nascimento") or ""
 
-    pid_key = f"pid:{pid}".strip()
     cpf_d = _only_digits(str(cpf))
     cns_d = _only_digits(str(cns))
-    nasc_iso = _norm_date_param(str(nasc))  # aceita dd/mm e yyyy-mm
+    nasc_iso = _norm_date_param(str(nasc))
 
-    # cache key (prioriza id)
     cache_key = None
     if str(pid).strip():
-        cache_key = pid_key
+        cache_key = f"pid:{pid}"
     elif cpf_d:
         cache_key = f"cpf:{cpf_d}"
     elif cns_d:
@@ -538,12 +578,18 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
         cur = conn.cursor()
 
         fields = [col_id]
-        for c in [col_nome, col_cpf, col_cns, col_nasc, col_sexo, col_tel, col_cep, col_log, col_num, col_bai, col_mun, col_uf]:
+        for c in [
+            col_nome, col_cpf, col_cns, col_nasc, col_pront, col_idade,
+            col_sexo, col_tel, col_cep, col_log, col_num, col_bai, col_mun, col_uf,
+            col_mod, col_stat, col_cid, col_cid2, col_mae, col_pai, col_resp,
+            col_alerg, col_aviso, col_comorb, col_raca, col_est_civil, col_compl
+        ]:
             if c and c not in fields:
                 fields.append(c)
 
-        # 1) por id
         pac = None
+
+        # 1) por id
         if str(pid).strip() and str(pid).strip().isdigit():
             cur.execute(
                 f"SELECT {', '.join(fields)} FROM pacientes WHERE {col_id} = ? LIMIT 1",
@@ -551,35 +597,48 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
             )
             pac = cur.fetchone()
 
-        # 2) por cpf/cns/nome+nasc
-        if pac is None:
-            if col_cpf and cpf_d:
-                cur.execute(
-                    f"SELECT {', '.join(fields)} FROM pacientes WHERE REPLACE(REPLACE(REPLACE(REPLACE({col_cpf},'.',''),'-',''),' ',''),'/','') LIKE ? LIMIT 1",
-                    (f"%{cpf_d}%",),
-                )
-                pac = cur.fetchone()
+        # 2) por CPF
+        if pac is None and col_cpf and cpf_d:
+            cur.execute(
+                f"""
+                SELECT {', '.join(fields)}
+                  FROM pacientes
+                 WHERE REPLACE(REPLACE(REPLACE(REPLACE({col_cpf},'.',''),'-',''),' ',''),'/','') LIKE ?
+                 LIMIT 1
+                """,
+                (f"%{cpf_d}%",),
+            )
+            pac = cur.fetchone()
 
-        if pac is None:
-            if col_cns and cns_d:
-                cur.execute(
-                    f"SELECT {', '.join(fields)} FROM pacientes WHERE REPLACE(REPLACE(REPLACE(REPLACE({col_cns},'.',''),'-',''),' ',''),'/','') LIKE ? LIMIT 1",
-                    (f"%{cns_d}%",),
-                )
-                pac = cur.fetchone()
+        # 3) por CNS
+        if pac is None and col_cns and cns_d:
+            cur.execute(
+                f"""
+                SELECT {', '.join(fields)}
+                  FROM pacientes
+                 WHERE REPLACE(REPLACE(REPLACE(REPLACE({col_cns},'.',''),'-',''),' ',''),'/','') LIKE ?
+                 LIMIT 1
+                """,
+                (f"%{cns_d}%",),
+            )
+            pac = cur.fetchone()
 
-        if pac is None:
-            if col_nome and col_nasc and str(nome).strip() and nasc_iso:
-                cur.execute(
-                    f"SELECT {', '.join(fields)} FROM pacientes WHERE TRIM(LOWER({col_nome})) = TRIM(LOWER(?)) AND date({col_nasc}) = date(?) LIMIT 1",
-                    (str(nome).strip(), nasc_iso),
-                )
-                pac = cur.fetchone()
+        # 4) por nome + nascimento
+        if pac is None and col_nome and col_nasc and str(nome).strip() and nasc_iso:
+            cur.execute(
+                f"""
+                SELECT {', '.join(fields)}
+                  FROM pacientes
+                 WHERE TRIM(LOWER({col_nome})) = TRIM(LOWER(?))
+                   AND date({col_nasc}) = date(?)
+                 LIMIT 1
+                """,
+                (str(nome).strip(), nasc_iso),
+            )
+            pac = cur.fetchone()
 
-        # vira dict simples (por índice)
-        pac_dict: dict = {}
+        pac_dict = {}
         if pac is not None:
-            # mapeia pelo fields
             for i, fname in enumerate(fields):
                 try:
                     pac_dict[fname] = pac[i]
@@ -589,7 +648,6 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
         cache[cache_key] = pac_dict
         pac = pac_dict
 
-    # aplica no row (prefixado)
     if isinstance(pac, dict) and pac:
         if col_nome and col_nome in pac:
             base_row["pac__nome"] = pac.get(col_nome, "")
@@ -599,6 +657,12 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
             base_row["pac__cns"] = pac.get(col_cns, "")
         if col_nasc and col_nasc in pac:
             base_row["pac__nascimento"] = pac.get(col_nasc, "")
+
+        # ✅ AGORA VEM PRO MODAL
+        if col_pront and col_pront in pac:
+            base_row["pac__prontuario"] = pac.get(col_pront, "")
+        if col_idade and col_idade in pac:
+            base_row["pac__idade"] = pac.get(col_idade, "")
 
         if col_sexo and col_sexo in pac:
             base_row["pac__sexo"] = pac.get(col_sexo, "")
@@ -616,6 +680,32 @@ def _enrich_with_paciente(conn: sqlite3.Connection, base_row: dict, cache: dict)
             base_row["pac__municipio"] = pac.get(col_mun, "")
         if col_uf and col_uf in pac:
             base_row["pac__uf"] = pac.get(col_uf, "")
+        if col_mod and col_mod in pac:
+            base_row["pac__mod"] = pac.get(col_mod, "")
+        if col_stat and col_stat in pac:
+            base_row["pac__status"] = pac.get(col_stat, "")
+        if col_cid and col_cid in pac:
+            base_row["pac__cid"] = pac.get(col_cid, "")
+        if col_cid2 and col_cid2 in pac:
+            base_row["pac__cid2"] = pac.get(col_cid2, "")
+        if col_mae and col_mae in pac:
+            base_row["pac__mae"] = pac.get(col_mae, "")
+        if col_pai and col_pai in pac:
+            base_row["pac__pai"] = pac.get(col_pai, "")
+        if col_resp and col_resp in pac:
+            base_row["pac__responsavel"] = pac.get(col_resp, "")
+        if col_alerg and col_alerg in pac:
+            base_row["pac__alergias"] = pac.get(col_alerg, "")
+        if col_aviso and col_aviso in pac:
+            base_row["pac__aviso"] = pac.get(col_aviso, "")
+        if col_comorb and col_comorb in pac:
+            base_row["pac__comorbidades_json"] = pac.get(col_comorb, "")
+        if col_raca and col_raca in pac:
+            base_row["pac__raca"] = pac.get(col_raca, "")
+        if col_est_civil and col_est_civil in pac:
+            base_row["pac__estado_civil"] = pac.get(col_est_civil, "")
+        if col_compl and col_compl in pac:
+            base_row["pac__complemento"] = pac.get(col_compl, "")
 
 
 def _enrich_with_agendamento(conn: sqlite3.Connection, base_row: dict, cache: dict) -> None:
@@ -1355,3 +1445,344 @@ def exportar_evolucoes_pdf():
 
     finally:
         conn.close()
+
+
+
+
+# ==========================
+# BPA-i · Export XLSX (ordem fixa com hífen)
+# ==========================
+
+def _fmt_date_bpai_ddmmyyyy(v: str) -> str:
+    """
+    Retorna SEMPRE DD/MM/YYYY.
+    Aceita:
+      - ISO: YYYY-MM-DD[...]
+      - BR : DD/MM/YYYY[...]
+    """
+    s = _safe_str(v)
+    if not s:
+        return ""
+    s10 = s[:10]
+
+    # ISO
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", s10):
+        y, m, d = s10.split("-")
+        return f"{d}/{m}/{y}"
+
+    # BR
+    if re.match(r"^\d{2}/\d{2}/\d{4}$", s10):
+        return s10
+
+    # fallback: tenta limpar e devolver algo legível (mas não inventa)
+    return s10
+
+def _calc_idade_no_dia(nasc: str, data_at: str) -> str:
+    """
+    idade em anos no dia do atendimento (string).
+    """
+    n = _safe_str(nasc)
+    d = _safe_str(data_at)
+    if not n or not d:
+        return ""
+    n_iso = _norm_date_param(n[:10])
+    d_iso = _norm_date_param(d[:10])
+    try:
+        ny, nm, nd = int(n_iso[:4]), int(n_iso[5:7]), int(n_iso[8:10])
+        dy, dm, dd = int(d_iso[:4]), int(d_iso[5:7]), int(d_iso[8:10])
+        idade = dy - ny - ((dm, dd) < (nm, nd))
+        return str(max(0, idade))
+    except Exception:
+        return ""
+
+def _map_raca_to_codigo(raca: str) -> str:
+    """
+    Converte texto → código (2 dígitos).
+    Padrões comuns do e-SUS / BPA:
+      01 BRANCA
+      02 PRETA
+      03 PARDA
+      04 AMARELA
+      05 INDIGENA
+      99 IGNORADO/SEM INFORMACAO
+    Se já vier numérico, mantém com 2 dígitos.
+    """
+    s = _safe_str(raca).strip().lower()
+    if not s:
+        return "99"
+
+    # já é número
+    d = _only_digits(s)
+    if d:
+        if len(d) == 1:
+            return f"0{d}"
+        return d[:2]
+
+    m = {
+        "branca": "01", "branco": "01",
+        "preta": "02", "preto": "02", "negra": "02", "negro": "02",
+        "parda": "03", "pardo": "03",
+        "amarela": "04", "amarelo": "04",
+        "indigena": "05", "indígena": "05",
+        "ignorado": "99", "ignorada": "99",
+        "sem informacao": "99", "sem informação": "99",
+        "nao informado": "99", "não informado": "99",
+    }
+    return m.get(s, "99")
+
+# ====== CONFIG BPA-i (defaults que você pediu) ======
+BPAI_CFG = {
+    "prd-ident": "03",        # fixo
+    "prd-cnes": "",           # vazio (flexível)
+    "prd-ibge": "",           # resolve depois
+    "prd-org": "BPA",         # padrão BPA
+    "prd-qt": "000001",       # 6 chars
+    "prd-caten": "01",        # 2 chars
+    "prd-nac": "010",         # padrão
+    "prd-lograd-pcnte": "081",# padrão
+    # os abaixo ficam vazios por enquanto
+    "prd-naut": "",
+    "prd-srv": "",
+    "prd-clf": "",
+    "prd-equipe-seq": "",
+    "prd-equipe-area": "",
+    "prd-cnpj": "",
+    "prd-ine": "",
+}
+
+# ✅ ORDEM EXATA (com hífen)
+BPAI_COLS = [
+    "prd-ident","prd-cnes","prd-cnsmed","prd-cbo","prd-dtaten","prd-pa",
+    "prd-cnspac","prd-sexo","prd-ibge","prd-cid","prd-idade","prd-qt",
+    "prd-caten","prd-naut","prd-org","prd-nmpac","prd-dtnasc","prd-raca",
+    "prd-etnia","prd-nac","prd-srv","prd-clf","prd-equipe-seq","prd-equipe-area",
+    "prd-cnpj","prd-cep-pcnte","prd-lograd-pcnte","prd-end-pcnte","prd-compl-pcnte",
+    "prd-num-pcnte","prd-bairro-pcnte","prd-ddtel-pcnte","prd-email-pcnte","prd-ine"
+]
+
+def _fetch_paciente_dict(conn: sqlite3.Connection, paciente_id: Any) -> dict:
+    if not _has_table(conn, "pacientes"):
+        return {}
+    cols = _get_columns(conn, "pacientes")
+    if "id" not in cols:
+        return {}
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM pacientes WHERE id = ? LIMIT 1", (paciente_id,))
+    r = cur.fetchone()
+    if not r:
+        return {}
+    if isinstance(r, sqlite3.Row):
+        return {k: r[k] for k in r.keys()}
+    return {}
+
+def _fetch_prof_dict(conn: sqlite3.Connection, profissional_id: Any) -> dict:
+    if not _has_table(conn, "usuarios"):
+        return {}
+    cols = _get_columns(conn, "usuarios")
+    if "id" not in cols:
+        return {}
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM usuarios WHERE id = ? LIMIT 1", (profissional_id,))
+    r = cur.fetchone()
+    if not r:
+        return {}
+    if isinstance(r, sqlite3.Row):
+        return {k: r[k] for k in r.keys()}
+    return {}
+
+def _rows_bpai(conn: sqlite3.Connection, filtros: dict) -> list[dict]:
+    """
+    Gera 1 linha BPA por PROCEDIMENTO.
+    """
+    sql, params = _montar_query_atendimentos(
+        conn,
+        q=filtros.get("q",""),
+        prof=filtros.get("prof",""),
+        data_ini=filtros.get("data_ini",""),
+        data_fim=filtros.get("data_fim",""),
+        status=filtros.get("status",""),
+        sexo=filtros.get("sexo",""),
+        cid=filtros.get("cid",""),
+        cidade=filtros.get("cidade",""),
+        limit=filtros.get("limit", 50000),
+    )
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    at_rows = cur.fetchall()
+    at_list = [_row_to_dict(r) for r in at_rows]
+
+    out: list[dict] = []
+
+    for a in at_list:
+        atendimento_id = a.get("id")
+        paciente_id = a.get("paciente_id")
+        prof_id = a.get("profissional_id")
+
+        pac = _fetch_paciente_dict(conn, paciente_id) if paciente_id else {}
+        prof = _fetch_prof_dict(conn, prof_id) if prof_id else {}
+
+        # datas (DD/MM/YYYY)
+        dt_at_raw = a.get("data_atendimento") or a.get("data") or a.get("created_at") or ""
+        dt_aten = _fmt_date_bpai_ddmmyyyy(str(dt_at_raw))
+
+        nasc_raw = pac.get("nascimento") or a.get("nascimento") or ""
+        dt_nasc = _fmt_date_bpai_ddmmyyyy(str(nasc_raw))
+
+        # sexo/cid/idade
+        sexo_p = _safe_str(pac.get("sexo") or a.get("sexo") or "")
+        cid_p  = _safe_str(pac.get("cid")  or a.get("cid")  or "")
+        idade  = _safe_str(pac.get("idade") or "") or _calc_idade_no_dia(str(nasc_raw), str(dt_at_raw))
+
+        # endereço/contato
+        cep   = _safe_str(pac.get("cep") or "")
+        logr  = _safe_str(pac.get("logradouro") or pac.get("rua") or "")
+        compl = _safe_str(pac.get("complemento") or "")
+        numc  = _safe_str(pac.get("numero_casa") or pac.get("numero") or "")
+        bai   = _safe_str(pac.get("bairro") or "")
+        tel1  = _safe_str(pac.get("telefone1") or pac.get("telefone") or "")
+
+        # paciente ids
+        cnspac = _only_digits(pac.get("cns") or "")
+        nmpac  = _safe_str(pac.get("nome") or a.get("nome") or "")
+        raca   = _map_raca_to_codigo(pac.get("raca") or "")
+        etnia  = _safe_str(pac.get("etnia") or pac.get("perd_etnia") or pac.get("prd_etnia") or "")
+
+        # profissional ids
+        cnsmed = _only_digits(prof.get("cns") or a.get("cns_profissional") or "")
+        cbo    = _only_digits(prof.get("cbo") or a.get("cbo_profissional") or "")
+
+        # procedimentos
+        proc_list: list[tuple[str,str]] = []
+        if _has_table(conn, "atendimento_procedimentos") and atendimento_id:
+            cur2 = conn.cursor()
+            cur2.execute(
+                "SELECT COALESCE(codigo_sigtap,'') AS codigo, COALESCE(procedimento,'') AS nome "
+                "FROM atendimento_procedimentos WHERE atendimento_id = ? ORDER BY id ASC",
+                (atendimento_id,),
+            )
+            for rr in cur2.fetchall():
+                codigo = rr["codigo"] if isinstance(rr, sqlite3.Row) else rr[0]
+                nomep  = rr["nome"] if isinstance(rr, sqlite3.Row) else rr[1]
+                if _safe_str(codigo) or _safe_str(nomep):
+                    proc_list.append((_safe_str(codigo), _safe_str(nomep)))
+
+        if not proc_list:
+            proc_list.append((_safe_str(a.get("codigo_sigtap") or ""), _safe_str(a.get("procedimento") or "")))
+
+        for (codigo_sigtap, nome_proc) in proc_list:
+            row = {k: "" for k in BPAI_COLS}
+
+            # ===== Defaults/padrões exigidos =====
+            row["prd-ident"] = BPAI_CFG["prd-ident"]      # "03"
+            row["prd-cnes"]  = BPAI_CFG["prd-cnes"]       # vazio
+            row["prd-ibge"]  = BPAI_CFG["prd-ibge"]       # vazio (por enquanto)
+            row["prd-qt"]    = BPAI_CFG["prd-qt"]         # "000001"
+            row["prd-caten"] = BPAI_CFG["prd-caten"]      # "01"
+            row["prd-org"]   = BPAI_CFG["prd-org"]        # "BPA"
+            row["prd-nac"]   = BPAI_CFG["prd-nac"]        # "010"
+            row["prd-lograd-pcnte"] = BPAI_CFG["prd-lograd-pcnte"]  # "081"
+            row["prd-email-pcnte"]  = ""                  # vazio
+
+            # ===== Variáveis do atendimento/paciente/prof =====
+            row["prd-cnsmed"] = cnsmed
+            row["prd-cbo"]    = cbo
+            row["prd-dtaten"] = dt_aten
+
+            # prd-pa = código do procedimento (sigtap)
+            row["prd-pa"]     = codigo_sigtap
+
+            row["prd-cnspac"] = cnspac
+            row["prd-sexo"]   = (_safe_str(sexo_p)[:1].upper() if sexo_p else "")
+            row["prd-cid"]    = cid_p
+            # prd-idade como NÚMERO (Excel)
+            idade_num = None
+            try:
+                idade_num = int(str(idade).strip())
+            except Exception:
+                idade_num = None
+
+            row["prd-idade"] = idade_num if idade_num is not None else ""
+
+
+            row["prd-naut"]   = BPAI_CFG["prd-naut"]      # vazio
+            row["prd-nmpac"]  = nmpac
+            row["prd-dtnasc"] = dt_nasc
+            row["prd-raca"]   = raca
+            row["prd-etnia"]  = etnia
+
+            # campos que você pediu vazio por enquanto
+            row["prd-srv"]          = ""  # poderia ser nome_proc, mas você pediu vazio
+            row["prd-clf"]          = ""
+            row["prd-equipe-seq"]   = ""
+            row["prd-equipe-area"]  = ""
+            row["prd-cnpj"]         = ""
+            row["prd-ine"]          = ""
+
+            # endereço/contato
+            row["prd-cep-pcnte"]      = _only_digits(cep)
+            row["prd-end-pcnte"]      = logr  # aqui é LOGRADOURO (como você pediu)
+            row["prd-compl-pcnte"]    = compl
+            row["prd-num-pcnte"]      = numc
+            row["prd-bairro-pcnte"]   = bai
+            row["prd-ddtel-pcnte"]    = _only_digits(tel1)
+
+            out.append(row)
+
+    return out
+
+
+@registros_bp.get("/exportar_bpai_xlsx")
+def exportar_bpai_xlsx():
+    """
+    Exporta XLSX com colunas BPA-i NA ORDEM e NOMES com hífen.
+    """
+    filtros = {
+        "q": (request.args.get("q") or "").strip(),
+        "prof": (request.args.get("prof") or "").strip(),
+        "data_ini": (request.args.get("data_ini") or "").strip(),
+        "data_fim": (request.args.get("data_fim") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "sexo": (request.args.get("sexo") or "").strip(),
+        "cid": (request.args.get("cid") or "").strip(),
+        "cidade": (request.args.get("cidade") or "").strip(),
+    }
+    try:
+        filtros["limit"] = int(request.args.get("limit", 50000))
+    except ValueError:
+        filtros["limit"] = 50000
+
+    conn = conectar_db()
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = _rows_bpai(conn, filtros)
+    finally:
+        conn.close()
+
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({"error": "Instale o pacote 'openpyxl' para exportar XLSX."}), 500
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "BPAi"
+
+    ws.append(BPAI_COLS)
+
+    if not rows:
+        ws.append([""] * len(BPAI_COLS))
+    else:
+        for r in rows:
+            ws.append([r.get(c, "") for c in BPAI_COLS])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"bpai_{date.today().isoformat()}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

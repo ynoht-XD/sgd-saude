@@ -3,221 +3,785 @@
 
 {% block extra_css %}
 <style>
-/* ====== BASE ====== */
-.page-av{
-  max-width:min(1200px,96vw);
-  margin:18px auto 40px;
-  padding:0 12px 28px;
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-}
-.page-head{
-  display:flex;justify-content:space-between;align-items:flex-end;
-  gap:12px;flex-wrap:wrap;margin-bottom:16px;
-}
-.page-head h2{margin:0;font-size:22px;font-weight:900}
-.page-head p{margin:4px 0 0;color:#64748b;font-size:.95rem}
+  :root{
+    --av-bg:#f6f8fc;
+    --av-card:#ffffff;
+    --av-card-2:#fbfcff;
+    --av-text:#0f172a;
+    --av-muted:#64748b;
+    --av-border:#e5e7eb;
+    --av-border-strong:#dbe3ee;
+    --av-primary:#1d4ed8;
+    --av-primary-2:#4338ca;
+    --av-soft:#eef2ff;
+    --av-soft-2:#eff6ff;
+    --av-success:#059669;
+    --av-warn:#d97706;
+    --av-danger:#dc2626;
+    --av-shadow:0 18px 44px rgba(15,23,42,.06);
+    --av-shadow-soft:0 10px 26px rgba(15,23,42,.05);
+    --av-radius-xl:28px;
+    --av-radius-lg:22px;
+    --av-radius-md:18px;
+    --av-radius-sm:14px;
+  }
 
-/* ====== BOTÕES ====== */
-.btn{
-  border:0;cursor:pointer;padding:10px 14px;border-radius:12px;
-  font-weight:900;font-size:.95rem;text-decoration:none;
-  display:inline-flex;align-items:center;gap:8px;
-}
-.btn-primary{background:#1e3a8a;color:#fff}
-.btn-ghost{background:#f1f5f9;color:#0f172a}
-.btn-soft{background:#eef2ff;color:#1e3a8a}
+  .page-av{
+    max-width:min(1380px, 96vw);
+    margin:20px auto 42px;
+    padding:0 12px 30px;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--av-text);
+    display:grid;
+    gap:18px;
+  }
 
-/* ====== CARDS ====== */
-.card{
-  background:#fff;border:1px solid #e5e7eb;border-radius:16px;
-  box-shadow:0 10px 30px rgba(2,6,23,.06);
-  margin-bottom:16px;
-}
-.card-head{
-  padding:14px;border-bottom:1px solid #eef2f7;
-  display:flex;justify-content:space-between;gap:10px;
-}
-.card-title{margin:0;font-size:16px;font-weight:900}
-.card-sub{margin:4px 0 0;font-size:.9rem;color:#64748b}
-.card-body{padding:14px}
+  .av-hero{
+    position:relative;
+    overflow:hidden;
+    display:grid;
+    grid-template-columns:minmax(0,1.45fr) minmax(280px,.75fr);
+    gap:18px;
+    padding:26px;
+    border-radius:var(--av-radius-xl);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.84)),
+      linear-gradient(135deg, rgba(29,78,216,.08), rgba(67,56,202,.08));
+    border:1px solid rgba(255,255,255,.7);
+    box-shadow:var(--av-shadow);
+    isolation:isolate;
+  }
 
-/* ====== PICKS ====== */
-.pick-grid{
-  display:grid;gap:12px;grid-template-columns:1fr;
-}
-@media(min-width:700px){
-  .pick-grid{grid-template-columns:1fr 1fr}
-}
-.pick{
-  border:1px solid #e5e7eb;border-radius:16px;padding:14px;
-  background:#f8fafc;display:flex;gap:12px;text-decoration:none;
-  color:inherit;
-}
-.pick-ico{
-  width:44px;height:44px;border-radius:14px;
-  display:grid;place-items:center;font-size:18px;
-  background:#eef2ff;color:#1e3a8a;font-weight:900;
-}
+  .av-hero::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:
+      radial-gradient(circle at top right, rgba(29,78,216,.12), transparent 28%),
+      radial-gradient(circle at left bottom, rgba(67,56,202,.10), transparent 25%);
+    pointer-events:none;
+    z-index:0;
+  }
 
-/* ====== FILTROS ====== */
-.filters{
-  display:grid;gap:10px;
-  grid-template-columns:1fr;
-}
-@media(min-width:900px){
-  .filters{grid-template-columns:1.3fr .9fr .7fr .6fr}
-}
-.f-field{display:flex;flex-direction:column;gap:6px}
-.f-label{font-weight:900;font-size:.85rem}
-.f-input,.f-select{
-  border:1px solid #e5e7eb;border-radius:12px;
-  padding:10px 12px;font-size:.95rem;
-}
+  .av-hero > *{ position:relative; z-index:1; }
 
-/* ====== TABELA ====== */
-.table-wrap{
-  margin-top:12px;border:1px solid #e5e7eb;
-  border-radius:16px;overflow:hidden;
-}
-table{width:100%;border-collapse:collapse}
-th,td{padding:10px 12px;border-bottom:1px solid #eef2f7}
-th{background:#f8fafc;font-size:.8rem;text-transform:uppercase}
-tr:hover td{background:#f8fafc}
-.pill{
-  padding:6px 10px;border-radius:999px;
-  font-size:.8rem;font-weight:900;
-  background:#eef2ff;color:#1e3a8a;
-}
-.muted{color:#64748b;font-size:.9rem}
+  .av-kicker{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    min-height:38px;
+    padding:0 14px;
+    border-radius:999px;
+    background:rgba(29,78,216,.10);
+    color:var(--av-primary);
+    font-size:.82rem;
+    font-weight:900;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+
+  .av-hero h2{
+    margin:0 0 10px;
+    font-size:clamp(1.85rem,2.8vw,2.65rem);
+    line-height:1.04;
+    letter-spacing:-.03em;
+  }
+
+  .av-hero p{
+    margin:0;
+    color:var(--av-muted);
+    line-height:1.75;
+    max-width:760px;
+    font-size:1rem;
+  }
+
+  .av-hero-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:18px;
+  }
+
+  .av-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    min-height:40px;
+    padding:0 14px;
+    border-radius:999px;
+    background:rgba(255,255,255,.86);
+    border:1px solid rgba(148,163,184,.14);
+    box-shadow:0 8px 18px rgba(15,23,42,.04);
+    color:#1e293b;
+    font-size:.92rem;
+    font-weight:700;
+  }
+
+  .av-hero-side{
+    display:grid;
+    gap:12px;
+  }
+
+  .av-highlight{
+    padding:18px;
+    border-radius:22px;
+    background:rgba(255,255,255,.80);
+    border:1px solid rgba(148,163,184,.14);
+    box-shadow:var(--av-shadow-soft);
+  }
+
+  .av-highlight span{
+    display:block;
+    margin-bottom:8px;
+    color:var(--av-muted);
+    font-size:.83rem;
+    font-weight:900;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+  }
+
+  .av-highlight strong{
+    display:block;
+    font-size:1.15rem;
+    line-height:1.35;
+    letter-spacing:-.02em;
+  }
+
+  .card{
+    background:var(--av-card);
+    border:1px solid var(--av-border);
+    border-radius:var(--av-radius-lg);
+    box-shadow:var(--av-shadow-soft);
+    overflow:hidden;
+  }
+
+  .card-head{
+    padding:16px 18px;
+    border-bottom:1px solid #eef2f7;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .card-title{
+    margin:0;
+    font-size:1.04rem;
+    font-weight:900;
+    letter-spacing:-.02em;
+  }
+
+  .card-sub{
+    margin:5px 0 0;
+    color:var(--av-muted);
+    font-size:.94rem;
+    line-height:1.6;
+  }
+
+  .card-body{
+    padding:18px;
+  }
+
+  .btn{
+    border:0;
+    cursor:pointer;
+    min-height:42px;
+    padding:0 14px;
+    border-radius:12px;
+    font-weight:900;
+    font-size:.93rem;
+    text-decoration:none;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    transition:transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+    white-space:nowrap;
+  }
+
+  .btn:hover{ transform:translateY(-1px); }
+
+  .btn-primary{
+    background:linear-gradient(135deg, var(--av-primary), var(--av-primary-2));
+    color:#fff;
+    box-shadow:0 14px 28px rgba(29,78,216,.20);
+  }
+
+  .btn-ghost{
+    background:#f1f5f9;
+    color:#0f172a;
+  }
+
+  .btn-soft{
+    background:var(--av-soft);
+    color:#1e3a8a;
+  }
+
+  .pick-grid{
+    display:grid;
+    gap:14px;
+    grid-template-columns:repeat(2, minmax(0,1fr));
+  }
+
+  .pick{
+    position:relative;
+    overflow:hidden;
+    border:1px solid #e5e7eb;
+    border-radius:20px;
+    padding:16px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+    display:flex;
+    gap:14px;
+    text-decoration:none;
+    color:inherit;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    min-height:106px;
+  }
+
+  .pick::before{
+    content:"";
+    position:absolute;
+    width:120px;
+    height:120px;
+    border-radius:999px;
+    right:-36px;
+    bottom:-44px;
+    opacity:.13;
+    pointer-events:none;
+    background:linear-gradient(135deg, var(--av-primary), var(--av-primary-2));
+  }
+
+  .pick:hover{
+    transform:translateY(-3px);
+    box-shadow:0 16px 34px rgba(15,23,42,.08);
+    border-color:#c7d2fe;
+  }
+
+  .pick-ico{
+    width:52px;
+    height:52px;
+    flex:0 0 52px;
+    border-radius:16px;
+    display:grid;
+    place-items:center;
+    font-size:1.15rem;
+    background:linear-gradient(135deg, #eef2ff, #eff6ff);
+    color:#1e3a8a;
+    font-weight:900;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.65);
+  }
+
+  .pick-body{
+    min-width:0;
+  }
+
+  .pick strong{
+    display:block;
+    margin-bottom:4px;
+    font-size:1rem;
+    line-height:1.35;
+  }
+
+  .muted{
+    color:var(--av-muted);
+    font-size:.92rem;
+    line-height:1.55;
+  }
+
+  .filters{
+    display:grid;
+    gap:12px;
+    grid-template-columns:1.25fr .85fr .75fr .75fr auto;
+    align-items:end;
+  }
+
+  .f-field{
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+  }
+
+  .f-label{
+    font-weight:900;
+    font-size:.82rem;
+    color:#334155;
+    letter-spacing:.03em;
+    text-transform:uppercase;
+  }
+
+  .f-input,.f-select{
+    border:1px solid #e5e7eb;
+    border-radius:14px;
+    padding:11px 12px;
+    font-size:.95rem;
+    background:#fff;
+    color:var(--av-text);
+    outline:none;
+    transition:border-color .18s ease, box-shadow .18s ease;
+  }
+
+  .f-input:focus,.f-select:focus{
+    border-color:#93c5fd;
+    box-shadow:0 0 0 4px rgba(59,130,246,.10);
+  }
+
+  .table-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:12px;
+  }
+
+  .table-info{
+    color:var(--av-muted);
+    font-size:.94rem;
+  }
+
+  .table-wrap{
+    border:1px solid var(--av-border);
+    border-radius:18px;
+    overflow:hidden;
+    background:#fff;
+  }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    min-width:980px;
+  }
+
+  th,td{
+    padding:12px 14px;
+    border-bottom:1px solid #eef2f7;
+    text-align:left;
+    vertical-align:middle;
+  }
+
+  th{
+    background:#f8fafc;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:#475569;
+    font-weight:900;
+  }
+
+  tbody tr:hover td{
+    background:#f8fbff;
+  }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:.8rem;
+    font-weight:900;
+    background:#eef2ff;
+    color:#1e3a8a;
+    line-height:1.2;
+  }
+
+  .pill-date{
+    background:#eff6ff;
+    color:#1d4ed8;
+  }
+
+  .row-actions{
+    display:flex;
+    gap:8px;
+    justify-content:flex-end;
+    flex-wrap:wrap;
+  }
+
+  .empty-state{
+    text-align:center;
+    padding:40px 20px;
+    border:1px dashed var(--av-border-strong);
+    border-radius:20px;
+    background:linear-gradient(180deg, #fbfdff, #f8fbff);
+  }
+
+  .empty-state .ico{
+    font-size:2rem;
+    margin-bottom:10px;
+  }
+
+  .empty-state h4{
+    margin:0 0 6px;
+    font-size:1.08rem;
+  }
+
+  .empty-state p{
+    margin:0;
+    color:var(--av-muted);
+    line-height:1.65;
+  }
+
+  .table-empty{
+    display:none;
+    text-align:center;
+    padding:28px 16px 8px;
+    color:var(--av-muted);
+    font-weight:700;
+  }
+
+  @media (max-width: 1100px){
+    .av-hero{ grid-template-columns:1fr; }
+    .filters{ grid-template-columns:1fr 1fr; }
+    .pick-grid{ grid-template-columns:1fr 1fr; }
+  }
+
+  @media (max-width: 760px){
+    .page-av{
+      margin:16px auto 28px;
+      padding:0 10px 24px;
+      gap:16px;
+    }
+
+    .av-hero{
+      padding:18px;
+      border-radius:22px;
+      gap:14px;
+    }
+
+    .av-hero h2{ font-size:1.7rem; }
+
+    .av-hero p{
+      font-size:.95rem;
+      line-height:1.65;
+    }
+
+    .av-hero-chips{ gap:8px; }
+
+    .av-chip{
+      width:100%;
+      justify-content:flex-start;
+      font-size:.88rem;
+    }
+
+    .card-head,.card-body{ padding:16px; }
+    .pick-grid{ grid-template-columns:1fr; }
+    .filters{ grid-template-columns:1fr; }
+
+    .table-wrap{
+      border:none;
+      overflow:visible;
+      background:transparent;
+    }
+
+    table{
+      min-width:0;
+      display:block;
+      background:transparent;
+    }
+
+    thead{ display:none; }
+    tbody{ display:grid; gap:12px; }
+
+    tr{
+      display:block;
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:18px;
+      box-shadow:0 10px 22px rgba(15,23,42,.04);
+      overflow:hidden;
+    }
+
+    td{
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      gap:7px;
+      padding:13px 14px 0;
+      border-bottom:none;
+    }
+
+    td:last-child{ padding-bottom:14px; }
+
+    td::before{
+      content:attr(data-label);
+      font-size:.75rem;
+      font-weight:900;
+      color:#64748b;
+      letter-spacing:.05em;
+      text-transform:uppercase;
+    }
+
+    .row-actions{
+      width:100%;
+      justify-content:stretch;
+      flex-direction:column;
+    }
+
+    .row-actions .btn{ width:100%; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-av">
 
-  <!-- ===== CABEÇALHO ===== -->
-  <header class="page-head">
+  <header class="av-hero">
     <div>
-      <h2>📋 Avaliações</h2>
-      <p>Registro, filtro e histórico das avaliações multiprofissionais.</p>
+      <span class="av-kicker">📋 SGD · Avaliações multiprofissionais</span>
+      <h2>Avaliações</h2>
+      <p>
+        Registre, consulte e acompanhe as avaliações da equipe com mais clareza,
+        filtros rápidos e acesso direto aos formulários principais do sistema.
+      </p>
+
+      <div class="av-hero-chips">
+        <span class="av-chip">🩺 Enfermagem</span>
+        <span class="av-chip">🗣️ Fonoaudiologia Infantil</span>
+        <span class="av-chip">🧠 Psicologia Infantil</span>
+        <span class="av-chip">🤝 Serviço Social</span>
+        <span class="av-chip">🧩 Terapia Ocupacional</span>
+      </div>
     </div>
-    <a class="btn btn-soft" href="{{ url_for('avaliacoes.tela_anamnese') }}">+ Nova avaliação</a>
+
+    <aside class="av-hero-side">
+      <div class="av-highlight">
+        <span>Total de registros</span>
+        <strong>{{ avaliacoes|length }}</strong>
+      </div>
+      <div class="av-highlight">
+        <span>Último lançamento</span>
+        <strong>
+          {% if avaliacoes and avaliacoes[0].criado_em %}
+            {{ avaliacoes[0].criado_em[:16].replace('T', ' ') }}
+          {% else %}
+            —
+          {% endif %}
+        </strong>
+      </div>
+    </aside>
   </header>
 
-  <!-- ===== BLOCO 1 · TIPOS ===== -->
   <section class="card">
     <div class="card-head">
       <div>
-        <h3 class="card-title">Tipo de avaliação</h3>
-        <p class="card-sub">Selecione o formulário desejado.</p>
+        <h3 class="card-title">Tipos de avaliação</h3>
+        <p class="card-sub">Escolha o formulário que deseja abrir e registrar.</p>
       </div>
     </div>
+
     <div class="card-body">
       <div class="pick-grid">
-        {% for c in cards %}
-          {% if c.route %}
-          <a class="pick" href="{{ url_for(c.route) }}">
-            <div class="pick-ico">📄</div>
-            <div>
-              <strong>{{ c.label }}</strong>
-              <div class="muted">Abrir formulário</div>
-            </div>
-          </a>
-          {% endif %}
-        {% endfor %}
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_enfermagem') }}">
+          <div class="pick-ico">🩺</div>
+          <div class="pick-body">
+            <strong>Enfermagem</strong>
+            <div class="muted">Avaliação clínica e acompanhamento de enfermagem.</div>
+          </div>
+        </a>
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_fonoaudiologia_infantil') }}">
+          <div class="pick-ico">🗣️</div>
+          <div class="pick-body">
+            <strong>Fonoaudiologia Infantil</strong>
+            <div class="muted">Desenvolvimento da linguagem, comunicação e aspectos funcionais.</div>
+          </div>
+        </a>
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_psicologia_infantil') }}">
+          <div class="pick-ico">🧠</div>
+          <div class="pick-body">
+            <strong>Psicologia Infantil</strong>
+            <div class="muted">Aspectos emocionais, comportamentais e contexto do desenvolvimento.</div>
+          </div>
+        </a>
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_social') }}">
+          <div class="pick-ico">🤝</div>
+          <div class="pick-body">
+            <strong>Serviço Social</strong>
+            <div class="muted">Condições sociais, rede de apoio e informações familiares.</div>
+          </div>
+        </a>
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_terapia_ocupacional') }}">
+          <div class="pick-ico">🧩</div>
+          <div class="pick-body">
+            <strong>Terapia Ocupacional</strong>
+            <div class="muted">Desempenho ocupacional, rotina, funcionalidade e autonomia.</div>
+          </div>
+        </a>
+
       </div>
     </div>
   </section>
 
-  <!-- ===== BLOCO 2 · FILTROS ===== -->
   <section class="card">
     <div class="card-head">
-      <h3 class="card-title">Filtros</h3>
+      <div>
+        <h3 class="card-title">Filtros</h3>
+        <p class="card-sub">Refine os resultados por paciente, tipo, CBO ou competência.</p>
+      </div>
     </div>
+
     <div class="card-body">
       <div class="filters">
         <div class="f-field">
-          <label class="f-label">Paciente</label>
+          <label class="f-label" for="fNome">Paciente</label>
           <input id="fNome" class="f-input" placeholder="Nome do paciente">
         </div>
+
         <div class="f-field">
-          <label class="f-label">CBO</label>
-          <input id="fCbo" class="f-input" placeholder="Ex.: 251510">
+          <label class="f-label" for="fTipo">Tipo</label>
+          <select id="fTipo" class="f-select">
+            <option value="">Todos</option>
+            <option value="Avaliação de Enfermagem">Avaliação de Enfermagem</option>
+            <option value="Fonoaudiologia Infantil">Fonoaudiologia Infantil</option>
+            <option value="Avaliação Psicológica Infantil">Avaliação Psicológica Infantil</option>
+            <option value="Avaliação Social">Avaliação Social</option>
+            <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+          </select>
         </div>
+
         <div class="f-field">
-          <label class="f-label">Competência</label>
+          <label class="f-label" for="fCbo">CBO</label>
+          <input id="fCbo" class="f-input" placeholder="Ex.: 223505">
+        </div>
+
+        <div class="f-field">
+          <label class="f-label" for="fComp">Competência</label>
           <input id="fComp" class="f-input" type="month">
         </div>
+
         <div class="f-field">
           <label class="f-label">&nbsp;</label>
-          <button class="btn btn-primary" id="btnLimpar">Limpar</button>
+          <button class="btn btn-primary" id="btnLimpar" type="button">Limpar</button>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== BLOCO 3 · TABELA ===== -->
   <section class="card">
     <div class="card-head">
-      <h3 class="card-title">Registros</h3>
-    </div>
-    <div class="card-body">
-      <div class="table-wrap">
-        <table id="tblAvaliacoes">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Paciente</th>
-              <th>Tipo</th>
-              <th>Profissional</th>
-              <th>Competência</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for a in avaliacoes %}
-            <tr
-              data-nome="{{ a.paciente_nome|lower }}"
-              data-cbo="{{ a.usuario_cbo or '' }}"
-              data-comp="{{ a.criado_em[:7] }}"
-            >
-              <td>#{{ a.id }}</td>
-              <td>{{ a.paciente_nome }}</td>
-              <td><span class="pill">{{ tipos.get(a.tipo,a.tipo) }}</span></td>
-              <td>{{ a.usuario_nome }}</td>
-              <td class="muted">{{ a.criado_em[:7] }}</td>
-              <td>
-                <a class="btn btn-ghost" href="{{ url_for('avaliacoes.visualizar', id=a.id) }}">Ver</a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div>
+        <h3 class="card-title">Registros</h3>
+        <p class="card-sub">Histórico das avaliações já lançadas no sistema.</p>
       </div>
+    </div>
+
+    <div class="card-body">
+      <div class="table-toolbar">
+        <div class="table-info">
+          <strong id="countVisible">{{ avaliacoes|length }}</strong> registro(s) visível(is)
+        </div>
+      </div>
+
+      {% if avaliacoes %}
+        <div class="table-wrap">
+          <table id="tblAvaliacoes">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Paciente</th>
+                <th>Tipo</th>
+                <th>Profissional</th>
+                <th>CBO</th>
+                <th>Competência</th>
+                <th style="text-align:right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in avaliacoes %}
+              <tr
+                data-nome="{{ (a.paciente_nome or '')|lower }}"
+                data-tipo="{{ (tipos.get(a.tipo, a.tipo) or '')|lower }}"
+                data-cbo="{{ (a.usuario_cbo or '')|lower }}"
+                data-comp="{{ (a.criado_em[:7] if a.criado_em else '') }}"
+              >
+                <td data-label="#">#{{ a.id }}</td>
+                <td data-label="Paciente"><strong>{{ a.paciente_nome or '—' }}</strong></td>
+                <td data-label="Tipo"><span class="pill">{{ tipos.get(a.tipo, a.tipo) }}</span></td>
+                <td data-label="Profissional">{{ a.usuario_nome or "—" }}</td>
+                <td data-label="CBO">{{ a.usuario_cbo or "—" }}</td>
+                <td data-label="Competência">
+                  <span class="pill pill-date">{{ a.criado_em[:7] if a.criado_em else "—" }}</span>
+                </td>
+                <td data-label="Ações">
+                  <div class="row-actions">
+                    <a class="btn btn-ghost" href="{{ url_for('avaliacoes.visualizar', id=a.id) }}">Ver</a>
+                    <a class="btn btn-soft" href="{{ url_for('avaliacoes.exportar_pdf', id=a.id) }}">PDF</a>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-empty" id="tableEmpty">
+          Nenhum registro encontrado com os filtros atuais.
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <div class="ico">🗂️</div>
+          <h4>Nenhuma avaliação registrada ainda</h4>
+          <p>Comece abrindo um dos formulários acima para lançar a primeira avaliação no sistema.</p>
+        </div>
+      {% endif %}
     </div>
   </section>
 
 </div>
 
-<!-- ===== JS FILTRO ===== -->
 <script>
 (function(){
   const nome = document.getElementById('fNome');
+  const tipo = document.getElementById('fTipo');
   const cbo  = document.getElementById('fCbo');
   const comp = document.getElementById('fComp');
-  const rows = document.querySelectorAll('#tblAvaliacoes tbody tr');
+  const rows = Array.from(document.querySelectorAll('#tblAvaliacoes tbody tr'));
   const clear = document.getElementById('btnLimpar');
+  const tableEmpty = document.getElementById('tableEmpty');
+  const countVisible = document.getElementById('countVisible');
 
   function apply(){
-    rows.forEach(r=>{
-      const okNome = !nome.value || r.dataset.nome.includes(nome.value.toLowerCase());
-      const okCbo  = !cbo.value  || r.dataset.cbo.includes(cbo.value);
-      const okComp = !comp.value || r.dataset.comp === comp.value;
-      r.style.display = (okNome && okCbo && okComp) ? '' : 'none';
+    let visible = 0;
+
+    rows.forEach(r => {
+      const okNome = !nome.value || (r.dataset.nome || '').includes(nome.value.toLowerCase());
+      const okTipo = !tipo.value || (r.dataset.tipo || '') === tipo.value.toLowerCase();
+      const okCbo  = !cbo.value  || (r.dataset.cbo || '').includes(cbo.value.toLowerCase());
+      const okComp = !comp.value || (r.dataset.comp || '') === comp.value;
+
+      const show = okNome && okTipo && okCbo && okComp;
+      r.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    if (countVisible) countVisible.textContent = visible;
+    if (tableEmpty) tableEmpty.style.display = visible ? 'none' : 'block';
+  }
+
+  [nome, tipo, cbo, comp].forEach(el => {
+    if (!el) return;
+    el.addEventListener('input', apply);
+    if (el.tagName === 'SELECT') el.addEventListener('change', apply);
+  });
+
+  if (clear) {
+    clear.addEventListener('click', () => {
+      if (nome) nome.value = '';
+      if (tipo) tipo.value = '';
+      if (cbo) cbo.value = '';
+      if (comp) comp.value = '';
+      apply();
     });
   }
-  [nome,cbo,comp].forEach(i=>i.addEventListener('input',apply));
-  clear.onclick = ()=>{nome.value=cbo.value=comp.value='';apply();}
+
+  apply();
 })();
 </script>
 {% endblock %}

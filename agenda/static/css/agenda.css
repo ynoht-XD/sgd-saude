@@ -1,45 +1,91 @@
 /* ===========================================================
-   AGENDA — CSS moderno (versão cards)
+   AGENDA — CSS moderno premium
    =========================================================== */
 
 :root {
-  --bg: #f8fafc;
+  --bg: #f4f7fb;
+  --bg-soft: #f8fafc;
   --card: #ffffff;
   --text: #0f172a;
   --muted: #64748b;
+
   --line: #e5e7eb;
-  --line-soft: #f1f5f9;
+  --line-soft: #eef2f7;
+  --line-strong: #d7dfeb;
+
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
-  --radius: 12px;
-  --shadow: 0 6px 24px rgba(2,6,23,.06);
+  --primary-soft: rgba(37, 99, 235, .10);
+
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, .10);
+
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, .10);
+
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, .10);
+
+  --radius-xl: 26px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+
+  --shadow-sm: 0 8px 24px rgba(15, 23, 42, .05);
+  --shadow-md: 0 18px 46px rgba(15, 23, 42, .08);
+  --shadow-lg: 0 28px 70px rgba(15, 23, 42, .16);
 }
 
-/* ======== Estrutura geral ======== */
+/* ===========================================================
+   BASE
+   =========================================================== */
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(37,99,235,.06), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(22,163,74,.05), transparent 24%),
+    var(--bg);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
 }
 
-h2 {
-  margin-top: 10px;
-  margin-bottom: 14px;
-  font-size: 22px;
+.page-agenda{
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.page-agenda *,
+.page-agenda *::before,
+.page-agenda *::after{
+  box-sizing: border-box;
+}
+
+h2, h3 {
+  margin: 0;
   color: var(--text);
 }
 
-/* ======== Cards base ======== */
-.card {
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ===========================================================
+   CARDS BASE
+   =========================================================== */
+.card,
+.ag-card{
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-xl);
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
   margin-bottom: 18px;
 }
 
-.card h3 {
+.card h3,
+.ag-card h3 {
   font-size: 18px;
   margin-bottom: 4px;
   color: var(--text);
@@ -52,85 +98,259 @@ h2 {
   gap: 10px;
 }
 
+/* ===========================================================
+   HERO
+   =========================================================== */
+.ag-hero{
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 330px);
+  gap: 18px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(37,99,235,.10), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(22,163,74,.08), transparent 35%),
+    linear-gradient(180deg, #ffffff, #fbfdff);
+}
 
+.ag-kicker,
+.ag-eyebrow{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
 
-/* ======== Grid do formulário / filtros ======== */
-.grid {
+.ag-hero h2{
+  margin: 8px 0 10px;
+  font-size: clamp(1.55rem, 2vw, 2.2rem);
+  line-height: 1.08;
+}
+
+.ag-hero p{
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 72ch;
+}
+
+.ag-hero__content{
+  min-width: 0;
+}
+
+.ag-hero__chips{
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ag-chip{
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.ag-chip--blue{
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.ag-chip--green{
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.ag-chip--gold{
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.ag-chip--soft{
+  background: #f4f7fb;
+  color: #475569;
+  border-color: #e5e7eb;
+}
+
+.ag-hero__side{
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(6, 1fr);
 }
-.grid .col-6 { grid-column: span 6; }
-.grid .col-3 { grid-column: span 3; }
-.grid .col-2 { grid-column: span 2; }
-.grid .col-1 { grid-column: span 1; }
+
+.ag-mini-stat{
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.ag-mini-stat__label{
+  display: block;
+  font-size: .82rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.ag-mini-stat strong{
+  font-size: 1rem;
+  color: var(--text);
+}
+
+/* ===========================================================
+   CABEÇALHO DE SEÇÃO
+   =========================================================== */
+.ag-section-head{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.ag-section-head--row{
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.ag-section-head h3{
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.ag-section-head p{
+  margin: 0;
+  color: var(--muted);
+  font-size: .94rem;
+  line-height: 1.55;
+}
+
+.ag-list-actions{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ===========================================================
+   GRID DO FORMULÁRIO / FILTROS
+   =========================================================== */
+.grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+}
+.grid .col-12 { grid-column: span 6; }
+.grid .col-6  { grid-column: span 6; }
+.grid .col-4  { grid-column: span 4; }
+.grid .col-3  { grid-column: span 3; }
+.grid .col-2  { grid-column: span 2; }
+.grid .col-1  { grid-column: span 1; }
 
 label {
   display: block;
   font-size: 14px;
   color: #334155;
-  font-weight: 600;
-  margin-bottom: 4px;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
   font-size: 14px;
   background: #fff;
+  color: var(--text);
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+textarea{
+  resize: vertical;
+  min-height: 110px;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 4px rgba(37,99,235,.10);
+}
+
+input[readonly]{
+  background: #f8fafc;
+  color: #475569;
 }
 
 .card .grid input,
-.card .grid select {
+.card .grid select,
+.card .grid textarea {
   background: #fff;
 }
 
-.muted {
-  color: var(--muted);
-  font-size: 13px;
+/* ===========================================================
+   AÇÕES DO FORM
+   =========================================================== */
+.ag-form-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
-/* ======== Botões ======== */
+/* ===========================================================
+   BOTÕES
+   =========================================================== */
 .btn {
   appearance: none;
   border: 1px solid var(--primary);
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
   color: #fff;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 16px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all .2s ease;
   font-size: 14px;
+  box-shadow: 0 10px 24px rgba(37,99,235,.16);
 }
 .btn:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  filter: brightness(1.02);
+  transform: translateY(-1px);
 }
 .btn:disabled {
   opacity: .6;
   cursor: not-allowed;
+  transform: none;
 }
 .btn.ghost {
   background: #fff;
   color: var(--text);
   border: 1px solid var(--line);
+  box-shadow: none;
 }
 .btn.ghost:hover {
   background: #f9fafb;
 }
 
-/* ======== Sugestões (autocomplete pacientes) ======== */
+/* ===========================================================
+   SUGESTÕES (AUTOCOMPLETE PACIENTES)
+   =========================================================== */
 .suggest {
   position: relative;
   margin-top: 6px;
@@ -145,13 +365,13 @@ select:focus {
   right: 0;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(0,0,0,.12);
-  max-height: 260px;
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(0,0,0,.12);
+  max-height: 280px;
   overflow-y: auto;
 }
 .suggest-item {
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   border-bottom: 1px dashed var(--line-soft);
 }
@@ -171,37 +391,49 @@ select:focus {
   font-size: 12px;
 }
 
-/* ======== Lista de agendamentos em CARDS ======== */
-
+/* ===========================================================
+   LISTA DE AGENDAMENTOS EM CARDS
+   =========================================================== */
 .ag-cards-list {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
 }
 
 /* Card individual de agendamento */
 .ag-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #ffffff;
-  padding: 12px 12px 10px;
-  box-shadow: 0 4px 16px rgba(15,23,42,.04);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff, #fbfcff);
+  padding: 14px 14px 12px;
+  box-shadow: 0 6px 18px rgba(15,23,42,.05);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  overflow: hidden;
+  position: relative;
 }
 
-/* cabeçalho: nome do paciente e dia/horário */
+.ag-card::before{
+  content:"";
+  position:absolute;
+  inset:0 auto auto 0;
+  width:100%;
+  height:4px;
+  background:linear-gradient(90deg, var(--primary), #22c55e);
+}
+
+/* cabeçalho */
 .ag-card-head {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-bottom: 4px;
+  gap: 3px;
+  margin-bottom: 2px;
 }
 
 .ag-card-paciente {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 15px;
   color: var(--text);
   word-break: break-word;
@@ -212,13 +444,13 @@ select:focus {
   color: var(--muted);
 }
 
-/* corpo: linhas de info (prontuário, qtd, profissional, etc.) */
+/* corpo */
 .ag-card-body {
   border-top: 1px dashed var(--line-soft);
-  padding-top: 6px;
+  padding-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .ag-card-line {
@@ -233,39 +465,43 @@ select:focus {
 }
 
 .ag-card-line .value {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   text-align: right;
+  word-break: break-word;
 }
 
-/* Rodapé: ações (prontuário, editar, excluir) */
+/* Rodapé: ações */
 .ag-card-actions {
   margin-top: 6px;
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--line-soft);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-/* ======== Ícones de ação ======== */
+/* ===========================================================
+   ÍCONES DE AÇÃO
+   =========================================================== */
 .icon-btn {
   appearance: none;
   border: 1px solid var(--line);
   background: #fff;
-  border-radius: 8px;
-  width: 36px;
-  height: 36px;
+  border-radius: 10px;
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   margin: 0;
   transition: all .2s ease;
+  box-shadow: 0 2px 8px rgba(15,23,42,.03);
 }
 .icon-btn:hover {
   background: #f8fafc;
-  filter: brightness(0.96);
+  transform: translateY(-1px);
 }
 .icon-btn svg {
   width: 18px;
@@ -276,26 +512,33 @@ select:focus {
 }
 .icon-btn.danger {
   border-color: #fecaca;
-  background: #fff0f0;
+  background: #fff1f2;
 }
 .icon-btn.danger svg {
   stroke: #dc2626;
 }
 
-/* ======== Paginação ======== */
-.pagination {
+/* ===========================================================
+   PAGINAÇÃO
+   =========================================================== */
+.pagination,
+.ag-pagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
 }
 
-.pager {
+.pager,
+.ag-pager {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .page-input {
@@ -303,8 +546,9 @@ select:focus {
   text-align: center;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
+  background:#fff;
 }
 .page-input:focus {
   outline: none;
@@ -312,54 +556,18 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(37,99,235,0.12);
 }
 
-/* ======== Filtros ======== */
+/* ===========================================================
+   FILTROS
+   =========================================================== */
 #filtros_msg {
   font-size: 13px;
   color: var(--muted);
   margin-left: 8px;
 }
 
-/* ======== Botão de recarregar (extra) ======== */
-.icon-refresh::before {
-  content: "⟳";
-  display: inline-block;
-  margin-right: 4px;
-  font-weight: bold;
-  color: var(--text);
-}
-
-/* ======== Responsividade ======== */
-@media (max-width: 880px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .pagination {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 480px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  .btn {
-    width: 100%;
-    text-align: center;
-  }
-  .page-input {
-    width: 50px;
-  }
-  .ag-cards-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-
 /* ===========================================================
-   MODAL · Edição de agendamento
+   MODAL · EDIÇÃO DE AGENDAMENTO
    =========================================================== */
-
 .agenda-modal {
   position: fixed;
   inset: 0;
@@ -378,52 +586,74 @@ select:focus {
 .agenda-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(2px);
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(4px);
 }
 
 .agenda-modal-panel {
   position: relative;
   z-index: 1001;
-  max-width: 640px;
-  width: 92vw;
-  background: var(--card);
-  border-radius: 18px;
-  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.22);
-  padding: 18px 18px 16px;
+  max-width: 720px;
+  width: min(92vw, 720px);
+  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  padding: 20px 20px 18px;
   border: 1px solid var(--line);
-  animation: mae-pop-in 0.16s ease-out;
+  animation: mae-pop-in 0.18s ease-out;
+  overflow: hidden;
+}
+
+.agenda-modal-panel::before{
+  content:"";
+  position:absolute;
+  inset:0 auto auto 0;
+  width:100%;
+  height:4px;
+  background:linear-gradient(90deg, var(--primary), #22c55e);
 }
 
 .agenda-modal-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.agenda-modal-head-text{
+  min-width: 0;
 }
 
 .agenda-modal-head h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: var(--text);
+}
+
+.mae-sub{
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .agenda-modal-close {
   appearance: none;
   border: none;
-  background: transparent;
+  background: #f3f6fb;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
   color: var(--muted);
   border-radius: 999px;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
 }
 .agenda-modal-close:hover {
   background: #e5e7eb;
@@ -435,17 +665,18 @@ select:focus {
 }
 
 .agenda-modal-foot {
-  margin-top: 14px;
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Grid interno do modal */
 .mae-grid {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 .mae-col-6 { grid-column: span 6; }
 .mae-col-3 { grid-column: span 3; }
@@ -454,19 +685,35 @@ select:focus {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--muted);
+  line-height: 1.45;
 }
 
 .mae-msg {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 13px;
   color: #dc2626;
 }
 
-/* Animação leve de entrada */
+.mae-readonly{
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 10px 14px;
+  color: #334155;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* ===========================================================
+   ANIMAÇÃO
+   =========================================================== */
 @keyframes mae-pop-in {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translateY(10px) scale(0.985);
   }
   to {
     opacity: 1;
@@ -474,15 +721,129 @@ select:focus {
   }
 }
 
-/* Responsivo */
-@media (max-width: 540px) {
+/* ===========================================================
+   RESPONSIVIDADE
+   =========================================================== */
+@media (max-width: 1080px) {
+  .ag-hero{
+    grid-template-columns: 1fr;
+  }
+
+  .ag-hero__side{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 880px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid .col-12,
+  .grid .col-6,
+  .grid .col-4,
+  .grid .col-3,
+  .grid .col-2,
+  .grid .col-1{
+    grid-column: span 2;
+  }
+
+  .pagination,
+  .ag-pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ag-section-head--row{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ag-list-actions{
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .ag-hero,
+  .card,
+  .ag-card{
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .ag-form-actions{
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ag-form-actions .btn{
+    width: 100%;
+    text-align: center;
+  }
+
+  .ag-cards-list {
+    grid-template-columns: 1fr;
+  }
+
   .agenda-modal-panel {
-    padding: 16px 12px 14px;
-    border-radius: 16px;
+    padding: 16px 14px 14px;
+    border-radius: 18px;
+    width: min(96vw, 720px);
   }
+
   .mae-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .mae-col-6 { grid-column: span 2; }
-  .mae-col-3 { grid-column: span 2; }
+
+  .mae-col-6,
+  .mae-col-3 {
+    grid-column: span 2;
+  }
+
+  .agenda-modal-foot{
+    flex-direction: column;
+  }
+
+  .agenda-modal-foot .btn{
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .grid .col-12,
+  .grid .col-6,
+  .grid .col-4,
+  .grid .col-3,
+  .grid .col-2,
+  .grid .col-1{
+    grid-column: span 1;
+  }
+
+  .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .page-input {
+    width: 54px;
+  }
+
+  .ag-hero h2{
+    font-size: 1.45rem;
+  }
+
+  .ag-chip{
+    font-size: .76rem;
+  }
+
+  input,
+  select,
+  textarea{
+    font-size: 16px; /* evita zoom em mobile */
+  }
 }

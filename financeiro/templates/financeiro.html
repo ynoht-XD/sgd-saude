@@ -1,418 +1,419 @@
-{# sgd/financeiro/templates/financeiro.html #}
-{% extends 'layout.html' %}
+{% extends "layout.html" %}
+
+{% block title %}Financeiro{% endblock %}
 
 {% block extra_css %}
-  {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/financeiro.css') }}">
+<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/financeiro.css') }}">
 {% endblock %}
 
 {% block content %}
-<div class="fin-container">
+<section class="fin-page">
+  <div class="fin-shell">
 
-  {# flashes #}
-  {% with msgs = get_flashed_messages(with_categories=true) %}
-    {% if msgs %}
-      <div class="fin-flashes">
-        {% for cat, m in msgs %}
-          <div class="flash {{ cat }}">{{ m }}</div>
-        {% endfor %}
+    <!-- HERO / RESUMO -->
+    <header class="fin-card fin-hero">
+      <div class="fin-hero__main">
+        <div class="fin-kicker">SGD · Financeiro</div>
+        <h1>Controle financeiro</h1>
+        <p>
+          Acompanhe entradas, saídas, pendências e a movimentação de combos e planos
+          em uma visão mais limpa e operacional.
+        </p>
+
+        <div class="fin-hero__chips">
+          <span class="fin-chip fin-chip--blue">Entradas</span>
+          <span class="fin-chip fin-chip--red">Saídas</span>
+          <span class="fin-chip fin-chip--green">Recebimentos</span>
+          <span class="fin-chip fin-chip--soft">Livro caixa</span>
+        </div>
       </div>
-    {% endif %}
-  {% endwith %}
 
-  {# header #}
-  <div class="fin-head">
-    <div class="title-area">
-      <h2>Financeiro</h2>
-      <p class="muted">Caixa, recebíveis, pagáveis e faturamento. Data de referência: {{ data_ref|default('') }}</p>
-    </div>
-    <div class="actions">
-      <button class="btn primary" id="btnNovoReceber">+ Novo recebível</button>
-      <button class="btn" id="btnNovoPagar">+ Nova despesa</button>
-      <button class="btn" id="btnConcilia">Conciliação</button>
-      <button class="btn ghost" id="btnEmitirNFSe">Emitir NFSe</button>
-    </div>
+      <div class="fin-hero__stats">
+        <div class="fin-stat">
+          <span class="fin-stat__label">Saldo atual</span>
+          <strong id="kpiSaldo">R$ {{ ((kpis|default({})).get('saldo_caixa', 0.0)) | round(2) }}</strong>
+        </div>
+
+        <div class="fin-stat">
+          <span class="fin-stat__label">Entradas</span>
+          <strong id="kpiEntradas">R$ {{ ((kpis|default({})).get('entradas', 0.0)) | round(2) }}</strong>
+        </div>
+
+        <div class="fin-stat">
+          <span class="fin-stat__label">Saídas</span>
+          <strong id="kpiSaidas">R$ {{ ((kpis|default({})).get('saidas', 0.0)) | round(2) }}</strong>
+        </div>
+
+        <div class="fin-stat">
+          <span class="fin-stat__label">Pendente a receber</span>
+          <strong id="kpiPendentes">R$ {{ ((kpis|default({})).get('pendentes', 0.0)) | round(2) }}</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- FILTROS -->
+    <section class="fin-card fin-section">
+      <div class="fin-head">
+        <div>
+          <span class="fin-eyebrow">Filtro</span>
+          <h2>Período e visão</h2>
+          <p>Use os filtros para enxergar melhor o fluxo financeiro do período.</p>
+        </div>
+      </div>
+
+      <div class="fin-grid fin-grid--filters">
+        <div class="fin-field">
+          <label class="fin-label" for="fDataIni">Data inicial</label>
+          <input class="fin-input" id="fDataIni" type="date">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fDataFim">Data final</label>
+          <input class="fin-input" id="fDataFim" type="date">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fCompetencia">Competência</label>
+          <input class="fin-input" id="fCompetencia" type="month">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fTipoLanc">Tipo</label>
+          <select class="fin-select" id="fTipoLanc">
+            <option value="">Todos</option>
+            <option value="entrada">Entradas</option>
+            <option value="saida">Saídas</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fStatusLanc">Status</label>
+          <select class="fin-select" id="fStatusLanc">
+            <option value="">Todos</option>
+            <option value="pago">Pago</option>
+            <option value="pendente">Pendente</option>
+            <option value="parcial">Parcial</option>
+          </select>
+        </div>
+
+        <div class="fin-field fin-field--grow">
+          <label class="fin-label" for="fBuscaLanc">Pesquisar</label>
+          <input class="fin-input" id="fBuscaLanc" type="text" placeholder="Paciente, descrição, categoria...">
+        </div>
+
+        <div class="fin-actions fin-field--full">
+          <button type="button" class="fin-btn fin-btn--primary" id="btnAplicarFinanceiro">
+            Aplicar filtros
+          </button>
+          <button type="button" class="fin-btn fin-btn--ghost" id="btnLimparFinanceiro">
+            Limpar
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECEBIMENTOS DE COMBOS / PLANOS -->
+    <section class="fin-card fin-section">
+      <div class="fin-head fin-head--row">
+        <div>
+          <span class="fin-eyebrow">Recebimentos</span>
+          <h2>Combos e planos</h2>
+          <p>Entradas geradas a partir dos vínculos do comercial.</p>
+        </div>
+
+        <div class="fin-head__actions">
+          <button type="button" class="fin-btn fin-btn--ghost" id="btnAtualizarRecebimentos">
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      <div class="fin-toolbar">
+        <div class="fin-field">
+          <label class="fin-label" for="fRecebBusca">Pesquisar</label>
+          <input class="fin-input" id="fRecebBusca" type="text" placeholder="Paciente, combo, plano...">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fRecebStatus">Status</label>
+          <select class="fin-select" id="fRecebStatus">
+            <option value="">Todos</option>
+            <option value="ativo">Ativo</option>
+            <option value="encerrado">Encerrado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="fRecebTipo">Tipo</label>
+          <select class="fin-select" id="fRecebTipo">
+            <option value="">Todos</option>
+            <option value="combo">Combo</option>
+            <option value="plano">Plano</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="finCardsRecebimentos" class="fin-cards">
+        <div class="fin-empty">
+          <strong>Nenhum recebimento carregado.</strong>
+          <span>Os vínculos do comercial aparecerão aqui.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVRO CAIXA -->
+    <section class="fin-card fin-section">
+      <div class="fin-head">
+        <div>
+          <span class="fin-eyebrow">Livro caixa</span>
+          <h2>Entradas e saídas manuais</h2>
+          <p>Registre despesas, receitas extras e outras movimentações.</p>
+        </div>
+      </div>
+
+      <form id="formLancamentoManual" class="fin-grid fin-grid--manual">
+        <div class="fin-field">
+          <label class="fin-label" for="lancTipo">Tipo</label>
+          <select class="fin-select" id="lancTipo" name="tipo" required>
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancCategoria">Categoria</label>
+          <input class="fin-input" id="lancCategoria" name="categoria" type="text" placeholder="Ex: aluguel, pix, manutenção">
+        </div>
+
+        <div class="fin-field fin-field--grow">
+          <label class="fin-label" for="lancDescricao">Descrição</label>
+          <input class="fin-input" id="lancDescricao" name="descricao" type="text" placeholder="Descrição do lançamento" required>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancValor">Valor</label>
+          <input class="fin-input" id="lancValor" name="valor" type="number" min="0" step="0.01" placeholder="0,00" required>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancForma">Forma pagamento</label>
+          <select class="fin-select" id="lancForma" name="forma_pagamento">
+            <option value="">Selecione...</option>
+            <option value="pix">Pix</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão de crédito</option>
+            <option value="cartao_debito">Cartão de débito</option>
+            <option value="transferencia">Transferência</option>
+            <option value="boleto">Boleto</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancStatus">Status</label>
+          <select class="fin-select" id="lancStatus" name="status">
+            <option value="pago">Pago</option>
+            <option value="pendente">Pendente</option>
+            <option value="parcial">Parcial</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancVencimento">Vencimento</label>
+          <input class="fin-input" id="lancVencimento" name="vencimento" type="date">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="lancCompetencia">Competência</label>
+          <input class="fin-input" id="lancCompetencia" name="competencia" type="month">
+        </div>
+
+        <div class="fin-field fin-field--full">
+          <label class="fin-label" for="lancObservacoes">Observações</label>
+          <textarea class="fin-textarea" id="lancObservacoes" name="observacoes" rows="3" placeholder="Observações do lançamento"></textarea>
+        </div>
+
+        <div class="fin-actions fin-field--full">
+          <button type="submit" class="fin-btn fin-btn--primary" id="btnSalvarLancamento">
+            Salvar lançamento
+          </button>
+          <button type="button" class="fin-btn fin-btn--ghost" id="btnLimparLancamento">
+            Limpar
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- MOVIMENTAÇÕES -->
+    <section class="fin-card fin-section">
+      <div class="fin-head fin-head--row">
+        <div>
+          <span class="fin-eyebrow">Movimentações</span>
+          <h2>Lançamentos financeiros</h2>
+          <p>Entradas, saídas, pendências e registros manuais do caixa.</p>
+        </div>
+
+        <div class="fin-head__actions">
+          <button type="button" class="fin-btn fin-btn--ghost" id="btnAtualizarLancamentos">
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      <div id="finCardsLancamentos" class="fin-cards">
+        <div class="fin-empty">
+          <strong>Nenhum lançamento carregado.</strong>
+          <span>As movimentações aparecerão aqui.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FECHAMENTO -->
+    <section class="fin-card fin-section">
+      <div class="fin-head">
+        <div>
+          <span class="fin-eyebrow">Fechamento</span>
+          <h2>Resumo do período</h2>
+          <p>Uma visão consolidada para conferência do caixa.</p>
+        </div>
+      </div>
+
+      <div class="fin-grid fin-grid--closing">
+        <div class="fin-summary-box">
+          <span class="fin-summary-box__label">Entradas pagas</span>
+          <strong id="sumEntradasPagas">R$ 0,00</strong>
+        </div>
+
+        <div class="fin-summary-box">
+          <span class="fin-summary-box__label">Saídas pagas</span>
+          <strong id="sumSaidasPagas">R$ 0,00</strong>
+        </div>
+
+        <div class="fin-summary-box">
+          <span class="fin-summary-box__label">Entradas pendentes</span>
+          <strong id="sumEntradasPendentes">R$ 0,00</strong>
+        </div>
+
+        <div class="fin-summary-box">
+          <span class="fin-summary-box__label">Saldo projetado</span>
+          <strong id="sumSaldoProjetado">R$ 0,00</strong>
+        </div>
+      </div>
+
+      <div class="fin-closing-list">
+        <div class="fin-closing-col">
+          <h3>Categorias</h3>
+          <div id="finResumoCategorias" class="fin-list-clean">
+            <div class="fin-empty-inline">Sem dados.</div>
+          </div>
+        </div>
+
+        <div class="fin-closing-col">
+          <h3>Movimento por dia</h3>
+          <div id="finResumoDias" class="fin-list-clean">
+            <div class="fin-empty-inline">Sem dados.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </div>
+</section>
 
-  {# KPIs #}
-  <section class="fin-cards">
-    <div class="kpi-card">
-      <div class="kpi-label">Saldo consolidado</div>
-      <div class="kpi-value" id="kpiSaldo">R$ {{ (kpis.saldo_caixa|default(0.0)) | round(2) }}</div>
-      <div class="kpi-sub">
-        <ul class="acc-list">
-          {% for c in contas|default([]) %}
-            <li><span class="dot"></span>{{ c.apelido }} — <strong>R$ {{ c.saldo|round(2) }}</strong></li>
-          {% endfor %}
-        </ul>
+<!-- MODAL LANÇAMENTO -->
+<dialog id="modalLancamento" class="fin-dialog">
+  <form method="dialog" class="fin-dialog-card" id="formModalLancamento">
+    <header class="fin-dialog-head">
+      <div>
+        <h3>Editar lançamento</h3>
+        <p>Atualize ou remova um lançamento do financeiro.</p>
       </div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">A receber (30 dias)</div>
-      <div class="kpi-value" id="kpiReceber">R$ {{ (kpis.receber_30d|default(0.0)) | round(2) }}</div>
-      <div class="kpi-sub">Aging e cobranças</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">A pagar (30 dias)</div>
-      <div class="kpi-value" id="kpiPagar">R$ {{ (kpis.pagar_30d|default(0.0)) | round(2) }}</div>
-      <div class="kpi-sub">Calendário de vencimentos</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Inadimplência</div>
-      <div class="kpi-value" id="kpiInad">{{ (kpis.inadimplencia|default(0.0)) | round(1) }}%</div>
-      <div class="kpi-sub">Convênios + particular</div>
-    </div>
-  </section>
+      <button class="fin-dialog-close" value="cancel" aria-label="Fechar">×</button>
+    </header>
 
-  {# avisos #}
-  <section class="fin-alerts">
-    <h3 class="section-title">Alertas</h3>
-    <ul class="alerts-list" id="alertsList">
-      {% for a in avisos|default([]) %}
-      <li class="alert-card">
-        <div class="alert-main"><strong>{{ a.tipo }}</strong> — {{ a.msg }}</div>
-        <div class="alert-actions">
-          <button class="btn xs">{{ a.acao }}</button>
+    <div class="fin-dialog-body">
+      <input type="hidden" id="mlId">
+
+      <div class="fin-grid fin-grid--manual">
+        <div class="fin-field">
+          <label class="fin-label" for="mlTipo">Tipo</label>
+          <select class="fin-select" id="mlTipo">
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+          </select>
         </div>
-      </li>
-      {% else %}
-      <li class="alert-empty">Sem alertas por enquanto.</li>
-      {% endfor %}
-    </ul>
-  </section>
 
-  {# Fluxo de caixa (gráfico) #}
-  <section class="fin-section">
-    <div class="section-head">
-      <h3 class="section-title">Fluxo de Caixa (14 dias)</h3>
-      <div class="section-actions">
-        <button class="btn xs" id="btnExportFluxo">Exportar CSV</button>
-      </div>
-    </div>
-    <div class="chart-wrap">
-      <canvas id="chartFluxo" width="900" height="280" aria-label="Gráfico do fluxo de caixa" role="img"></canvas>
-    </div>
-  </section>
-
-  {# Receber + Pagar (lado a lado) #}
-  <section class="fin-grid-two">
-    <div class="fin-card">
-      <div class="section-head">
-        <h3 class="section-title">Contas a Receber</h3>
-        <div class="section-actions">
-          <button class="btn xs" id="btnReceberCSV">Exportar CSV</button>
+        <div class="fin-field">
+          <label class="fin-label" for="mlCategoria">Categoria</label>
+          <input class="fin-input" id="mlCategoria" type="text">
         </div>
-      </div>
 
-      <form class="filters" id="fReceber">
-        <input type="text" id="qReceber" placeholder="Buscar pagador, paciente...">
-        <select id="stReceber">
-          <option value="">Status</option>
-          <option value="EM_ABERTO">Em aberto</option>
-          <option value="PROGRAMADO">Programado</option>
-          <option value="PAGO">Pago</option>
-          <option value="EM_ATRASO">Em atraso</option>
-        </select>
-        <select id="ccReceber">
-          <option value="">Centro de custo</option>
-          {% for cc in centros_custo|default([]) %}
-            <option value="{{ cc.id }}">{{ cc.nome }}</option>
-          {% endfor %}
-        </select>
-        <input type="date" id="dtDeReceber" title="De">
-        <input type="date" id="dtAteReceber" title="Até">
-        <button class="btn">Filtrar</button>
-        <button type="button" class="btn ghost" id="btnLimparReceber">Limpar</button>
-      </form>
+        <div class="fin-field fin-field--grow">
+          <label class="fin-label" for="mlDescricao">Descrição</label>
+          <input class="fin-input" id="mlDescricao" type="text">
+        </div>
 
-      <div class="table-wrap">
-        <table class="table" id="tReceber">
-          <thead>
-            <tr>
-              <th>Emissão</th>
-              <th>Venc.</th>
-              <th>Pagador</th>
-              <th>Paciente</th>
-              <th class="num">Valor</th>
-              <th>Status</th>
-              <th style="width:140px">Ações</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <div class="empty" id="emptyReceber">Nenhum título encontrado.</div>
+        <div class="fin-field">
+          <label class="fin-label" for="mlValor">Valor</label>
+          <input class="fin-input" id="mlValor" type="number" min="0" step="0.01">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="mlFormaPagamento">Forma pagamento</label>
+          <select class="fin-select" id="mlFormaPagamento">
+            <option value="">Selecione...</option>
+            <option value="pix">Pix</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão de crédito</option>
+            <option value="cartao_debito">Cartão de débito</option>
+            <option value="transferencia">Transferência</option>
+            <option value="boleto">Boleto</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="mlStatus">Status</label>
+          <select class="fin-select" id="mlStatus">
+            <option value="pago">Pago</option>
+            <option value="pendente">Pendente</option>
+            <option value="parcial">Parcial</option>
+          </select>
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="mlVencimento">Vencimento</label>
+          <input class="fin-input" id="mlVencimento" type="date">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="mlDataPagamento">Data pagamento</label>
+          <input class="fin-input" id="mlDataPagamento" type="date">
+        </div>
+
+        <div class="fin-field">
+          <label class="fin-label" for="mlCompetencia">Competência</label>
+          <input class="fin-input" id="mlCompetencia" type="month">
+        </div>
+
+        <div class="fin-field fin-field--full">
+          <label class="fin-label" for="mlObservacoes">Observações</label>
+          <textarea class="fin-textarea" id="mlObservacoes" rows="3"></textarea>
+        </div>
       </div>
     </div>
 
-    <div class="fin-card">
-      <div class="section-head">
-        <h3 class="section-title">Contas a Pagar</h3>
-        <div class="section-actions">
-          <button class="btn xs" id="btnPagarCSV">Exportar CSV</button>
-        </div>
+    <footer class="fin-dialog-actions">
+      <button type="button" class="fin-btn fin-btn--danger" id="btnExcluirLancamentoModal">Excluir</button>
+
+      <div class="fin-dialog-actions__right">
+        <button type="button" class="fin-btn fin-btn--ghost" id="btnFecharLancamentoModal">Fechar</button>
+        <button type="submit" class="fin-btn fin-btn--primary">Salvar alterações</button>
       </div>
-
-      <form class="filters" id="fPagar">
-        <input type="text" id="qPagar" placeholder="Buscar fornecedor, descrição...">
-        <select id="stPagar">
-          <option value="">Status</option>
-          <option value="EM_ABERTO">Em aberto</option>
-          <option value="PROGRAMADO">Programado</option>
-          <option value="PAGO">Pago</option>
-          <option value="EM_ATRASO">Em atraso</option>
-        </select>
-        <select id="ccPagar">
-          <option value="">Centro de custo</option>
-          {% for cc in centros_custo|default([]) %}
-            <option value="{{ cc.id }}">{{ cc.nome }}</option>
-          {% endfor %}
-        </select>
-        <input type="date" id="dtDePagar" title="De">
-        <input type="date" id="dtAtePagar" title="Até">
-        <button class="btn">Filtrar</button>
-        <button type="button" class="btn ghost" id="btnLimparPagar">Limpar</button>
-      </form>
-
-      <div class="table-wrap">
-        <table class="table" id="tPagar">
-          <thead>
-            <tr>
-              <th>Emissão</th>
-              <th>Venc.</th>
-              <th>Fornecedor</th>
-              <th>Descrição</th>
-              <th class="num">Valor</th>
-              <th>Status</th>
-              <th style="width:140px">Ações</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <div class="empty" id="emptyPagar">Nenhum título encontrado.</div>
-      </div>
-    </div>
-  </section>
-
-  {# Conciliação #}
-  <section class="fin-section">
-    <div class="section-head">
-      <h3 class="section-title">Conciliação Bancária</h3>
-      <div class="section-actions">
-        <label class="btn">
-          Importar OFX/CSV
-          <input type="file" id="fileExtrato" accept=".ofx,.csv" hidden>
-        </label>
-        <button class="btn" id="btnSugerirConc">Sugerir conciliação</button>
-      </div>
-    </div>
-
-    <div class="table-wrap">
-      <table class="table" id="tExtrato">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Histórico</th>
-            <th>Documento</th>
-            <th class="num">Valor</th>
-            <th>Match</th>
-            <th style="width:120px">Ações</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div class="empty" id="emptyExtrato">Nenhum lançamento importado.</div>
-    </div>
-  </section>
-
-  {# Modal: Novo Recebível #}
-  <dialog id="modalReceber" class="modal">
-    <form id="formReceber" class="modal-card" method="post" action="#">
-      <header class="modal-header">
-        <h3>Novo recebível</h3>
-        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
-      </header>
-      <section class="modal-body">
-        <div class="grid two">
-          <div class="field">
-            <label>Pagador *</label>
-            <input type="text" name="pagador" required>
-          </div>
-          <div class="field">
-            <label>Paciente</label>
-            <input type="text" name="paciente">
-          </div>
-        </div>
-        <div class="grid four">
-          <div class="field">
-            <label>Origem</label>
-            <select name="origem">
-              <option value="PARTICULAR">Particular</option>
-              <option value="CONVENIO">Convênio</option>
-              <option value="SUS">SUS</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Centro de custo</label>
-            <select name="centro_custo">
-              <option value="">—</option>
-              {% for cc in centros_custo|default([]) %}
-                <option value="{{ cc.id }}">{{ cc.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label>Vencimento *</label>
-            <input type="date" name="venc" required>
-          </div>
-          <div class="field">
-            <label>Valor *</label>
-            <input type="number" name="valor" min="0" step="0.01" required>
-          </div>
-        </div>
-        <div class="grid two">
-          <div class="field">
-            <label>Status</label>
-            <select name="status">
-              <option value="EM_ABERTO">Em aberto</option>
-              <option value="PROGRAMADO">Programado</option>
-              <option value="PAGO">Pago</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Anexo (opcional)</label>
-            <input type="file" name="anexo" accept=".pdf,.jpg,.png,.jpeg">
-          </div>
-        </div>
-      </section>
-      <footer class="modal-footer">
-        <button type="button" class="btn" data-modal-close>Cancelar</button>
-        <button type="submit" class="btn primary">Salvar</button>
-      </footer>
-    </form>
-  </dialog>
-
-  {# Modal: Nova Despesa (Pagar) #}
-  <dialog id="modalPagar" class="modal">
-    <form id="formPagar" class="modal-card" method="post" action="#">
-      <header class="modal-header">
-        <h3>Nova despesa</h3>
-        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
-      </header>
-      <section class="modal-body">
-        <div class="grid two">
-          <div class="field">
-            <label>Fornecedor *</label>
-            <input type="text" name="fornecedor" required>
-          </div>
-          <div class="field">
-            <label>Descrição</label>
-            <input type="text" name="descricao">
-          </div>
-        </div>
-        <div class="grid four">
-          <div class="field">
-            <label>Centro de custo</label>
-            <select name="centro_custo">
-              <option value="">—</option>
-              {% for cc in centros_custo|default([]) %}
-                <option value="{{ cc.id }}">{{ cc.nome }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label>Vencimento *</label>
-            <input type="date" name="venc" required>
-          </div>
-          <div class="field">
-            <label>Valor *</label>
-            <input type="number" name="valor" min="0" step="0.01" required>
-          </div>
-          <div class="field">
-            <label>Status</label>
-            <select name="status">
-              <option value="EM_ABERTO">Em aberto</option>
-              <option value="PROGRAMADO">Programado</option>
-              <option value="PAGO">Pago</option>
-            </select>
-          </div>
-        </div>
-        <div class="grid two">
-          <div class="field">
-            <label>Anexo (nota/contrato)</label>
-            <input type="file" name="anexo" accept=".pdf,.jpg,.png,.jpeg">
-          </div>
-          <div class="field">
-            <label>Aprovação</label>
-            <select name="aprovacao">
-              <option value="">—</option>
-              <option value="SOLICITADO">Solicitado</option>
-              <option value="APROVADO">Aprovado</option>
-              <option value="REPROVADO">Reprovado</option>
-            </select>
-          </div>
-        </div>
-      </section>
-      <footer class="modal-footer">
-        <button type="button" class="btn" data-modal-close>Cancelar</button>
-        <button type="submit" class="btn primary">Salvar</button>
-      </footer>
-    </form>
-  </dialog>
-
-  {# Modal: Emissão NFSe (simples/preview) #}
-  <dialog id="modalNFSe" class="modal">
-    <form id="formNFSe" class="modal-card" method="post" action="#">
-      <header class="modal-header">
-        <h3>Emitir NFSe</h3>
-        <button type="button" class="icon-btn" data-modal-close aria-label="Fechar">×</button>
-      </header>
-      <section class="modal-body">
-        <div class="grid two">
-          <div class="field">
-            <label>Tomador *</label>
-            <input type="text" name="tomador" required>
-          </div>
-          <div class="field">
-            <label>Município (código IBGE)</label>
-            <input type="text" name="ibge" placeholder="Ex.: 2704302 (Maceió)">
-          </div>
-        </div>
-        <div class="grid three">
-          <div class="field">
-            <label>Serviço</label>
-            <input type="text" name="servico" placeholder="Descrição do serviço">
-          </div>
-          <div class="field">
-            <label>Código serviço (município)</label>
-            <input type="text" name="codigo_servico" placeholder="Ex.: 4.01">
-          </div>
-          <div class="field">
-            <label>Valor *</label>
-            <input type="number" name="valor" step="0.01" min="0" required>
-          </div>
-        </div>
-        <div class="grid two">
-          <div class="field">
-            <label>ISS (%)</label>
-            <input type="number" name="iss" step="0.01" min="0" max="10" placeholder="5,00">
-          </div>
-          <div class="field">
-            <label>RPS (número/serie)</label>
-            <input type="text" name="rps" placeholder="Ex.: 123/UN1">
-          </div>
-        </div>
-      </section>
-      <footer class="modal-footer">
-        <button type="button" class="btn" data-modal-close>Cancelar</button>
-        <button type="submit" class="btn primary">Emitir (preview)</button>
-      </footer>
-    </form>
-  </dialog>
-
-</div>
+    </footer>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
-  {{ super() }}
-  <script src="{{ url_for('financeiro.static', filename='js/financeiro.js') }}" defer></script>
+<script src="{{ url_for('financeiro.static', filename='js/financeiro.js') }}"></script>
 {% endblock %}
