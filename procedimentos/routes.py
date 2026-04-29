@@ -58,13 +58,9 @@ def to_int(v):
 
 
 def get_col(row, *names):
-    """
-    Busca uma coluna no DataFrame tolerando nomes alternativos.
-    Exemplo: codigo, co_procedimento, Código etc.
-    """
     for name in names:
-        if name in row:
-            return row.get(name)
+        if name in row.index:
+            return row[name]
     return ""
 
 
@@ -442,7 +438,7 @@ def importar_xls():
         cur = conn.cursor()
 
         # Importação substitutiva
-        cur.execute("DELETE FROM procedimentos")
+        cur.execute("TRUNCATE TABLE procedimentos RESTART IDENTITY;")
 
         total = 0
 
@@ -503,37 +499,36 @@ def importar_xls():
                     CURRENT_TIMESTAMP
                 )
             """, (
-                normalize_text(get_col(row, "codigo", "co_procedimento")),
-                normalize_text(get_col(row, "descricao", "no_procedimento")),
-                normalize_text(get_col(row, "complexidade", "tp_complexidade")),
-                normalize_text(get_col(row, "competencia", "dt_competencia")),
+    normalize_text(get_col(row, "codigo")),
+    normalize_text(get_col(row, "descricao")),
+    normalize_text(get_col(row, "complexidade")),
+    normalize_text(get_col(row, "competencia")),
 
-                valor_sh,
-                valor_sa,
-                valor_sp,
-                valor_total,
+    valor_sh,
+    valor_sa,
+    valor_sp,
+    valor_total,
 
-                normalize_text(get_col(row, "co_financiamento")),
-                normalize_text(get_col(row, "no_financiamento")),
-                normalize_text(get_col(row, "co_rubrica")),
-                normalize_text(get_col(row, "no_rubrica")),
+    normalize_text(get_col(row, "co_financiamento")),
+    normalize_text(get_col(row, "no_financiamento")),
+    normalize_text(get_col(row, "co_rubrica")),
+    normalize_text(get_col(row, "no_rubrica")),
 
-                to_int(get_col(row, "qtd_cids")),
-                normalize_text(get_col(row, "cids_codigos")),
-                normalize_text(get_col(row, "cids_descricoes")),
+    to_int(get_col(row, "qtd_cids")),
+    normalize_text(get_col(row, "cids_codigos")),
+    normalize_text(get_col(row, "cids_descricoes")),
 
-                to_int(get_col(row, "qtd_cbos")),
-                normalize_text(get_col(row, "cbos_codigos")),
-                normalize_text(get_col(row, "cbos_descricoes")),
+    to_int(get_col(row, "qtd_cbos")),
+    normalize_text(get_col(row, "cbos_codigos")),
+    normalize_text(get_col(row, "cbos_descricoes")),
 
-                to_int(get_col(row, "qtd_servicos")),
-                normalize_text(get_col(row, "servicos_codigos")),
-                normalize_text(get_col(row, "servicos_descricoes")),
+    to_int(get_col(row, "qtd_servicos")),
+    normalize_text(get_col(row, "servicos_codigos")),
+    normalize_text(get_col(row, "servicos_descricoes")),
 
-                normalize_text(get_col(row, "classificacoes_codigos")),
-                normalize_text(get_col(row, "classificacoes_descricoes")),
-            ))
-
+    normalize_text(get_col(row, "classificacoes_codigos")),
+    normalize_text(get_col(row, "classificacoes_descricoes")),
+))
             total += 1
 
         conn.commit()
