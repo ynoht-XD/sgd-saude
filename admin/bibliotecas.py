@@ -164,6 +164,13 @@ def importar_cbo_xlsx(file_storage):
 # IMPORTAÇÃO CID
 # ============================================================
 
+def _pick_col(hmap: dict, nomes: list[str]):
+    for nome in nomes:
+        if nome in hmap:
+            return hmap[nome]
+    return None
+
+
 def importar_cid_xlsx(file_storage):
     ensure_bibliotecas_postgres()
 
@@ -178,24 +185,27 @@ def importar_cid_xlsx(file_storage):
 
     hmap = _header_map(headers)
 
-    col_codigo = (
-        hmap.get("co_cid")
-        or hmap.get("codigo")
-        or hmap.get("código")
-        or hmap.get("cid")
-    )
+    col_codigo = _pick_col(hmap, [
+        "co_cid",
+        "codigo",
+        "código",
+        "cid",
+    ])
 
-    col_nome = (
-        hmap.get("no_cid")
-        or hmap.get("descricao")
-        or hmap.get("descrição")
-        or hmap.get("nome")
-    )
+    col_nome = _pick_col(hmap, [
+        "no_cid",
+        "descricao",
+        "descrição",
+        "nome",
+    ])
 
     if col_codigo is None or col_nome is None:
-        raise ValueError("Colunas obrigatórias: co_cid e no_cid.")
+        raise ValueError(
+            f"Colunas obrigatórias não encontradas. Cabeçalhos lidos: {list(hmap.keys())}"
+        )
 
     conn = conectar_db()
+
     try:
         cur = conn.cursor()
 
@@ -221,10 +231,10 @@ def importar_cid_xlsx(file_storage):
 
         conn.commit()
         cur.close()
+
         print("CID importados:", processados, "ignorados:", ignorados)
-        
+
         return processados, ignorados
-    
 
     finally:
         conn.close()
