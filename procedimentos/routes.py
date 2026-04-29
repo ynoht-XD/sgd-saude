@@ -286,7 +286,8 @@ def index():
             WHERE {where_sql}
         """, params)
 
-        total = cur.fetchone()[0] or 0
+        row = cur.fetchone()
+        total = row[0] if row else 0
         total_paginas = max(1, math.ceil(total / por_pagina))
 
         # DADOS
