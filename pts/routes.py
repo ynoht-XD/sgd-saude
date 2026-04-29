@@ -33,11 +33,15 @@ def _valid_ident(name: str) -> bool:
     return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name or ""))
 
 
-def _row_get(row, idx: int, default=None):
-    if row is None:
+def _val(row, key: str, index: int = 0, default=None):
+    if not row:
         return default
+
+    if isinstance(row, dict):
+        return row.get(key, default)
+
     try:
-        return row[idx]
+        return row[index]
     except Exception:
         return default
 
@@ -47,18 +51,21 @@ def has_table(conn, table_name: str) -> bool:
         return False
 
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.tables
-             WHERE table_schema = 'public'
-               AND table_name = %s
+    try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.tables
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+            ) AS existe
+            """,
+            (table_name,),
         )
-        """,
-        (table_name,),
-    )
-    return bool(_row_get(cur.fetchone(), 0, False))
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def has_column(conn, table_name: str, column_name: str) -> bool:
@@ -66,19 +73,22 @@ def has_column(conn, table_name: str, column_name: str) -> bool:
         return False
 
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name = %s
-               AND column_name = %s
+    try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+                   AND column_name = %s
+            ) AS existe
+            """,
+            (table_name, column_name),
         )
-        """,
-        (table_name, column_name),
-    )
-    return bool(_row_get(cur.fetchone(), 0, False))
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def _table_columns(conn, table: str) -> set[str]:
@@ -86,16 +96,24 @@ def _table_columns(conn, table: str) -> set[str]:
         return set()
 
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT column_name
-          FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = %s
-        """,
-        (table,),
-    )
-    return {r[0] for r in cur.fetchall() or []}
+    try:
+        cur.execute(
+            """
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = %s
+            """,
+            (table,),
+        )
+        rows = cur.fetchall() or []
+        return {
+            _val(r, "column_name", 0)
+            for r in rows
+            if _val(r, "column_name", 0)
+        }
+    finally:
+        cur.close()
 
 
 def _first_existing(cols: set[str], names: list[str]) -> str | None:
@@ -156,7 +174,7 @@ def _resolve_logged_usuario_id(conn) -> int | None:
             )
             r = cur.fetchone()
             if r:
-                return int(r[0])
+                return int(_val(r, "id", 0))
 
     return None
 
@@ -224,9 +242,8 @@ def ensure_pts_schema(conn):
         )
     """)
 
-    if not has_column(conn, "pts_participantes", "funcao"):
-        cur.execute("ALTER TABLE pts_participantes ADD COLUMN funcao TEXT")
-
+    cur.execute("ALTER TABLE pts_participantes ADD COLUMN IF NOT EXISTS funcao TEXT")
+    
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_pts_part_pts
         ON pts_participantes (pts_id)
@@ -279,19 +296,18 @@ def _fetch_paciente_full(conn, paciente_id: str | int):
         return None
 
     return {
-        "id": r[0],
-        "nome": r[1] or "",
-        "nascimento": r[2] or "",
-        "cpf": r[3] or "",
-        "cns": r[4] or "",
-        "prontuario": r[5] or "",
-        "mod": r[6] or "",
-        "status": r[7] or "",
-        "cid": r[8] or "",
-        "telefone": r[9] or "",
-        "sexo": r[10] or "",
+        "id": _val(r, "id", 0),
+        "nome": _val(r, "nome", 1, "") or "",
+        "nascimento": _val(r, "nascimento", 2, "") or "",
+        "cpf": _val(r, "cpf", 3, "") or "",
+        "cns": _val(r, "cns", 4, "") or "",
+        "prontuario": _val(r, "prontuario", 5, "") or "",
+        "mod": _val(r, "mod", 6, "") or "",
+        "status": _val(r, "status", 7, "") or "",
+        "cid": _val(r, "cid", 8, "") or "",
+        "telefone": _val(r, "telefone", 9, "") or "",
+        "sexo": _val(r, "sexo", 10, "") or "",
     }
-
 
 def _fetch_pts_by_id(conn, pts_id: int) -> dict | None:
     ensure_pts_schema(conn)
@@ -319,19 +335,19 @@ def _fetch_pts_by_id(conn, pts_id: int) -> dict | None:
         return None
 
     return {
-        "id": int(r[0]),
-        "paciente_id": int(r[1]),
-        "data_pts": r[2] or "",
-        "data": r[2] or "",
-        "competencia": (r[2] or "")[:7],
+        "id": int(_val(r, "id", 0)),
+        "paciente_id": int(_val(r, "paciente_id", 1)),
+        "data_pts": _val(r, "data_pts", 2, "") or "",
+        "data": _val(r, "data_pts", 2, "") or "",
+        "competencia": (_val(r, "data_pts", 2, "") or "")[:7],
         "status": "",
-        "objetivo_geral": r[3] or "",
-        "avaliacao": r[4] or "",
-        "plano": r[5] or "",
-        "observacoes": r[6] or "",
-        "created_by": r[7],
-        "created_at": r[8] or "",
-        "updated_at": r[9] or "",
+        "objetivo_geral": _val(r, "objetivo_geral", 3, "") or "",
+        "avaliacao": _val(r, "avaliacao", 4, "") or "",
+        "plano": _val(r, "plano", 5, "") or "",
+        "observacoes": _val(r, "observacoes", 6, "") or "",
+        "created_by": _val(r, "created_by", 7),
+        "created_at": _val(r, "created_at", 8, "") or "",
+        "updated_at": _val(r, "updated_at", 9, "") or "",
     }
 
 
@@ -354,10 +370,10 @@ def _fetch_participantes(conn, pts_id: int) -> list[dict]:
 
     return [
         {
-            "usuario_id": int(r[0]),
-            "nome": r[1] or "",
-            "cbo": r[2] or "",
-            "funcao": r[3] or "",
+            "usuario_id": int(_val(r, "usuario_id", 0) or 0),
+            "nome": _val(r, "nome", 1, "") or "",
+            "cbo": _val(r, "cbo", 2, "") or "",
+            "funcao": _val(r, "funcao", 3, "") or "",
         }
         for r in rows
     ]
@@ -482,7 +498,7 @@ def pts_page_post():
             now,
         ))
 
-        pts_id = int(cur.fetchone()[0])
+        pts_id = int(_val(cur.fetchone(), "id", 0))
 
         _insert_pts_participantes(conn, pts_id, ids, now)
 
@@ -537,7 +553,7 @@ def pts_visualizar():
             params,
         )
 
-        total = int(cur.fetchone()[0] or 0)
+        total = int(_val(cur.fetchone(), "count", 0, 0) or 0)
 
         cur.execute(
             f"""
@@ -576,14 +592,14 @@ def pts_visualizar():
 
         itens = [
             dict(
-                id=r[0],
-                paciente_id=r[1],
-                data_pts=r[2],
-                competencia=r[3],
-                paciente_nome=r[4],
-                prontuario=r[5],
-                cid=r[6],
-                equipe=r[7] or "",
+                id=_val(r, "id", 0),
+                paciente_id=_val(r, "paciente_id", 1),
+                data_pts=_val(r, "data_pts", 2, ""),
+                competencia=_val(r, "competencia", 3, ""),
+                paciente_nome=_val(r, "paciente_nome", 4, ""),
+                prontuario=_val(r, "prontuario", 5, ""),
+                cid=_val(r, "cid", 6, ""),
+                equipe=_val(r, "equipe", 7, "") or "",
             )
             for r in rows
         ]
@@ -748,7 +764,10 @@ def api_pts_profissionais():
 
         items = []
 
-        for uid, nome, cbo in rows:
+        for r in rows:
+            uid = _val(r, "id", 0)
+            nome = _val(r, "nome", 1, "")
+            cbo = _val(r, "cbo", 2, "")
             nome = (nome or "").strip()
             cbo = (cbo or "").strip()
             if not nome:
@@ -765,7 +784,7 @@ def api_pts_profissionais():
             label = f"{nome} · " + " · ".join(extra) if extra else nome
 
             items.append({
-                "id": int(uid),
+                "id": int(uid or 0),
                 "nome": nome,
                 "cbo": cbo,
                 "funcao": funcao,
@@ -822,20 +841,23 @@ def api_pts_dados():
         participantes = []
 
         if r:
-            pts_id = int(r[0])
+            pts_id = int(_val(r, "id", 0))
+            data_pts_val = _val(r, "data_pts", 1, "") or ""
+
             pts = {
                 "id": pts_id,
-                "data_pts": r[1],
-                "data": r[1],
-                "competencia": (r[1] or "")[:7],
-                "objetivo_geral": r[2],
-                "avaliacao": r[3],
-                "plano": r[4],
-                "observacoes": r[5],
+                "data_pts": data_pts_val,
+                "data": data_pts_val,
+                "competencia": data_pts_val[:7],
+                "objetivo_geral": _val(r, "objetivo_geral", 2, "") or "",
+                "avaliacao": _val(r, "avaliacao", 3, "") or "",
+                "plano": _val(r, "plano", 4, "") or "",
+                "observacoes": _val(r, "observacoes", 5, "") or "",
                 "status": "",
-                "resumo": r[3],
+                "resumo": _val(r, "avaliacao", 3, "") or "",
             }
             participantes = _fetch_participantes(conn, pts_id)
+
 
         return jsonify(ok=True, paciente=paciente, pts=pts, participantes=participantes)
 
@@ -879,8 +901,8 @@ def _insert_pts_participantes(conn, pts_id: int, ids: list[int], now=None):
         if not ur:
             continue
 
-        nome_u = (ur[0] or "").strip()
-        cbo_u = (ur[1] or "").strip()
+        nome_u = (_val(ur, "nome", 0, "") or "").strip()
+        cbo_u = (_val(ur, "cbo", 1, "") or "").strip()
         funcao_u = _funcao_from_cbo(cbo_u)
 
         cur.execute("""
@@ -958,7 +980,7 @@ def api_pts_salvar():
             now,
         ))
 
-        pts_id = int(cur.fetchone()[0])
+        pts_id = int(_val(cur.fetchone(), "id", 0))
 
         _insert_pts_participantes(conn, pts_id, norm_ids, now)
 
