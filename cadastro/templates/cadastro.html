@@ -8,7 +8,7 @@
 <div class="cadastro-container">
   <h2>Cadastro de Paciente</h2>
 
-  <form id="formCadastro" class="form-grid">
+  <form id="formCadastro" class="form-grid" method="POST" action="{{ url_for('cadastro.salvar_paciente') }}">
 
     <!-- =========================
          BLOCO 1 · DADOS PESSOAIS
@@ -77,7 +77,7 @@
       </div>
 
       <!-- Linha 3 -->
-      <div class="campo-quintuplo">
+      <div class="campo-quartuplo-ajustado">
         <div>
           <label>Sexo:</label>
           <select id="sexo" name="sexo">
@@ -88,13 +88,8 @@
         </div>
 
         <div>
-          <label>CID 1:</label>
-          <input type="text" id="cid" name="cid" placeholder="Ex: F84.0">
-        </div>
-
-        <div>
-          <label>CID 2:</label>
-          <input type="text" id="cid2" name="cid2" placeholder="Opcional">
+          <label>Religião:</label>
+          <input type="text" id="religiao" name="religiao" placeholder="Ex.: CATÓLICA, EVANGÉLICA...">
         </div>
 
         <div>
@@ -118,53 +113,113 @@
     </fieldset>
 
     <!-- =========================
-         BLOCO 2 · ENDEREÇO
+         BLOCO 2 · LAUDOS
+         ========================= -->
+    <fieldset>
+      <legend>Laudos</legend>
+
+      <div class="campo-triplo laudos-topo">
+        <div class="laudos-busca-wrap">
+          <label>CID / Descrição:</label>
+          <input
+            type="text"
+            id="laudo-cid-busca"
+            placeholder="Digite o CID ou a descrição para buscar"
+            autocomplete="off"
+          >
+          <div id="laudo-cid-sugestoes" class="autocomplete-list" hidden></div>
+        </div>
+
+        <div>
+          <label>CID selecionado:</label>
+          <input
+            type="text"
+            id="laudo-cid-selecionado"
+            placeholder="Selecione um CID na busca"
+            readonly
+          >
+        </div>
+
+        <div class="laudos-acoes">
+          <label>&nbsp;</label>
+          <button type="button" id="btnAdicionarLaudo" class="btn-secundario">
+            + Adicionar CID
+          </button>
+        </div>
+      </div>
+
+      <input type="hidden" id="laudos_json" name="laudos_json" value="[]">
+
+      <div class="laudos-lista-wrap">
+        <label>CIDs adicionados:</label>
+        <div id="laudosLista" class="laudos-lista">
+          <div class="laudos-vazio">Nenhum CID adicionado ainda.</div>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- =========================
+         BLOCO 3 · ENDEREÇO
          ========================= -->
     <fieldset>
       <legend>Endereço</legend>
 
       <div class="campo-triplo">
         <div>
-          <label>Logradouro:</label>
-          <input type="text" id="logradouro" name="logradouro">
-        </div>
-
-        <div>
-          <label>Bairro:</label>
-          <input type="text" id="bairro" name="bairro">
-        </div>
-
-        <div>
-          <label>Nº da Casa:</label>
-          <input type="text" id="numero_casa" name="numero_casa">
-        </div>
-      </div>
-
-      <div class="campo-quadruplo">
-        <div>
-          <label>Complemento:</label>
-          <input type="text" id="complemento" name="complemento">
-        </div>
-
-        <div>
           <label>CEP:</label>
-          <input type="text" id="cep" name="cep">
+          <input type="text" id="cep" name="cep" maxlength="9" placeholder="00000-000">
         </div>
 
         <div>
           <label>Município:</label>
-          <input type="text" id="municipio" name="municipio">
+          <input type="text" id="municipio" name="municipio" readonly data-cep-lock="true">
+        </div>
+
+        <div>
+          <label>Código IBGE:</label>
+          <input type="text" id="codigo_ibge" name="codigo_ibge" readonly data-cep-lock="true">
+        </div>
+      </div>
+
+      <div class="campo-triplo">
+        <div>
+          <label>Logradouro:</label>
+          <input type="text" id="logradouro" name="logradouro" data-cep-lock="true">
+        </div>
+
+        <div>
+          <label>Bairro:</label>
+          <input type="text" id="bairro" name="bairro" data-cep-lock="true">
+        </div>
+
+        <div>
+          <label>Nº da Casa:</label>
+          <input type="text" id="numero_casa" name="numero_casa" data-cep-lock="true">
+        </div>
+      </div>
+
+      <div class="campo-triplo">
+        <div>
+          <label>Complemento:</label>
+          <input type="text" id="complemento" name="complemento" data-cep-lock="true">
         </div>
 
         <div>
           <label>Código do Logradouro:</label>
-          <input type="text" id="codigo_logradouro" name="codigo_logradouro">
+          <input type="text" id="codigo_logradouro" name="codigo_logradouro" data-cep-lock="true">
+        </div>
+
+        <div class="cep-status-wrap">
+          <label>Status do CEP:</label>
+          <div id="cep-status" class="cep-status cep-status--neutro">
+            Informe o CEP para liberar os campos de endereço.
+          </div>
         </div>
       </div>
     </fieldset>
 
     <!-- =========================
-         BLOCO 3 · DOCUMENTOS
+         BLOCO 4 · DOCUMENTOS
          ========================= -->
     <fieldset>
       <legend>Documentos</legend>
@@ -212,7 +267,7 @@
     </fieldset>
 
     <!-- =========================
-         BLOCO 4 · DADOS FAMILIARES
+         BLOCO 5 · DADOS FAMILIARES
          ========================= -->
     <fieldset>
       <legend>Dados Familiares</legend>
@@ -282,7 +337,7 @@
     </fieldset>
 
     <!-- =========================
-         BLOCO 5 · RESPONSÁVEL
+         BLOCO 6 · RESPONSÁVEL
          ========================= -->
     <fieldset>
       <legend>Responsável Legal</legend>

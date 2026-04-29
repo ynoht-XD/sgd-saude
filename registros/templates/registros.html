@@ -2,14 +2,10 @@
 {% extends "layout.html" %}
 {% block title %}Registros · SGD{% endblock %}
 
-{# =========================================================
-   CSS (somente 1 vez)
-   ========================================================= #}
 {% block extra_css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('registros.static', filename='css/registros.css') }}">
 {% endblock %}
-
 
 {% block content %}
 <header class="page-head">
@@ -19,44 +15,38 @@
   </div>
 
   <div class="head-actions">
-    <!-- ✅ PDF de Evoluções -->
-    <a
-      id="btnExportarEvoPdf"
-      class="btn ghost"
-      href="{{ url_for('registros.exportar_evolucoes_pdf') }}"
-      target="_blank"
-      rel="noopener"
-      title="Gera um PDF com as evoluções (somente da tabela atendimentos)"
-    >
-      Exportar Evoluções
-    </a>
-
-    <!-- ✅ XLSX (o JS monta URL com filtros) -->
-    <button id="btnExportar" class="btn" type="button">Exportar</button>
-    <button class="btn primary" type="button" id="btnExportBPAI">
-      Exportar BPA-i (XLSX)
+    <button id="btnExportarEvoGeralPdf" class="btn ghost" type="button">
+      Evoluções gerais
     </button>
-  
+
+    <button id="btnExportarEvoPacientePdf" class="btn ghost" type="button">
+      Evoluções do paciente
+    </button>
+
+    <button id="btnExportar" class="btn" type="button">
+      Exportar
+    </button>
+
+    <button class="btn primary" type="button" id="btnExportBPAI">
+      Exportar BPA-i
+    </button>
   </div>
-
-
 </header>
 
-<!-- Filtros -->
 <section class="card" aria-label="Filtros de pesquisa">
   <form id="frmFiltros" class="filtros-grid">
-    <!-- Linha 1 -->
+
     <div class="field" style="grid-column: span 4">
-      <label for="f_busca">Paciente (nome, CPF, CNS...)</label>
+      <label for="f_busca">Paciente</label>
       <input
         id="f_busca"
         name="q"
-        placeholder="Ex.: Maria, 123.456.789-00, 8980 0 0000 0000..."
+        placeholder="Nome, CPF, CNS..."
         autocomplete="off"
       >
     </div>
 
-    <div class="field" id="f_prof_wrap">
+    <div class="field" id="f_prof_wrap" style="grid-column: span 3">
       <label for="f_prof">Profissional</label>
 
       <div class="prof-ac">
@@ -64,10 +54,10 @@
           id="f_prof"
           name="f_prof_text"
           type="text"
-          placeholder="Digite 3+ letras…"
+          placeholder="Digite 3+ letras..."
           autocomplete="off"
-        />
-        <input id="f_prof_id" name="prof" type="hidden" value="" />
+        >
+        <input id="f_prof_id" name="prof" type="hidden" value="">
 
         <div
           id="f_prof_sugestoes"
@@ -88,24 +78,30 @@
       </select>
     </div>
 
-    <!-- Linha 2 -->
     <div class="field" style="grid-column: span 2">
       <label for="f_data_ini">Data inicial</label>
-      <input id="f_data_ini" name="data_ini" type="date" placeholder="AAAA-MM-DD">
+      <input id="f_data_ini" name="data_ini" type="date">
     </div>
 
     <div class="field" style="grid-column: span 2">
       <label for="f_data_fim">Data final</label>
-      <input id="f_data_fim" name="data_fim" type="date" placeholder="AAAA-MM-DD">
+      <input id="f_data_fim" name="data_fim" type="date">
     </div>
 
     <div class="field" style="grid-column: span 2">
       <label for="f_status">Status</label>
       <select id="f_status" name="status">
         <option value="">Todos</option>
-        <option value="presente">Presente</option>
-        <option value="faltoso">Faltoso</option>
-        <option value="justificado">Justificado</option>
+        <option value="Realizado">Realizado</option>
+        <option value="Presente">Presente</option>
+        <option value="Falta">Falta</option>
+        <option value="Faltoso">Faltoso</option>
+        <option value="Justificado">Justificado</option>
+        <option value="Remarcado">Remarcado</option>
+        <option value="Admissão">Admissão</option>
+        <option value="Desligamento">Desligamento</option>
+        <option value="Alta">Alta</option>
+        <option value="Óbito">Óbito</option>
       </select>
     </div>
 
@@ -119,7 +115,6 @@
       <input id="f_cidade" name="cidade" placeholder="Ex.: Maceió">
     </div>
 
-    <!-- Linha 3 -->
     <div class="filtros-actions" style="grid-column: span 8">
       <button id="btnFiltrar" class="btn primary" type="submit">Filtrar</button>
       <button id="btnLimpar" class="btn" type="button">Limpar</button>
@@ -127,7 +122,6 @@
   </form>
 </section>
 
-<!-- Lista resumida -->
 <section class="card" aria-label="Resultados">
   <div class="muted" id="lblResumo"></div>
 
@@ -138,27 +132,28 @@
           <th>Paciente</th>
           <th>Profissional</th>
           <th>Data</th>
+          <th>Status</th>
           <th>CNS</th>
           <th class="nowrap">Ações</th>
         </tr>
       </thead>
-      <tbody>
-        {# linhas via JS #}
-      </tbody>
+      <tbody></tbody>
     </table>
   </div>
 
-  <!-- Paginação -->
   <div class="paginacao" id="paginacao" aria-label="Paginação">
     <div class="pag-info">
       <span id="pagInfo">Mostrando 0–0 de 0 registro(s)</span>
     </div>
+
     <div class="pag-controls">
       <button type="button" class="btn ghost" data-page="first" id="pagFirst">&laquo;</button>
       <button type="button" class="btn ghost" data-page="prev" id="pagPrev">&lsaquo;</button>
+
       <span class="pag-status">
         Página <span id="pagAtual">1</span> de <span id="pagTotal">1</span>
       </span>
+
       <button type="button" class="btn ghost" data-page="next" id="pagNext">&rsaquo;</button>
       <button type="button" class="btn ghost" data-page="last" id="pagLast">&raquo;</button>
     </div>
@@ -168,9 +163,6 @@
 {% include "_modal_registro.html" %}
 {% endblock %}
 
-{# =========================================================
-   JS (somente 1 vez)
-   ========================================================= #}
 {% block extra_js %}
   {{ super() }}
   <script src="{{ url_for('registros.static', filename='js/registros.js') }}"></script>

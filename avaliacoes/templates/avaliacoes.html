@@ -342,37 +342,50 @@
     font-size:.94rem;
   }
 
-  .table-wrap{
-    border:1px solid var(--av-border);
-    border-radius:18px;
+  .reg-grid{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0,1fr));
+    gap:14px;
+  }
+
+  .reg-card{
+    position:relative;
     overflow:hidden;
-    background:#fff;
+    background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(248,250,252,.96));
+    border:1px solid var(--av-border);
+    border-radius:22px;
+    box-shadow:0 12px 24px rgba(15,23,42,.04);
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   }
 
-  table{
-    width:100%;
-    border-collapse:collapse;
-    min-width:980px;
+  .reg-card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 18px 34px rgba(15,23,42,.08);
+    border-color:#c7d2fe;
   }
 
-  th,td{
-    padding:12px 14px;
-    border-bottom:1px solid #eef2f7;
-    text-align:left;
-    vertical-align:middle;
+  .reg-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:10px;
   }
 
-  th{
-    background:#f8fafc;
-    font-size:.78rem;
-    text-transform:uppercase;
-    letter-spacing:.06em;
-    color:#475569;
+  .reg-id{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:32px;
+    padding:0 10px;
+    border-radius:999px;
+    background:#eff6ff;
+    color:#1d4ed8;
+    font-size:.8rem;
     font-weight:900;
-  }
-
-  tbody tr:hover td{
-    background:#f8fbff;
   }
 
   .pill{
@@ -393,11 +406,55 @@
     color:#1d4ed8;
   }
 
+  .reg-patient{
+    margin:0;
+    font-size:1.06rem;
+    line-height:1.35;
+    letter-spacing:-.02em;
+  }
+
+  .reg-type{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .reg-meta{
+    display:grid;
+    gap:10px;
+  }
+
+  .reg-meta-item{
+    padding:12px 13px;
+    border-radius:16px;
+    background:#f8fafc;
+    border:1px solid #eef2f7;
+  }
+
+  .reg-meta-item span{
+    display:block;
+    margin-bottom:4px;
+    color:#64748b;
+    font-size:.75rem;
+    font-weight:900;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+  }
+
+  .reg-meta-item strong{
+    display:block;
+    color:#0f172a;
+    font-size:.93rem;
+    line-height:1.45;
+    word-break:break-word;
+  }
+
   .row-actions{
     display:flex;
     gap:8px;
     justify-content:flex-end;
     flex-wrap:wrap;
+    margin-top:auto;
   }
 
   .empty-state{
@@ -436,6 +493,7 @@
     .av-hero{ grid-template-columns:1fr; }
     .filters{ grid-template-columns:1fr 1fr; }
     .pick-grid{ grid-template-columns:1fr 1fr; }
+    .reg-grid{ grid-template-columns:1fr 1fr; }
   }
 
   @media (max-width: 760px){
@@ -469,49 +527,11 @@
     .card-head,.card-body{ padding:16px; }
     .pick-grid{ grid-template-columns:1fr; }
     .filters{ grid-template-columns:1fr; }
+    .reg-grid{ grid-template-columns:1fr; }
 
-    .table-wrap{
-      border:none;
-      overflow:visible;
-      background:transparent;
-    }
-
-    table{
-      min-width:0;
-      display:block;
-      background:transparent;
-    }
-
-    thead{ display:none; }
-    tbody{ display:grid; gap:12px; }
-
-    tr{
-      display:block;
-      background:#fff;
-      border:1px solid #e5e7eb;
+    .reg-card{
       border-radius:18px;
-      box-shadow:0 10px 22px rgba(15,23,42,.04);
-      overflow:hidden;
-    }
-
-    td{
-      display:flex;
-      flex-direction:column;
-      align-items:flex-start;
-      gap:7px;
-      padding:13px 14px 0;
-      border-bottom:none;
-    }
-
-    td:last-child{ padding-bottom:14px; }
-
-    td::before{
-      content:attr(data-label);
-      font-size:.75rem;
-      font-weight:900;
-      color:#64748b;
-      letter-spacing:.05em;
-      text-transform:uppercase;
+      padding:14px;
     }
 
     .row-actions{
@@ -538,6 +558,7 @@
       </p>
 
       <div class="av-hero-chips">
+        <span class="av-chip">📝 Anamnese</span>
         <span class="av-chip">🩺 Enfermagem</span>
         <span class="av-chip">🗣️ Fonoaudiologia Infantil</span>
         <span class="av-chip">🧠 Psicologia Infantil</span>
@@ -574,6 +595,14 @@
 
     <div class="card-body">
       <div class="pick-grid">
+
+        <a class="pick" href="{{ url_for('avaliacoes.tela_anamnese') }}">
+          <div class="pick-ico">📝</div>
+          <div class="pick-body">
+            <strong>Anamnese</strong>
+            <div class="muted">Levantamento inicial das informações clínicas e históricas do paciente.</div>
+          </div>
+        </a>
 
         <a class="pick" href="{{ url_for('avaliacoes.tela_enfermagem') }}">
           <div class="pick-ico">🩺</div>
@@ -638,6 +667,7 @@
           <label class="f-label" for="fTipo">Tipo</label>
           <select id="fTipo" class="f-select">
             <option value="">Todos</option>
+            <option value="Anamnese">Anamnese</option>
             <option value="Avaliação de Enfermagem">Avaliação de Enfermagem</option>
             <option value="Fonoaudiologia Infantil">Fonoaudiologia Infantil</option>
             <option value="Avaliação Psicológica Infantil">Avaliação Psicológica Infantil</option>
@@ -668,7 +698,7 @@
     <div class="card-head">
       <div>
         <h3 class="card-title">Registros</h3>
-        <p class="card-sub">Histórico das avaliações já lançadas no sistema.</p>
+        <p class="card-sub">Histórico das avaliações já lançadas no sistema em visual de cards.</p>
       </div>
     </div>
 
@@ -680,45 +710,48 @@
       </div>
 
       {% if avaliacoes %}
-        <div class="table-wrap">
-          <table id="tblAvaliacoes">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Paciente</th>
-                <th>Tipo</th>
-                <th>Profissional</th>
-                <th>CBO</th>
-                <th>Competência</th>
-                <th style="text-align:right;">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for a in avaliacoes %}
-              <tr
-                data-nome="{{ (a.paciente_nome or '')|lower }}"
-                data-tipo="{{ (tipos.get(a.tipo, a.tipo) or '')|lower }}"
-                data-cbo="{{ (a.usuario_cbo or '')|lower }}"
-                data-comp="{{ (a.criado_em[:7] if a.criado_em else '') }}"
-              >
-                <td data-label="#">#{{ a.id }}</td>
-                <td data-label="Paciente"><strong>{{ a.paciente_nome or '—' }}</strong></td>
-                <td data-label="Tipo"><span class="pill">{{ tipos.get(a.tipo, a.tipo) }}</span></td>
-                <td data-label="Profissional">{{ a.usuario_nome or "—" }}</td>
-                <td data-label="CBO">{{ a.usuario_cbo or "—" }}</td>
-                <td data-label="Competência">
-                  <span class="pill pill-date">{{ a.criado_em[:7] if a.criado_em else "—" }}</span>
-                </td>
-                <td data-label="Ações">
-                  <div class="row-actions">
-                    <a class="btn btn-ghost" href="{{ url_for('avaliacoes.visualizar', id=a.id) }}">Ver</a>
-                    <a class="btn btn-soft" href="{{ url_for('avaliacoes.exportar_pdf', id=a.id) }}">PDF</a>
-                  </div>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="reg-grid" id="regGrid">
+          {% for a in avaliacoes %}
+          <article
+            class="reg-card"
+            data-nome="{{ (a.paciente_nome or '')|lower }}"
+            data-tipo="{{ (tipos.get(a.tipo, a.tipo) or '')|lower }}"
+            data-cbo="{{ (a.usuario_cbo or '')|lower }}"
+            data-comp="{{ (a.criado_em[:7] if a.criado_em else '') }}"
+          >
+            <div class="reg-top">
+              <span class="reg-id">#{{ a.id }}</span>
+              <span class="pill pill-date">
+                {{ a.criado_em[:7] if a.criado_em else "—" }}
+              </span>
+            </div>
+
+            <div>
+              <h4 class="reg-patient">{{ a.paciente_nome or '—' }}</h4>
+            </div>
+
+            <div class="reg-type">
+              <span class="pill">{{ tipos.get(a.tipo, a.tipo) }}</span>
+            </div>
+
+            <div class="reg-meta">
+              <div class="reg-meta-item">
+                <span>Profissional</span>
+                <strong>{{ a.usuario_nome or "—" }}</strong>
+              </div>
+
+              <div class="reg-meta-item">
+                <span>CBO</span>
+                <strong>{{ a.usuario_cbo or "—" }}</strong>
+              </div>
+            </div>
+
+            <div class="row-actions">
+              <a class="btn btn-ghost" href="{{ url_for('avaliacoes.visualizar', id=a.id) }}">Ver</a>
+              <a class="btn btn-soft" href="{{ url_for('avaliacoes.exportar_pdf', id=a.id) }}">PDF</a>
+            </div>
+          </article>
+          {% endfor %}
         </div>
 
         <div class="table-empty" id="tableEmpty">
@@ -742,7 +775,7 @@
   const tipo = document.getElementById('fTipo');
   const cbo  = document.getElementById('fCbo');
   const comp = document.getElementById('fComp');
-  const rows = Array.from(document.querySelectorAll('#tblAvaliacoes tbody tr'));
+  const cards = Array.from(document.querySelectorAll('#regGrid .reg-card'));
   const clear = document.getElementById('btnLimpar');
   const tableEmpty = document.getElementById('tableEmpty');
   const countVisible = document.getElementById('countVisible');
@@ -750,14 +783,14 @@
   function apply(){
     let visible = 0;
 
-    rows.forEach(r => {
-      const okNome = !nome.value || (r.dataset.nome || '').includes(nome.value.toLowerCase());
-      const okTipo = !tipo.value || (r.dataset.tipo || '') === tipo.value.toLowerCase();
-      const okCbo  = !cbo.value  || (r.dataset.cbo || '').includes(cbo.value.toLowerCase());
-      const okComp = !comp.value || (r.dataset.comp || '') === comp.value;
+    cards.forEach(card => {
+      const okNome = !nome.value || (card.dataset.nome || '').includes(nome.value.toLowerCase());
+      const okTipo = !tipo.value || (card.dataset.tipo || '') === tipo.value.toLowerCase();
+      const okCbo  = !cbo.value  || (card.dataset.cbo || '').includes(cbo.value.toLowerCase());
+      const okComp = !comp.value || (card.dataset.comp || '') === comp.value;
 
       const show = okNome && okTipo && okCbo && okComp;
-      r.style.display = show ? '' : 'none';
+      card.style.display = show ? '' : 'none';
       if (show) visible++;
     });
 

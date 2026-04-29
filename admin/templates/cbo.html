@@ -1,0 +1,114 @@
+{% extends "layout.html" %}
+
+{% block title %}Biblioteca CBO{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/bibliotecas.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="page-biblioteca">
+  <div class="page-header">
+    <div>
+      <p class="eyebrow">SGD · Administrativo</p>
+      <h1>{{ titulo or 'Biblioteca CBO' }}</h1>
+      <p class="page-subtitle">
+        Importe a base de ocupações e pesquise por código ou descrição.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid-biblioteca">
+    <section class="card card-importacao">
+      <div class="card-head">
+        <h2>Importar arquivo XLSX</h2>
+        <p>Colunas esperadas: <strong>co_ocupacao</strong> e <strong>no_ocupacao</strong></p>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" class="import-form" id="formImportacao">
+        <label class="file-drop" for="arquivo">
+          <input
+            type="file"
+            id="arquivo"
+            name="arquivo"
+            accept=".xlsx"
+            required
+          >
+          <span class="file-drop-icon">📥</span>
+          <span class="file-drop-title">Clique para selecionar o arquivo</span>
+          <span class="file-drop-subtitle" id="file-name">Nenhum arquivo selecionado</span>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Importar CBO</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card card-busca">
+      <div class="card-head">
+        <h2>Pesquisar</h2>
+        <p>Busque por código CBO ou pela descrição.</p>
+      </div>
+
+      <form method="GET" class="search-form">
+        <div class="search-row">
+          <input
+            type="text"
+            name="q"
+            value="{{ q or '' }}"
+            placeholder="Ex.: 223605 ou fisioterapeuta"
+            autocomplete="off"
+          >
+          <button type="submit" class="btn btn-primary">Buscar</button>
+          {% if q %}
+            <a href="{{ url_for('admin.biblioteca_cbo') }}" class="btn btn-ghost">Limpar</a>
+          {% endif %}
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <section class="card card-lista">
+    <div class="card-head card-head-inline">
+      <div>
+        <h2>Registros encontrados</h2>
+        <p>{{ itens|length }} item(ns) exibido(s)</p>
+      </div>
+    </div>
+
+    {% if itens %}
+      <div class="table-wrap">
+        <table class="table-biblioteca">
+          <thead>
+            <tr>
+              <th style="width: 180px;">Código</th>
+              <th>Descrição</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in itens %}
+              <tr>
+                <td class="col-codigo">{{ item.codigo }}</td>
+                <td>{{ item.descricao }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">📚</div>
+        <h3>Nenhum CBO encontrado</h3>
+        <p>Importe uma biblioteca XLSX ou ajuste sua pesquisa.</p>
+      </div>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('admin.static', filename='js/bibliotecas.js') }}"></script>
+{% endblock %}

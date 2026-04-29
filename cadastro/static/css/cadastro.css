@@ -1,4 +1,6 @@
-/* Estilo geral */
+/* =========================================================
+   ESTILO GERAL
+   ========================================================= */
 body {
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 16px;
@@ -15,7 +17,9 @@ body {
   box-shadow: 0 0 18px rgba(0, 0, 0, 0.07);
 }
 
-/* Título */
+/* =========================================================
+   TÍTULO
+   ========================================================= */
 .cadastro-container h2 {
   text-align: center;
   margin-bottom: 20px;
@@ -24,21 +28,22 @@ body {
   color: #2c3e50;
 }
 
-/* Seções com fundo claro para destaque */
+/* =========================================================
+   FIELDSETS
+   ========================================================= */
 form fieldset {
   border: 1px solid #d0d6dd;
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
   background-color: #f9fbfc;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, border-color 0.2s, box-shadow 0.2s;
 }
 
 form fieldset:hover {
   background-color: #f1f6fa;
 }
 
-/* Legenda da seção */
 form legend {
   font-size: 17px;
   font-weight: bold;
@@ -46,7 +51,9 @@ form legend {
   padding: 0 10px;
 }
 
-/* Rótulo e inputs alinhados */
+/* =========================================================
+   LINHAS / LABELS / INPUTS
+   ========================================================= */
 .linha-ajustada {
   display: flex;
   align-items: center;
@@ -57,33 +64,56 @@ form legend {
 form label {
   font-weight: 600;
   font-size: 13px;
-  width: 120px;        /* 👈 largura fixa do label */
-  margin: 0;
-
+  width: 100%;
+  margin: 0 0 6px;
   text-align: left;
+  display: block;
+  color: #29485d;
 }
 
-/* Inputs e selects */
 form input,
-form select {
+form select,
+form textarea,
+form button {
+  font-family: inherit;
+}
+
+form input,
+form select,
+form textarea {
   display: inline-block;
   width: 100%;
   padding: 9px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #c9d3dc;
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
   background-color: #fdfdfd;
-  transition: border 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  color: #2c3e50;
 }
 
 form input:focus,
-form select:focus {
+form select:focus,
+form textarea:focus {
   border-color: #2980b9;
   outline: none;
+  box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.12);
 }
 
-/* Botão principal */
+form input[readonly],
+form input:disabled,
+form select:disabled,
+form textarea:disabled {
+  background-color: #eef2f5;
+  color: #667788;
+  cursor: not-allowed;
+  border-color: #d6dde4;
+}
+
+/* =========================================================
+   BOTÕES
+   ========================================================= */
 form button.btn-salvar {
   width: 100%;
   padding: 12px;
@@ -95,26 +125,61 @@ form button.btn-salvar {
   font-weight: bold;
   cursor: pointer;
   margin-top: 15px;
-  transition: background 0.3s ease;
+  transition: background 0.3s ease, transform 0.08s ease;
 }
 
 form button.btn-salvar:hover {
   background-color: #1f6390;
 }
 
-/* Grid flexível para campos */
+form button.btn-salvar:active {
+  transform: translateY(1px);
+}
+
+.btn-secundario {
+  width: 100%;
+  min-height: 41px;
+  padding: 10px 12px;
+  background: #eaf4fb;
+  color: #1f6390;
+  border: 1px solid #b8d5e8;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s, transform 0.08s ease;
+}
+
+.btn-secundario:hover {
+  background: #dceef9;
+  border-color: #98c4df;
+}
+
+.btn-secundario:active {
+  transform: translateY(1px);
+}
+
+/* =========================================================
+   GRID / LAYOUT DOS CAMPOS
+   ========================================================= */
 .form-grid {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+.campo-unico,
 .campo-duplo,
 .campo-triplo,
-.campo-unico {
+.campo-quadruplo,
+.campo-quartuplo-ajustado {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.campo-unico > * {
+  flex: 1 1 100%;
 }
 
 .campo-duplo > * {
@@ -125,13 +190,11 @@ form button.btn-salvar:hover {
   flex: 1 1 30%;
 }
 
-.campo-quadruplo {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.campo-quadruplo > * {
+  flex: 1 1 23%;
 }
 
-.campo-quadruplo > * {
+.campo-quartuplo-ajustado > * {
   flex: 1 1 23%;
 }
 
@@ -142,13 +205,265 @@ form button.btn-salvar:hover {
   margin-bottom: 16px;
 }
 
-
-.campo-unico > * {
-  flex: 1 1 100%;
+/* =========================================================
+   CEP / ENDEREÇO
+   ========================================================= */
+.cep-status-wrap {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
-/* Responsividade */
+.cep-status {
+  min-height: 41px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+
+.cep-status--neutro {
+  background: #eef4f8;
+  color: #4e6475;
+  border-color: #d7e2ea;
+}
+
+.cep-status--carregando {
+  background: #fff8e8;
+  color: #8a6116;
+  border-color: #f0dbab;
+}
+
+.cep-status--sucesso {
+  background: #eaf8ef;
+  color: #1c6b3d;
+  border-color: #bfe3ca;
+}
+
+.cep-status--erro {
+  background: #fdeeee;
+  color: #9b2d2d;
+  border-color: #efc0c0;
+}
+
+/* =========================================================
+   LAUDOS
+   ========================================================= */
+.laudos-topo {
+  align-items: flex-end;
+}
+
+.laudos-busca-wrap {
+  position: relative;
+}
+
+.laudos-acoes {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.laudos-lista-wrap {
+  margin-top: 12px;
+}
+
+.laudos-lista {
+  min-height: 70px;
+  padding: 10px;
+  border: 1px dashed #c8d4de;
+  background: #fcfdfe;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.laudos-vazio {
+  font-size: 13px;
+  color: #6d7f8c;
+  font-style: italic;
+}
+
+.laudo-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #eef6fb;
+  border: 1px solid #c8dfef;
+  border-radius: 999px;
+  padding: 8px 10px 8px 12px;
+  max-width: 100%;
+}
+
+.laudo-chip-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.laudo-chip-texto strong {
+  font-size: 13px;
+  color: #174764;
+  line-height: 1.1;
+}
+
+.laudo-chip-texto span {
+  font-size: 12px;
+  color: #567082;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 380px;
+}
+
+.laudo-chip-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  background: #d8eaf5;
+  color: #19506f;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background-color 0.2s, transform 0.08s ease;
+}
+
+.laudo-chip-remove:hover {
+  background: #c6deee;
+}
+
+.laudo-chip-remove:active {
+  transform: scale(0.96);
+}
+
+/* =========================================================
+   AUTOCOMPLETE CID
+   ========================================================= */
+.autocomplete-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #ffffff;
+  border: 1px solid #cfdae3;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.autocomplete-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background-color 0.18s ease;
+}
+
+.autocomplete-item:hover {
+  background: #eef6fb;
+}
+
+.autocomplete-item strong {
+  font-size: 13px;
+  color: #1b4d68;
+}
+
+.autocomplete-item span {
+  font-size: 12px;
+  color: #6a7d8c;
+}
+
+.autocomplete-empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #6b7d8a;
+}
+
+/* =========================================================
+   BOTÃO VOLTAR
+   ========================================================= */
+.btn-voltar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  margin-top: 12px;
+  padding: 10px 14px;
+
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 14px;
+
+  color: #0f172a;
+  background: rgba(108,117,125,.12);
+  border: 1px solid rgba(108,117,125,.22);
+
+  transition: transform .12s, background-color .2s, border-color .2s, box-shadow .2s;
+}
+
+.btn-voltar:hover {
+  background: rgba(108,117,125,.18);
+  border-color: rgba(108,117,125,.32);
+  box-shadow: 0 6px 16px rgba(2,6,23,.08);
+}
+
+.btn-voltar:active {
+  transform: translateY(1px);
+}
+
+.btn-voltar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(31,111,235,.18);
+}
+
+/* =========================================================
+   RESPONSIVIDADE
+   ========================================================= */
+@media (max-width: 980px) {
+  .campo-quadruplo > *,
+  .campo-quartuplo-ajustado > * {
+    flex: 1 1 48%;
+  }
+
+  .campo-triplo > * {
+    flex: 1 1 48%;
+  }
+
+  .campo-quintuplo {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .laudo-chip-texto span {
+    max-width: 260px;
+  }
+}
+
 @media (max-width: 768px) {
+  .cadastro-container {
+    margin: 16px;
+    padding: 18px;
+  }
+
   .linha-ajustada {
     flex-direction: column;
     align-items: flex-start;
@@ -159,53 +474,52 @@ form button.btn-salvar:hover {
     width: 100%;
   }
 
+  .campo-duplo > *,
+  .campo-triplo > *,
+  .campo-quadruplo > *,
+  .campo-quartuplo-ajustado > * {
+    flex: 1 1 100%;
+  }
+
+  .campo-quintuplo {
+    grid-template-columns: 1fr;
+  }
+
   form button.btn-salvar {
     font-size: 15px;
     padding: 10px;
   }
-}
-/* ==========================================================
-   Ajuste rápido: botão Cancelar (.btn-voltar)
-   Cole no FINAL do cadastro.css
-   ========================================================== */
 
-.btn-voltar{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
+  .laudos-lista {
+    padding: 8px;
+  }
 
-  margin-top:12px;
-  padding:10px 14px;
+  .laudo-chip {
+    width: 100%;
+    border-radius: 12px;
+    justify-content: space-between;
+  }
 
-  border-radius:12px;
-  text-decoration:none;
-  font-weight:900;
-  font-size:14px;
-
-  color:#0f172a;
-  background:rgba(108,117,125,.12);
-  border:1px solid rgba(108,117,125,.22);
-
-  transition:transform .12s, background-color .2s, border-color .2s, box-shadow .2s;
+  .laudo-chip-texto span {
+    max-width: 100%;
+    white-space: normal;
+  }
 }
 
-.btn-voltar:hover{
-  background:rgba(108,117,125,.18);
-  border-color:rgba(108,117,125,.32);
-  box-shadow:0 6px 16px rgba(2,6,23,.08);
-}
+@media (max-width: 520px) {
+  .btn-voltar {
+    width: 100%;
+  }
 
-.btn-voltar:active{
-  transform:translateY(1px);
-}
+  .cadastro-container h2 {
+    font-size: 21px;
+  }
 
-.btn-voltar:focus-visible{
-  outline:none;
-  box-shadow:0 0 0 3px rgba(31,111,235,.18);
-}
+  .autocomplete-list {
+    max-height: 220px;
+  }
 
-/* mobile: deixa o botão ocupar a largura toda */
-@media (max-width: 520px){
-  .btn-voltar{ width:100%; }
+  .cep-status {
+    font-size: 12px;
+  }
 }

@@ -288,6 +288,10 @@
       isolation: isolate;
     }
 
+    .admin-card.admin-card-wide{
+      grid-column: span 6;
+    }
+
     .admin-card::before{
       content: "";
       position: absolute;
@@ -428,20 +432,28 @@
       background: linear-gradient(135deg, rgba(5,150,105,.86), rgba(52,211,153,.76));
     }
 
-    .admin-card.is-cbo .admin-card-icon{
-      background: linear-gradient(135deg, rgba(217,119,6,.14), rgba(251,191,36,.28));
-      color: #b45309;
-    }
-    .admin-card.is-cbo::before{
-      background: linear-gradient(135deg, rgba(217,119,6,.86), rgba(251,191,36,.78));
-    }
-
     .admin-card.is-procedures .admin-card-icon{
       background: linear-gradient(135deg, rgba(220,38,38,.12), rgba(248,113,113,.26));
       color: #b91c1c;
     }
     .admin-card.is-procedures::before{
       background: linear-gradient(135deg, rgba(220,38,38,.84), rgba(248,113,113,.76));
+    }
+
+    .admin-card.is-cbo .admin-card-icon{
+      background: linear-gradient(135deg, rgba(14,165,233,.14), rgba(56,189,248,.26));
+      color: #0369a1;
+    }
+    .admin-card.is-cbo::before{
+      background: linear-gradient(135deg, rgba(14,165,233,.84), rgba(56,189,248,.76));
+    }
+
+    .admin-card.is-cid .admin-card-icon{
+      background: linear-gradient(135deg, rgba(217,119,6,.14), rgba(251,191,36,.28));
+      color: #b45309;
+    }
+    .admin-card.is-cid::before{
+      background: linear-gradient(135deg, rgba(217,119,6,.84), rgba(251,191,36,.78));
     }
 
     .admin-mini-panel{
@@ -493,7 +505,8 @@
         grid-template-columns: 1fr;
       }
 
-      .admin-card{
+      .admin-card,
+      .admin-card.admin-card-wide{
         grid-column: span 6;
       }
 
@@ -516,7 +529,8 @@
         font-size: 1.75rem;
       }
 
-      .admin-card{
+      .admin-card,
+      .admin-card.admin-card-wide{
         grid-column: span 12;
         min-height: 190px;
         padding: 18px;
@@ -554,7 +568,17 @@
         transition: none !important;
         animation: none !important;
       }
+
     }
+
+    .admin-card.is-cep .admin-card-icon{
+      background: linear-gradient(135deg, rgba(16,185,129,.14), rgba(45,212,191,.26));
+      color: #0f766e;
+    }
+    .admin-card.is-cep::before{
+      background: linear-gradient(135deg, rgba(16,185,129,.84), rgba(45,212,191,.76));
+    }
+
   </style>
 {% endblock %}
 
@@ -572,13 +596,13 @@
             <p class="admin-subtitle">
               Centralize os controles do sistema em uma tela mais limpa, visual e objetiva.
               Aqui ficam os atalhos principais para gestão de usuários, módulos, backups,
-              catálogo de CBO e procedimentos.
+              procedimentos e bibliotecas auxiliares de CID e CBO.
             </p>
 
             <div class="admin-badges">
               <span class="admin-badge"><i class="dot"></i> Gestão rápida</span>
               <span class="admin-badge"><i class="dot"></i> Visual mais moderno</span>
-              <span class="admin-badge"><i class="dot"></i> Acesso direto aos módulos-chave</span>
+              <span class="admin-badge"><i class="dot"></i> Bibliotecas técnicas integradas</span>
             </div>
           </div>
 
@@ -620,7 +644,7 @@
         <div>
           <h2 class="admin-actions-title">Acessos principais</h2>
           <p class="admin-actions-sub">
-            Menos botão sem sal, mais painel com presença. Agora sim o admin parou de andar de chinelo.
+            Menos rotas perdidas no mato, mais organização. Agora o painel já entrega também acesso rápido às bibliotecas de CID e CBO.
           </p>
         </div>
       </section>
@@ -661,7 +685,7 @@
           </div>
         </a>
 
-        <a class="admin-card is-backup" href="{{ url_for('admin.backup') }}">
+        <a class="admin-card is-backup" href="{{ url_for('admin.backup_criar') }}">
           <div class="admin-card-top">
             <div class="admin-card-icon">🗂️</div>
             <span class="admin-card-tag">Segurança</span>
@@ -678,25 +702,7 @@
           </div>
         </a>
 
-        <a class="admin-card is-cbo" href="{{ url_for('admin.cbos_listar') }}">
-          <div class="admin-card-top">
-            <div class="admin-card-icon">🏷️</div>
-            <span class="admin-card-tag">Catálogo</span>
-          </div>
-          <div class="admin-card-bottom">
-            <h3>CBO</h3>
-            <p>
-              Organize os códigos e descrições de CBO usados pelo sistema em um catálogo central.
-            </p>
-            <span class="admin-card-foot">
-              Gerenciar CBOs
-              <span class="arrow">→</span>
-            </span>
-          </div>
-        </a>
-
-        {# Ajuste este endpoint se o módulo de procedimentos usar outro nome #}
-        <a class="admin-card is-procedures" href="procedimentos.pagina_base_procedimentos/">
+        <a class="admin-card admin-card-wide is-procedures" href="{{ url_for('procedimentos.index') }}">
           <div class="admin-card-top">
             <div class="admin-card-icon">📋</div>
             <span class="admin-card-tag">Base técnica</span>
@@ -704,7 +710,8 @@
           <div class="admin-card-bottom">
             <h3>Procedimentos</h3>
             <p>
-              Consulte e mantenha a base de procedimentos com acesso rápido a pesquisas e vínculos.
+              Consulte e mantenha a base de procedimentos com acesso rápido a competência,
+              exportação, importação técnica e vínculos assistenciais.
             </p>
             <span class="admin-card-foot">
               Abrir procedimentos
@@ -713,29 +720,57 @@
           </div>
         </a>
 
-      </section>
+        <a class="admin-card is-cbo" href="{{ url_for('admin.biblioteca_cbo') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">🧠</div>
+            <span class="admin-card-tag">Biblioteca</span>
+          </div>
+          <div class="admin-card-bottom">
+            <h3>Biblioteca CBO</h3>
+            <p>
+              Importe e consulte ocupações por código ou descrição de forma rápida dentro do administrativo.
+            </p>
+            <span class="admin-card-foot">
+              Abrir CBO
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
 
-      <section class="admin-mini-panel">
-        <article class="admin-mini">
-          <strong>Visual mais limpo</strong>
-          <span>
-            Os atalhos agora ficam bem distribuídos em cards, com leitura rápida e foco no que importa.
-          </span>
-        </article>
+        <a class="admin-card is-cid" href="{{ url_for('admin.biblioteca_cid') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">🩺</div>
+            <span class="admin-card-tag">Biblioteca</span>
+          </div>
+          <div class="admin-card-bottom">
+            <h3>Biblioteca CID</h3>
+            <p>
+              Importe e pesquise códigos CID e descrições diagnósticas sem depender de gambiarra intergaláctica.
+            </p>
+            <span class="admin-card-foot">
+              Abrir CID
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
 
-        <article class="admin-mini">
-          <strong>Navegação direta</strong>
-          <span>
-            Sem botão sobrando nem rota perdida. Cada área principal fica destacada logo na entrada.
-          </span>
-        </article>
+        <a class="admin-card is-cep" href="{{ url_for('admin.biblioteca_cep_ibge') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">📍</div>
+            <span class="admin-card-tag">Biblioteca</span>
+          </div>
+          <div class="admin-card-bottom">
+            <h3>CEP / IBGE / Municípios</h3>
+            <p>
+              Importe e consulte a base de CEP, código IBGE e municípios com busca rápida e paginação otimizada.
+            </p>
+            <span class="admin-card-foot">
+              Abrir base
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
 
-        <article class="admin-mini">
-          <strong>Base pronta para crescer</strong>
-          <span>
-            Esse layout já suporta bem quando você quiser adicionar métricas, avisos e ações rápidas.
-          </span>
-        </article>
       </section>
 
       {% block admin_content %}

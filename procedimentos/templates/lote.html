@@ -1,0 +1,1144 @@
+{% extends "layout.html" %}
+
+{% block title %}Pesquisa em lote{% endblock %}
+
+{% block content %}
+<section class="lote-page">
+
+  <header class="lote-hero">
+    <div class="lote-hero__content">
+      <div class="lote-kicker">SGD · Procedimentos</div>
+      <h1>Pesquisa em lote</h1>
+      <p>
+        Pesquise vários procedimentos, CIDs ou CBOs de uma vez.
+        Você pode colar os itens manualmente ou importar um arquivo para consulta em lote.
+      </p>
+    </div>
+
+    <div class="lote-hero__actions">
+      <a href="{{ url_for('procedimentos.index') }}" class="btn btn-ghost">
+        Voltar para procedimentos
+      </a>
+    </div>
+  </header>
+
+  <section class="lote-grid">
+    <!-- FORM PRINCIPAL -->
+    <article class="lote-card">
+      <div class="lote-card__head">
+        <div>
+          <h2>Consulta manual</h2>
+          <p>
+            Cole códigos, CIDs, CBOs ou palavras-chave. Pode separar por quebra de linha,
+            vírgula, ponto e vírgula ou espaço.
+          </p>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('procedimentos.lote') }}" class="lote-form" id="form-lote">
+        <div class="field">
+          <label for="lote">Itens para pesquisa</label>
+          <textarea
+            name="lote"
+            id="lote"
+            rows="12"
+            placeholder="Ex.:
+0304070076
+C920
+C910
+225122"
+          >{{ request.form.get('lote', '') }}</textarea>
+          <small id="lote-resumo">0 item(ns) identificado(s)</small>
+        </div>
+
+        <div class="field field-inline">
+          <label for="tipo">Tipo da busca</label>
+          <select name="tipo" id="tipo">
+            <option value="geral" {% if request.form.get('tipo', 'geral') == 'geral' %}selected{% endif %}>Geral</option>
+            <option value="codigo" {% if request.form.get('tipo') == 'codigo' %}selected{% endif %}>Somente código</option>
+            <option value="cid" {% if request.form.get('tipo') == 'cid' %}selected{% endif %}>Somente CID</option>
+            <option value="cbo" {% if request.form.get('tipo') == 'cbo' %}selected{% endif %}>Somente CBO</option>
+            <option value="procedimento" {% if request.form.get('tipo') == 'procedimento' %}selected{% endif %}>Somente procedimento</option>
+          </select>
+        </div>
+
+        <div class="lote-actions">
+          <button type="submit" class="btn btn-primary">Pesquisar em lote</button>
+          <button type="button" class="btn btn-secondary" id="btn-limpar">Limpar</button>
+        </div>
+      </form>
+    </article>
+
+    <!-- IMPORTAÇÃO -->
+    <article class="lote-card">
+      <div class="lote-card__head">
+        <div>
+          <h2>Importar arquivo para lote</h2>
+          <p>
+            Envie uma planilha ou CSV contendo códigos ou termos. O backend pode usar esse conteúdo
+            para montar a consulta em lote.
+          </p>
+        </div>
+      </div>
+
+      <form
+        method="POST"
+        action="{{ url_for('procedimentos.lote') }}"
+        enctype="multipart/form-data"
+        class="lote-upload"
+        id="form-upload-lote"
+      >
+        <div class="field">
+          <label for="arquivo_lote">Arquivo</label>
+          <label class="filebox" for="arquivo_lote">
+            <input type="file" id="arquivo_lote" name="arquivo_lote" accept=".xlsx,.xls,.csv">
+            <span class="filebox__button">Escolher arquivo</span>
+            <span class="filebox__name" id="arquivo-lote-nome">Nenhum arquivo selecionado</span>
+          </label>
+          <small>Formatos aceitos: XLSX, XLS e CSV.</small>
+        </div>
+
+        <div class="field field-inline">
+          <label for="coluna_arquivo">Nome da coluna (opcional)</label>
+          <input
+            type="text"
+            name="coluna_arquivo"
+            id="coluna_arquivo"
+            placeholder="Ex.: Código"
+            value="{{ request.form.get('coluna_arquivo', '') }}"
+          >
+        </div>
+
+        <div class="lote-actions">
+          <button type="submit" class="btn btn-primary">Importar e pesquisar</button>
+        </div>
+      </form>
+    </article>
+  </section>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <section class="lote-flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endwith %}
+
+  {% if resultados is defined %}
+    {% set resultados_lista = resultados if resultados else [] %}
+    <section class="lote-summary">
+      <div class="summary-pill">
+        <span class="summary-pill__label">Encontrados</span>
+        <strong>{{ resultados_lista|length }}</strong>
+      </div>
+
+      <div class="summary-pill">
+        <span class="summary-pill__label">Modo</span>
+        <strong>{{ request.form.get('tipo', 'geral')|capitalize }}</strong>
+      </div>
+    </section>
+
+    <section class="lote-card">
+      <div class="lote-card__head">
+        <div>
+          <h2>Resultados encontrados</h2>
+          <p>Visualize os procedimentos localizados pela sua pesquisa em lote.</p>
+        </div>
+      </div>
+
+      {% if resultados_lista %}
+        <div class="lote-table-wrap">
+          <table class="lote-table">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Procedimento</th>
+                <th>Complexidade</th>
+                <th>Competência</th>
+                <th>CIDs</th>
+                <th>CBOs</th>
+                <th>Serviços</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in resultados_lista %}
+                <tr>
+                  <td class="col-codigo">
+                    <span class="mono">{{ item.codigo }}</span>
+                  </td>
+
+                  <td class="col-procedimento">
+                    <div class="proc-main">
+                      <strong>{{ item.procedimento }}</strong>
+
+                      <div class="proc-meta">
+                        {% if item.flags %}
+                          <span class="badge badge-flag">{{ item.flags }}</span>
+                        {% endif %}
+
+                        {% if item.financiamento %}
+                          <span class="badge badge-fin">{{ item.financiamento }}</span>
+                        {% endif %}
+
+                        {% if item.rubrica and item.rubrica != '—' %}
+                          <span class="badge badge-rubrica">{{ item.rubrica }}</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td>
+                    {% set cx = (item.complexidade or '')|lower %}
+                    <span class="
+                      badge
+                      {% if 'alta' in cx %}badge-red
+                      {% elif 'média' in cx or 'media' in cx %}badge-yellow
+                      {% elif 'baixa' in cx %}badge-green
+                      {% else %}badge-neutral{% endif %}
+                    ">
+                      {{ item.complexidade or '—' }}
+                    </span>
+                  </td>
+
+                  <td>
+                    <span class="mono">{{ item.competencia or '—' }}</span>
+                  </td>
+
+                  <td>
+                    {% set cids_list = (item.cids or '').split(', ') if item.cids else [] %}
+                    <div class="chips">
+                      {% for cid in cids_list[:4] %}
+                        <span class="chip chip-cid">{{ cid }}</span>
+                      {% endfor %}
+
+                      {% if cids_list|length > 4 %}
+                        <button
+                          type="button"
+                          class="chip-more"
+                          data-modal-title="CIDs vinculados"
+                          data-modal-content="{{ item.cids }}"
+                        >
+                          +{{ cids_list|length - 4 }} mais
+                        </button>
+                      {% endif %}
+                    </div>
+                    <small class="muted">Qtd: {{ item.qtd_cids or 0 }}</small>
+                  </td>
+
+                  <td>
+                    {% set cbos_list = (item.cbos or '').split(', ') if item.cbos else [] %}
+                    <div class="chips">
+                      {% for cbo in cbos_list[:3] %}
+                        <span class="chip chip-cbo">{{ cbo }}</span>
+                      {% endfor %}
+
+                      {% if cbos_list|length > 3 %}
+                        <button
+                          type="button"
+                          class="chip-more"
+                          data-modal-title="CBOs vinculados"
+                          data-modal-content="{{ item.cbos }}"
+                        >
+                          +{{ cbos_list|length - 3 }} mais
+                        </button>
+                      {% endif %}
+                    </div>
+                    <small class="muted">Qtd: {{ item.qtd_cbos or 0 }}</small>
+                  </td>
+
+                  <td>
+                    {% set servicos_list = (item.servicos or '').split(', ') if item.servicos else [] %}
+                    <div class="chips">
+                      {% for serv in servicos_list[:2] %}
+                        <span class="chip chip-serv">{{ serv }}</span>
+                      {% endfor %}
+
+                      {% if servicos_list|length > 2 %}
+                        <button
+                          type="button"
+                          class="chip-more"
+                          data-modal-title="Serviços vinculados"
+                          data-modal-content="{{ item.servicos }}"
+                        >
+                          +{{ servicos_list|length - 2 }} mais
+                        </button>
+                      {% endif %}
+                    </div>
+                    <small class="muted">Qtd: {{ item.qtd_servicos or 0 }}</small>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="lote-mobile-list">
+          {% for item in resultados_lista %}
+            <article class="mob-card">
+              <div class="mob-card__top">
+                <span class="mono">{{ item.codigo }}</span>
+
+                {% set cx = (item.complexidade or '')|lower %}
+                <span class="
+                  badge
+                  {% if 'alta' in cx %}badge-red
+                  {% elif 'média' in cx or 'media' in cx %}badge-yellow
+                  {% elif 'baixa' in cx %}badge-green
+                  {% else %}badge-neutral{% endif %}
+                ">
+                  {{ item.complexidade or '—' }}
+                </span>
+              </div>
+
+              <h3>{{ item.procedimento }}</h3>
+
+              <div class="mob-meta">
+                {% if item.flags %}<span class="badge badge-flag">{{ item.flags }}</span>{% endif %}
+                {% if item.financiamento %}<span class="badge badge-fin">{{ item.financiamento }}</span>{% endif %}
+              </div>
+
+              <div class="mob-block">
+                <strong>Competência:</strong>
+                <span class="mono">{{ item.competencia or '—' }}</span>
+              </div>
+
+              <div class="mob-block">
+                <strong>CIDs ({{ item.qtd_cids or 0 }}):</strong>
+                <div class="chips">
+                  {% set cids_list = (item.cids or '').split(', ') if item.cids else [] %}
+                  {% for cid in cids_list[:4] %}
+                    <span class="chip chip-cid">{{ cid }}</span>
+                  {% endfor %}
+                  {% if cids_list|length > 4 %}
+                    <button
+                      type="button"
+                      class="chip-more"
+                      data-modal-title="CIDs vinculados"
+                      data-modal-content="{{ item.cids }}"
+                    >
+                      +{{ cids_list|length - 4 }} mais
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="mob-block">
+                <strong>CBOs ({{ item.qtd_cbos or 0 }}):</strong>
+                <div class="chips">
+                  {% set cbos_list = (item.cbos or '').split(', ') if item.cbos else [] %}
+                  {% for cbo in cbos_list[:3] %}
+                    <span class="chip chip-cbo">{{ cbo }}</span>
+                  {% endfor %}
+                  {% if cbos_list|length > 3 %}
+                    <button
+                      type="button"
+                      class="chip-more"
+                      data-modal-title="CBOs vinculados"
+                      data-modal-content="{{ item.cbos }}"
+                    >
+                      +{{ cbos_list|length - 3 }} mais
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="mob-block">
+                <strong>Serviços ({{ item.qtd_servicos or 0 }}):</strong>
+                <div class="chips">
+                  {% set servicos_list = (item.servicos or '').split(', ') if item.servicos else [] %}
+                  {% for serv in servicos_list[:2] %}
+                    <span class="chip chip-serv">{{ serv }}</span>
+                  {% endfor %}
+                  {% if servicos_list|length > 2 %}
+                    <button
+                      type="button"
+                      class="chip-more"
+                      data-modal-title="Serviços vinculados"
+                      data-modal-content="{{ item.servicos }}"
+                    >
+                      +{{ servicos_list|length - 2 }} mais
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="lote-empty">
+          <div class="lote-empty__icon">🔎</div>
+          <h3>Nenhum resultado encontrado</h3>
+          <p>
+            Revise os termos informados ou importe outro arquivo para a pesquisa em lote.
+          </p>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+</section>
+
+<dialog id="lote-modal" class="lote-modal">
+  <div class="lote-modal__dialog">
+    <header class="lote-modal__head">
+      <h3 id="lote-modal-title">Detalhes</h3>
+      <button type="button" class="lote-modal__close" id="lote-modal-close" aria-label="Fechar">×</button>
+    </header>
+    <div class="lote-modal__body" id="lote-modal-body"></div>
+  </div>
+</dialog>
+
+<style>
+:root{
+  --l-bg:#f8fafc;
+  --l-card:#ffffff;
+  --l-line:#e5e7eb;
+  --l-line-2:#dbe3ee;
+  --l-text:#0f172a;
+  --l-muted:#64748b;
+  --l-soft:#f1f5f9;
+  --l-primary:#2563eb;
+  --l-primary-2:#1d4ed8;
+  --l-shadow:0 18px 50px rgba(15,23,42,.08);
+  --l-radius-lg:24px;
+  --l-radius-md:16px;
+  --l-radius-sm:12px;
+  --l-green-bg:#dcfce7;
+  --l-green-text:#166534;
+  --l-yellow-bg:#fef3c7;
+  --l-yellow-text:#92400e;
+  --l-red-bg:#fee2e2;
+  --l-red-text:#991b1b;
+  --l-neutral-bg:#e2e8f0;
+  --l-neutral-text:#334155;
+}
+
+.lote-page{
+  max-width:1520px;
+  margin:0 auto;
+  padding:22px 16px 42px;
+}
+
+.lote-hero{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:18px;
+  margin-bottom:20px;
+  background:linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f8fafc 100%);
+  border:1px solid var(--l-line);
+  border-radius:var(--l-radius-lg);
+  box-shadow:var(--l-shadow);
+  padding:24px;
+}
+
+.lote-kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:#dbeafe;
+  color:#1d4ed8;
+  border-radius:999px;
+  padding:7px 12px;
+  font-size:.82rem;
+  font-weight:700;
+  margin-bottom:10px;
+}
+
+.lote-hero h1{
+  margin:0 0 8px;
+  color:var(--l-text);
+  font-size:clamp(1.5rem, 2vw, 2.1rem);
+  line-height:1.1;
+}
+
+.lote-hero p{
+  margin:0;
+  color:var(--l-muted);
+  max-width:760px;
+  line-height:1.55;
+}
+
+.lote-grid{
+  display:grid;
+  grid-template-columns:1.2fr .8fr;
+  gap:18px;
+  margin-bottom:18px;
+}
+
+.lote-card{
+  background:var(--l-card);
+  border:1px solid var(--l-line);
+  border-radius:var(--l-radius-lg);
+  box-shadow:var(--l-shadow);
+  padding:20px;
+  margin-bottom:18px;
+}
+
+.lote-card__head{
+  margin-bottom:16px;
+}
+
+.lote-card__head h2{
+  margin:0 0 4px;
+  font-size:1.1rem;
+  color:var(--l-text);
+}
+
+.lote-card__head p{
+  margin:0;
+  color:var(--l-muted);
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  margin-bottom:14px;
+}
+
+.field-inline{
+  max-width:320px;
+}
+
+.field label{
+  font-size:.92rem;
+  color:var(--l-text);
+  font-weight:700;
+}
+
+.field textarea,
+.field input,
+.field select{
+  width:100%;
+  border:1px solid var(--l-line-2);
+  border-radius:14px;
+  background:#fff;
+  padding:12px 14px;
+  font-size:.96rem;
+  color:var(--l-text);
+  outline:none;
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+
+.field select{
+  min-height:46px;
+}
+
+.field textarea{
+  min-height:260px;
+  resize:vertical;
+  line-height:1.5;
+}
+
+.field textarea:focus,
+.field input:focus,
+.field select:focus{
+  border-color:#93c5fd;
+  box-shadow:0 0 0 4px rgba(37,99,235,.10);
+}
+
+.field small{
+  color:var(--l-muted);
+  font-size:.8rem;
+}
+
+.lote-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:8px;
+}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:46px;
+  padding:0 16px;
+  border-radius:14px;
+  border:1px solid transparent;
+  text-decoration:none;
+  font-weight:700;
+  cursor:pointer;
+  transition:.2s ease;
+}
+
+.btn-primary{
+  background:var(--l-primary);
+  color:#fff;
+}
+
+.btn-primary:hover{
+  background:var(--l-primary-2);
+}
+
+.btn-secondary{
+  background:#0f172a;
+  color:#fff;
+}
+
+.btn-secondary:hover{
+  background:#1e293b;
+}
+
+.btn-ghost{
+  background:#fff;
+  color:var(--l-text);
+  border-color:var(--l-line);
+}
+
+.btn-ghost:hover{
+  background:#f8fafc;
+}
+
+.filebox{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+  background:var(--l-soft);
+  border:1px dashed #cbd5e1;
+  border-radius:18px;
+  padding:14px;
+}
+
+.filebox input[type="file"]{
+  display:none;
+}
+
+.filebox__button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:11px 16px;
+  border-radius:12px;
+  background:#e0ecff;
+  color:#1d4ed8;
+  font-weight:700;
+  cursor:pointer;
+  transition:.2s ease;
+}
+
+.filebox__button:hover{
+  background:#cfe2ff;
+}
+
+.filebox__name{
+  color:var(--l-muted);
+  font-size:.95rem;
+  word-break:break-word;
+}
+
+.lote-flash-wrap{
+  display:grid;
+  gap:10px;
+  margin-bottom:18px;
+}
+
+.flash{
+  padding:14px 16px;
+  border-radius:16px;
+  border:1px solid transparent;
+  font-weight:600;
+}
+
+.flash-success{
+  background:#ecfdf5;
+  border-color:#a7f3d0;
+  color:#065f46;
+}
+
+.flash-error{
+  background:#fef2f2;
+  border-color:#fecaca;
+  color:#991b1b;
+}
+
+.flash-warning{
+  background:#fffbeb;
+  border-color:#fde68a;
+  color:#92400e;
+}
+
+.lote-summary{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-bottom:18px;
+}
+
+.summary-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 14px;
+  background:#fff;
+  border:1px solid var(--l-line);
+  border-radius:999px;
+  box-shadow:0 10px 24px rgba(15,23,42,.05);
+}
+
+.summary-pill__label{
+  color:var(--l-muted);
+  font-size:.9rem;
+}
+
+.lote-table-wrap{
+  overflow:auto;
+  border:1px solid var(--l-line);
+  border-radius:18px;
+}
+
+.lote-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  min-width:1220px;
+}
+
+.lote-table thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#f8fafc;
+  color:#334155;
+  text-align:left;
+  font-size:.86rem;
+  letter-spacing:.02em;
+  padding:14px;
+  border-bottom:1px solid var(--l-line);
+}
+
+.lote-table tbody td{
+  vertical-align:top;
+  padding:14px;
+  border-bottom:1px solid #eef2f7;
+  color:var(--l-text);
+  background:#fff;
+}
+
+.lote-table tbody tr:hover td{
+  background:#fbfdff;
+}
+
+.proc-main strong{
+  display:block;
+  margin-bottom:8px;
+  line-height:1.45;
+}
+
+.proc-meta,
+.mob-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  font-size:.82rem;
+  font-weight:700;
+  line-height:1;
+}
+
+.badge-red{
+  background:var(--l-red-bg);
+  color:var(--l-red-text);
+}
+
+.badge-yellow{
+  background:var(--l-yellow-bg);
+  color:var(--l-yellow-text);
+}
+
+.badge-green{
+  background:var(--l-green-bg);
+  color:var(--l-green-text);
+}
+
+.badge-neutral{
+  background:var(--l-neutral-bg);
+  color:var(--l-neutral-text);
+}
+
+.badge-flag{
+  background:#fee2e2;
+  color:#991b1b;
+}
+
+.badge-fin{
+  background:#dbeafe;
+  color:#1d4ed8;
+}
+
+.badge-rubrica{
+  background:#ede9fe;
+  color:#6d28d9;
+}
+
+.chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:6px;
+}
+
+.chip{
+  display:inline-flex;
+  align-items:center;
+  padding:7px 10px;
+  border-radius:12px;
+  font-size:.82rem;
+  line-height:1.35;
+  border:1px solid transparent;
+}
+
+.chip-cid{
+  background:#fff1f2;
+  color:#9f1239;
+  border-color:#fecdd3;
+}
+
+.chip-cbo{
+  background:#eff6ff;
+  color:#1d4ed8;
+  border-color:#bfdbfe;
+}
+
+.chip-serv{
+  background:#f5f3ff;
+  color:#6d28d9;
+  border-color:#ddd6fe;
+}
+
+.chip-more{
+  min-height:34px;
+  padding:0 11px;
+  border:1px dashed #94a3b8;
+  border-radius:12px;
+  background:#fff;
+  color:#334155;
+  font-size:.82rem;
+  font-weight:700;
+  cursor:pointer;
+  transition:.2s ease;
+}
+
+.chip-more:hover{
+  background:#f8fafc;
+}
+
+.muted{
+  color:var(--l-muted);
+  font-size:.8rem;
+}
+
+.mono{
+  font-family:Consolas, "Courier New", monospace;
+  font-size:.92rem;
+}
+
+.lote-mobile-list{
+  display:none;
+}
+
+.mob-card{
+  border:1px solid var(--l-line);
+  border-radius:18px;
+  background:#fff;
+  padding:16px;
+  box-shadow:0 10px 26px rgba(15,23,42,.04);
+}
+
+.mob-card + .mob-card{
+  margin-top:12px;
+}
+
+.mob-card__top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+.mob-card h3{
+  margin:0 0 12px;
+  font-size:1rem;
+  line-height:1.45;
+  color:var(--l-text);
+}
+
+.mob-block{
+  margin-top:12px;
+}
+
+.mob-block strong{
+  display:block;
+  margin-bottom:8px;
+  color:var(--l-text);
+}
+
+.lote-empty{
+  text-align:center;
+  padding:36px 18px;
+}
+
+.lote-empty__icon{
+  font-size:2rem;
+  margin-bottom:8px;
+}
+
+.lote-empty h3{
+  margin:0 0 8px;
+  color:var(--l-text);
+}
+
+.lote-empty p{
+  margin:0;
+  color:var(--l-muted);
+}
+
+.lote-modal{
+  border:none;
+  padding:0;
+  background:transparent;
+}
+
+.lote-modal::backdrop{
+  background:rgba(15,23,42,.45);
+  backdrop-filter:blur(3px);
+}
+
+.lote-modal__dialog{
+  width:min(760px, calc(100vw - 24px));
+  max-height:82vh;
+  overflow:auto;
+  background:#fff;
+  border-radius:24px;
+  box-shadow:0 24px 80px rgba(15,23,42,.24);
+}
+
+.lote-modal__head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:18px 20px;
+  border-bottom:1px solid var(--l-line);
+  position:sticky;
+  top:0;
+  background:#fff;
+}
+
+.lote-modal__head h3{
+  margin:0;
+  font-size:1.05rem;
+  color:var(--l-text);
+}
+
+.lote-modal__close{
+  width:40px;
+  height:40px;
+  border:1px solid var(--l-line);
+  border-radius:12px;
+  background:#fff;
+  font-size:1.4rem;
+  cursor:pointer;
+}
+
+.lote-modal__body{
+  padding:20px;
+  color:var(--l-text);
+  line-height:1.7;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
+@media (max-width: 980px){
+  .lote-grid{
+    grid-template-columns:1fr;
+  }
+
+  .field-inline{
+    max-width:none;
+  }
+}
+
+@media (max-width: 860px){
+  .lote-hero{
+    flex-direction:column;
+  }
+
+  .lote-table-wrap{
+    display:none;
+  }
+
+  .lote-mobile-list{
+    display:block;
+  }
+}
+
+@media (max-width: 560px){
+  .lote-page{
+    padding:16px 12px 34px;
+  }
+
+  .lote-card,
+  .lote-hero{
+    padding:16px;
+    border-radius:20px;
+  }
+
+  .btn{
+    width:100%;
+  }
+
+  .lote-actions{
+    flex-direction:column;
+    align-items:stretch;
+  }
+}
+</style>
+
+<script>
+(() => {
+  "use strict";
+
+  const byId = (id) => document.getElementById(id);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  const textarea = byId("lote");
+  const resumo = byId("lote-resumo");
+  const btnLimpar = byId("btn-limpar");
+
+  const inputArquivo = byId("arquivo_lote");
+  const nomeArquivo = byId("arquivo-lote-nome");
+
+  const modal = byId("lote-modal");
+  const modalTitle = byId("lote-modal-title");
+  const modalBody = byId("lote-modal-body");
+  const modalClose = byId("lote-modal-close");
+
+  function safeText(v) {
+    return String(v ?? "").trim();
+  }
+
+  function extrairItens(texto) {
+    const bruto = safeText(texto);
+    if (!bruto) return [];
+
+    return bruto
+      .split(/[\n,;]+|\s{2,}/g)
+      .map((item) => safeText(item))
+      .filter(Boolean);
+  }
+
+  function atualizarResumo() {
+    if (!textarea || !resumo) return;
+    const itens = extrairItens(textarea.value);
+    resumo.textContent = `${itens.length} item(ns) identificado(s)`;
+  }
+
+  function bindTextarea() {
+    if (!textarea) return;
+    textarea.addEventListener("input", atualizarResumo);
+    textarea.addEventListener("blur", () => {
+      textarea.value = textarea.value.replace(/\t/g, " ").replace(/\r/g, "");
+      atualizarResumo();
+    });
+    atualizarResumo();
+  }
+
+  function bindLimpar() {
+    if (!btnLimpar) return;
+    btnLimpar.addEventListener("click", () => {
+      if (textarea) textarea.value = "";
+      const tipo = byId("tipo");
+      if (tipo) tipo.value = "geral";
+      atualizarResumo();
+      textarea?.focus();
+    });
+  }
+
+  function bindArquivo() {
+    if (!inputArquivo || !nomeArquivo) return;
+    inputArquivo.addEventListener("change", () => {
+      const file = inputArquivo.files && inputArquivo.files[0];
+      nomeArquivo.textContent = file ? file.name : "Nenhum arquivo selecionado";
+    });
+  }
+
+  function openModal(title, content) {
+    if (!modal || !modalTitle || !modalBody) return;
+
+    modalTitle.textContent = title || "Detalhes";
+    modalBody.textContent = content || "Sem conteúdo.";
+
+    if (typeof modal.showModal === "function") {
+      modal.showModal();
+    } else {
+      modal.setAttribute("open", "open");
+    }
+  }
+
+  function closeModal() {
+    if (!modal) return;
+
+    if (typeof modal.close === "function") {
+      modal.close();
+    } else {
+      modal.removeAttribute("open");
+    }
+  }
+
+  function bindMoreButtons() {
+    $$("[data-modal-title][data-modal-content]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        openModal(
+          btn.getAttribute("data-modal-title"),
+          btn.getAttribute("data-modal-content")
+        );
+      });
+    });
+  }
+
+  function bindModalEvents() {
+    if (!modal) return;
+
+    modalClose?.addEventListener("click", closeModal);
+
+    modal.addEventListener("click", (e) => {
+      const box = modal.querySelector(".lote-modal__dialog");
+      if (!box) return;
+      const rect = box.getBoundingClientRect();
+
+      const inside =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+
+      if (!inside) closeModal();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
+  }
+
+  bindTextarea();
+  bindLimpar();
+  bindArquivo();
+  bindMoreButtons();
+  bindModalEvents();
+})();
+</script>
+{% endblock %}

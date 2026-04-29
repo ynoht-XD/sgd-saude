@@ -10,26 +10,12 @@
 
 <div class="atd-page">
 
-  <!-- HERO LIMPO -->
-  <header class="atd-hero atd-hero--clean">
-    <div class="atd-hero-main">
-      <span class="atd-kicker">SGD · Atendimento</span>
-      <h1>Registro de Atendimento</h1>
-
-      <div class="atd-hero-sub">
-        <span class="atd-eyebrow">Paciente</span>
-        <strong class="atd-hero-sub-title">Resumo do paciente</strong>
-      </div>
-    </div>
-  </header>
-
   <!-- RESUMO DO PACIENTE -->
   <section class="atd-card atd-patient-overview">
     <div class="atd-overview-grid">
-
       <article class="atd-mini-card atd-mini-card--main">
         <span class="atd-mini-label">Nome</span>
-        <strong id="info-nome">{{ paciente_nome or '—' }}</strong>
+        <strong id="info-nome">{{ paciente_nome or request.args.get('paciente_nome','—') }}</strong>
       </article>
 
       <article class="atd-mini-card">
@@ -56,16 +42,12 @@
         <span class="atd-mini-label">CID</span>
         <strong id="info-cid">—</strong>
       </article>
-
     </div>
   </section>
 
-  <!-- HISTÓRICO + COMBO INLINE -->
+  <!-- HISTÓRICO RÁPIDO -->
   <section class="atd-card atd-inline-bar">
-
-    <!-- HISTÓRICO -->
     <div class="atd-last-inline-row">
-
       <div class="atd-last-inline-item">
         <span>📅</span>
         <strong id="ua-data">—</strong>
@@ -79,131 +61,334 @@
       <button type="button" class="btn-outline" id="btnVerUltimo">
         Ver atendimento
       </button>
-
     </div>
-
-    <!-- COMBO INLINE -->
-    <div class="atd-combo-inline" id="comboCard" hidden>
-
-      <strong class="combo-nome" id="comboNome">—</strong>
-
-      <div class="combo-stats">
-        <span>Contratadas: <strong id="comboContratadas">0</strong></span>
-        <span>Usadas: <strong id="comboUsadas">0</strong></span>
-        <span>Restantes: <strong id="comboRestantes">0</strong></span>
-      </div>
-
-      <label class="atd-switch">
-        <input type="checkbox" id="toggleUsarCombo" name="contabiliza_sessao" value="1" checked>
-        <span class="atd-switch-ui"></span>
-      </label>
-
-      <input type="hidden" name="combo_plano_id" id="combo_plano_id">
-      <input type="hidden" name="combo_plano_nome" id="combo_plano_nome">
-
-    </div>
-
-    <!-- SEM COMBO -->
-    <div class="atd-combo-inline atd-combo-inline--empty" id="comboEmptyCard">
-      Sem combo/plano ativo
-    </div>
-
   </section>
 
-  <!-- FORM -->
-  <section class="atd-card atd-form-card">
+  <!-- COMBO / PLANO -->
+  <section class="atd-card atd-combo-panel" id="comboPanel">
+    <button type="button"
+            class="atd-collapse-toggle"
+            id="btnToggleComboPanel"
+            aria-expanded="false"
+            aria-controls="comboPanelBody">
+      <span class="atd-collapse-title">Combo / plano</span>
+      <span class="atd-collapse-sub" id="comboCollapseStatus">Recolhido</span>
+      <span class="atd-collapse-icon" aria-hidden="true">▾</span>
+    </button>
 
+    <div class="atd-collapse-body is-collapsed" id="comboPanelBody" hidden>
+      <div class="atd-combo-inline" id="comboCard" hidden>
+        <div class="atd-combo-main">
+          <div class="atd-combo-head">
+            <strong class="combo-nome" id="comboNome">—</strong>
+
+            <div class="atd-combo-badges">
+              <span class="atd-badge atd-badge--soft" id="comboTipoBadge">Combo</span>
+              <span class="atd-badge atd-badge--soft" id="comboStatusBadge">Ativo</span>
+            </div>
+          </div>
+
+          <div class="combo-stats">
+            <span>Contratadas: <strong id="comboContratadas">0</strong></span>
+            <span>Usadas: <strong id="comboUsadas">0</strong></span>
+            <span id="comboRestantesCard">Restantes: <strong id="comboRestantes">0</strong></span>
+          </div>
+
+          <p class="atd-combo-help" id="comboHelpText">
+            Esta sessão pode ser abatida do combo/plano ativo.
+          </p>
+        </div>
+
+        <div class="atd-combo-side">
+          <span class="atd-switch-label">Contabilizar sessão</span>
+          <label class="atd-switch">
+            <input type="checkbox" id="toggleUsarCombo" name="contabiliza_sessao" value="1" checked>
+            <span class="atd-switch-ui"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="atd-combo-inline atd-combo-inline--empty" id="comboEmptyCard">
+        <strong>Sem combo/plano ativo</strong>
+        <span>Este paciente não possui combo/plano disponível no momento.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMULÁRIO -->
+  <section class="atd-card atd-form-card">
     <form method="post"
           action="{{ url_for('atendimentos.salvar_atendimento') }}"
           enctype="multipart/form-data"
           id="form-atendimento"
           class="atd-form">
 
-      <input type="hidden" name="fila_id" id="fila_id"
-             value="{{ fila_id or request.args.get('fila_id','') }}">
+      <input type="hidden" name="fila_id" id="fila_id" value="{{ fila_id or request.args.get('fila_id','') }}">
+
+      <input type="hidden"
+             name="nomePaciente"
+             id="nomePaciente"
+             value="{{ paciente_id or request.args.get('paciente_id','') }}">
+
+      <input type="hidden" name="combo_plano_id" id="combo_plano_id">
+      <input type="hidden" name="combo_plano_nome" id="combo_plano_nome">
+      <input type="hidden" name="enviar_sem_procedimento" id="enviar_sem_procedimento" value="0">
 
       <div class="atd-form-grid">
 
-        <!-- PACIENTE -->
-        <div class="atd-field atd-field--full">
-          <label>Paciente</label>
-
-          <div class="atd-autocomplete-wrap">
-            <input type="text"
-                   id="nomePaciente"
-                   name="nomePaciente_texto"
-                   autocomplete="off"
-                   value="{{ paciente_nome or '' }}"
-                   placeholder="Digite o nome do paciente…">
-
-            <input type="hidden" id="nomePacienteId"
-                   name="nomePaciente"
-                   value="{{ paciente_id or '' }}">
-
-            <ul class="autocomplete-list" id="listaPacientes" hidden></ul>
-          </div>
-        </div>
-
-        <!-- DATA -->
+        <!-- DATA / STATUS -->
         <div class="atd-field">
           <label>Data</label>
           <input type="date" name="dataAtendimento" value="{{ data_hoje }}">
         </div>
 
-        <!-- STATUS -->
         <div class="atd-field">
           <label>Status</label>
           <select name="status_justificativa">
             <option value="Realizado">Realizado</option>
+            <option value="Admissão">Admissão</option>
             <option value="Falta">Falta</option>
             <option value="Remarcado">Remarcado</option>
+            <option value="Desligamento">Desligamento</option>
+            <option value="Alta">Alta</option>
+            <option value="Óbito">Óbito</option>
           </select>
-        </div>
-
-        <!-- JUSTIFICATIVA -->
-        <div class="atd-field atd-field--wide">
-          <label>Observação</label>
-          <input type="text" name="justificativa">
-        </div>
-
-        <!-- PROCEDIMENTOS -->
-        <div class="atd-field atd-field--full">
-
-          <div class="atd-section-head">
-            <label>Procedimentos (opcional)</label>
-            <button type="button" id="btnAddProcedimento" class="btn-outline">
-              ➕
-            </button>
-          </div>
-
-          <div id="procedimentosWrap" class="atd-procs-wrap">
-            <div class="proc-row atd-proc-row">
-              <input type="text" name="procedimento[]">
-              <input type="text" name="codigoProcedimento[]">
-            </div>
-          </div>
-
         </div>
 
         <!-- EVOLUÇÃO -->
         <div class="atd-field atd-field--full">
-          <label>Evolução</label>
-          <textarea name="evolucao"></textarea>
+          <div class="atd-section-head">
+            <div>
+              <label for="evolucao">Evolução</label>
+              <p class="atd-section-sub">
+                Evolução comum do atendimento.
+              </p>
+            </div>
+          </div>
+
+          <div class="atd-textarea-voice-wrap">
+            <textarea id="evolucao"
+                      name="evolucao"
+                      placeholder="Descreva a evolução do atendimento..."></textarea>
+
+            <button type="button"
+                    class="atd-voice-btn"
+                    id="btnFalarEvolucao"
+                    aria-pressed="false">
+              🎙️ Falar
+            </button>
+
+            <small class="atd-voice-status" id="voiceStatus" hidden style="display:none;">
+              Ouvindo...
+            </small>
+          </div>
+        </div>
+
+        <!-- EVOLUÇÃO OCULTA -->
+        <div class="atd-field atd-field--full">
+          <section class="atd-hidden-evolution">
+            <button type="button"
+                    class="atd-collapse-toggle atd-collapse-toggle--secret"
+                    id="btnToggleEvolucaoOculta"
+                    aria-expanded="false"
+                    aria-controls="evolucaoOcultaBody">
+              <span class="atd-collapse-title">Evolução oculta</span>
+              <span class="atd-collapse-sub">Registro reservado por profissional ou CBO autorizado</span>
+              <span class="atd-collapse-icon" aria-hidden="true">▾</span>
+            </button>
+
+            <div class="atd-collapse-body is-collapsed" id="evolucaoOcultaBody" hidden>
+              <div class="atd-hidden-evolution-grid">
+                <div class="atd-field atd-field--full">
+                  <label for="evolucao_oculta">Anotação oculta</label>
+                  <textarea id="evolucao_oculta"
+                            name="evolucao_oculta"
+                            placeholder="Escreva uma anotação visível apenas para você ou para CBOs autorizados..."></textarea>
+                </div>
+
+                <div class="atd-secret-rules">
+                  <strong>Quem poderá visualizar?</strong>
+
+                  <label class="atd-radio-card">
+                    <input type="radio" name="evolucao_oculta_visibilidade" value="somente_eu" checked>
+                    <span>
+                      <b>Somente eu</b>
+                      <small>Apenas o profissional que registrou poderá visualizar.</small>
+                    </span>
+                  </label>
+
+                  <label class="atd-radio-card">
+                    <input type="radio" name="evolucao_oculta_visibilidade" value="cbos">
+                    <span>
+                      <b>CBOs autorizados</b>
+                      <small>Profissionais com os CBOs selecionados poderão visualizar.</small>
+                    </span>
+                  </label>
+                </div>
+
+                <div class="atd-field atd-field--full" id="boxCbosAutorizados" hidden>
+                  <label for="cboSearchOculto">CBOs autorizados</label>
+
+                  <div class="atd-cbo-picker">
+                    <div class="atd-cbo-search-wrap">
+                      <input type="text"
+                             id="cboSearchOculto"
+                             class="input"
+                             placeholder="Digite o número ou descrição do CBO. Ex: 223605, fisioterapeuta, psicólogo..."
+                             autocomplete="off">
+
+                      <div id="cboSugestoesOcultas"
+                           class="atd-cbo-suggestions"
+                           hidden></div>
+                    </div>
+
+                    <div id="cbosSelecionadosOcultos"
+                         class="atd-cbo-selected-list"></div>
+
+                    <input type="hidden"
+                           id="evolucao_oculta_cbos"
+                           name="evolucao_oculta_cbos">
+                  </div>
+
+                  <p class="atd-section-sub">
+                    Pesquise por código ou descrição e clique para adicionar.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- PROCEDIMENTOS -->
+        <div class="atd-field atd-field--full">
+          <div class="atd-section-head">
+            <div>
+              <label>Procedimentos</label>
+              <p class="atd-section-sub" id="hint-procs">
+                Digite o código ou parte do procedimento para receber sugestões compatíveis.
+              </p>
+            </div>
+
+            <div class="atd-section-actions">
+              <button type="button" class="btn-outline" id="btnAbrirSugestoesProc">
+                Sugestões por CID/CBO
+              </button>
+
+              <button type="button" class="btn-outline" id="btnUsarUltimosProcs">
+                Usar últimos
+              </button>
+            </div>
+          </div>
+
+          <div id="historicoProcedimentosBox" class="atd-procs-suggestions" hidden>
+            <div class="atd-procs-suggestions-head">
+              <strong>Últimos procedimentos usados neste paciente</strong>
+              <span id="historicoProcedimentosHint">—</span>
+            </div>
+
+            <div id="historicoProcedimentosLista" class="atd-chip-list"></div>
+          </div>
+
+          <div id="procedimentosWrap" class="atd-procs-wrap">
+            <div class="proc-row atd-proc-row">
+              <div class="proc-col proc-col--desc">
+                <label class="sr-only">Procedimento</label>
+
+                <div class="proc-input-inline">
+                  <input type="text"
+                         name="procedimento[]"
+                         class="input proc-input"
+                         value="CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)"
+                         placeholder="Digite o código ou nome do procedimento"
+                         autocomplete="off">
+
+                  <button type="button"
+                          id="btnAddProcedimento"
+                          class="btn-outline btn-outline--icon"
+                          title="Adicionar procedimento"
+                          aria-label="Adicionar procedimento">
+                    +
+                  </button>
+                </div>
+
+                <div class="proc-inline-suggestions" hidden></div>
+              </div>
+
+              <input type="hidden"
+                     name="codigoProcedimento[]"
+                     class="proc-codigo"
+                     value="0301010048">
+
+              <div class="proc-col proc-col--qtd">
+                <label class="sr-only">Quantidade</label>
+                <input type="number"
+                       name="quantidadeProcedimento[]"
+                       class="input proc-qtd"
+                       min="1"
+                       value="1"
+                       title="Quantidade">
+              </div>
+
+              <div class="proc-col proc-col--actions">
+                <button type="button"
+                        class="btn btn--ghost btnRemoveProc"
+                        title="Remover procedimento"
+                        aria-label="Remover procedimento">
+                  Remover
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
       </div>
 
       <div class="atd-form-actions">
+        <button type="button" class="btn-outline" id="btnCancelarAtendimento">
+          Cancelar
+        </button>
+
         <button type="submit" class="btn-salvar">
           Salvar atendimento
         </button>
       </div>
-
     </form>
-
   </section>
 
 </div>
+
+<!-- MODAL CENTRAL · SUGESTÕES DE PROCEDIMENTO -->
+<dialog class="atd-dialog" id="modalSugestoesProc">
+  <div class="atd-dialog-card">
+    <div class="atd-dialog-head">
+      <div>
+        <strong>Procedimentos sugeridos</strong>
+        <span id="sugestoesProcResumo">CID do paciente + CBO do profissional</span>
+      </div>
+
+      <button type="button" class="btn btn--ghost" id="btnFecharSugestoesProc">
+        Fechar
+      </button>
+    </div>
+
+    <div class="atd-dialog-tools">
+      <input type="search"
+             id="buscaSugestaoProc"
+             class="input"
+             placeholder="Filtrar por código ou descrição">
+
+      <button type="button" class="btn-outline" id="btnAdicionarSelecionadosProc">
+        Adicionar selecionados
+      </button>
+    </div>
+
+    <div class="atd-dialog-body">
+      <div id="listaSugestoesProc" class="atd-sugestoes-list">
+        <p class="atd-empty">Selecione um paciente para carregar sugestões.</p>
+      </div>
+    </div>
+  </div>
+</dialog>
 
 {% endblock %}
 

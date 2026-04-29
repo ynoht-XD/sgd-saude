@@ -1,0 +1,164 @@
+{% extends "layout.html" %}
+
+{% block title %}CEP / IBGE / Municípios{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/bibliotecas.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="page-biblioteca">
+  <div class="page-header">
+    <div>
+      <p class="eyebrow">SGD · Administrativo</p>
+      <h1>{{ titulo or 'Biblioteca CEP / IBGE' }}</h1>
+      <p class="page-subtitle">
+        Importe a base de CEP, IBGE e municípios e pesquise rapidamente.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid-biblioteca">
+    <!-- IMPORTAÇÃO -->
+    <section class="card card-importacao">
+      <div class="card-head">
+        <h2>Importar arquivo TXT</h2>
+        <p>Separador: <strong>;</strong> (ponto e vírgula)</p>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" class="import-form" id="formImportacao">
+        <label class="file-drop" for="arquivo">
+          <input
+            type="file"
+            id="arquivo"
+            name="arquivo"
+            accept=".txt,.csv"
+            required
+          >
+          <span class="file-drop-icon">📥</span>
+          <span class="file-drop-title">Clique para selecionar o arquivo</span>
+          <span class="file-drop-subtitle" id="file-name">Nenhum arquivo selecionado</span>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Importar Base</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- BUSCA -->
+    <section class="card card-busca">
+      <div class="card-head">
+        <h2>Pesquisar</h2>
+        <p>Busque por CEP, IBGE ou município.</p>
+      </div>
+
+      <form method="GET" class="search-form">
+        <div class="search-row">
+          <input
+            type="text"
+            name="q"
+            value="{{ q or '' }}"
+            placeholder="Ex.: 76954000 ou Alta Floresta"
+            autocomplete="off"
+          >
+          <button type="submit" class="btn btn-primary">Buscar</button>
+          {% if q %}
+            <a href="{{ url_for('admin.biblioteca_cep_ibge') }}" class="btn btn-ghost">Limpar</a>
+          {% endif %}
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- LISTA -->
+  <section class="card card-lista">
+    <div class="card-head card-head-inline">
+      <div>
+        <h2>Registros encontrados</h2>
+        <p>
+          {{ total or 0 }} item(ns) · página {{ pagina or 1 }} de {{ total_paginas or 1 }}
+        </p>
+      </div>
+    </div>
+
+    {% if itens %}
+      <div class="table-wrap">
+        <table class="table-biblioteca">
+          <thead>
+            <tr>
+              <th style="width:120px;">CEP</th>
+              <th style="width:120px;">IBGE</th>
+              <th>Município</th>
+              <th style="width:80px;">UF</th>
+              <th style="width:100px;">Cod. Mun.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in itens %}
+              <tr>
+                <td class="col-codigo">{{ item.cep }}</td>
+                <td>{{ item.ibge }}</td>
+                <td>{{ item.municipio }}</td>
+                <td>{{ item.coduf }}</td>
+                <td>{{ item.codmunicip }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PAGINAÇÃO -->
+      <div class="pagination">
+        {% set rota = 'admin.biblioteca_cep_ibge' %}
+
+        <div class="pagination-info">
+          Mostrando até {{ por_pagina or 20 }} registros por página
+        </div>
+
+        <div class="pagination-controls">
+          {% if pagina > 1 %}
+            <a class="page-btn" href="{{ url_for(rota, q=q, pagina=1) }}">« Primeira</a>
+            <a class="page-btn" href="{{ url_for(rota, q=q, pagina=pagina-1) }}">‹ Anterior</a>
+          {% else %}
+            <span class="page-btn disabled">« Primeira</span>
+            <span class="page-btn disabled">‹ Anterior</span>
+          {% endif %}
+
+          {% set inicio = [1, pagina - 2]|max %}
+          {% set fim = [total_paginas, pagina + 2]|min %}
+
+          {% for p in range(inicio, fim + 1) %}
+            {% if p == pagina %}
+              <span class="page-btn is-current">{{ p }}</span>
+            {% else %}
+              <a class="page-btn" href="{{ url_for(rota, q=q, pagina=p) }}">{{ p }}</a>
+            {% endif %}
+          {% endfor %}
+
+          {% if pagina < total_paginas %}
+            <a class="page-btn" href="{{ url_for(rota, q=q, pagina=pagina+1) }}">Próxima ›</a>
+            <a class="page-btn" href="{{ url_for(rota, q=q, pagina=total_paginas) }}">Última »</a>
+          {% else %}
+            <span class="page-btn disabled">Próxima ›</span>
+            <span class="page-btn disabled">Última »</span>
+          {% endif %}
+        </div>
+      </div>
+
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">📍</div>
+        <h3>Nenhum registro encontrado</h3>
+        <p>Importe a base ou refine sua busca.</p>
+      </div>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('admin.static', filename='js/bibliotecas.js') }}"></script>
+{% endblock %}

@@ -1,176 +1,377 @@
-{% extends 'layout.html' %}
+{% extends "layout.html" %}
+
+{% block title %}Módulos e Permissões{% endblock %}
 
 {% block extra_css %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/admin.css') }}">
   <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/modulos.css') }}">
 {% endblock %}
 
+{% macro nivel_select(name, valor_atual) %}
+  <select class="nivel-select" name="{{ name }}">
+    {% for n in niveis_acesso %}
+      <option value="{{ n.valor }}" {% if valor_atual is not none and valor_atual|int == n.valor %}selected{% endif %}>
+        {{ n.nome }}
+      </option>
+    {% endfor %}
+  </select>
+{% endmacro %}
+
+{% macro regra_valor(modulo_codigo, alvo_tipo, alvo_valor) %}
+  {% set chave = modulo_codigo ~ "::" ~ alvo_tipo ~ "::" ~ alvo_valor %}
+  {% if regras_map.get(chave) %}
+    {{ regras_map.get(chave).nivel_acesso }}
+  {% else %}
+    0
+  {% endif %}
+{% endmacro %}
+
 {% block content %}
-  <div class="admin-container">
-    {% with msgs = get_flashed_messages(with_categories=true) %}
-      {% if msgs %}
-        <div class="admin-flashes">
-          {% for cat, m in msgs %}
-            <div class="flash {{ cat }}">{{ m }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+<section class="mod-page">
 
-    {% block admin_content %}
-    <div class="mods-wrapper">
-      <h2 style="margin: 0 0 12px 0;">Módulos da Instituição</h2>
-
-      <form id="formModulos" method="post" action="{{ url_for('admin.modulos') }}">
-        <div class="mods-head">
-          <div class="field">
-            <label for="filtro">Filtrar módulos</label>
-            <input id="filtro" type="text" placeholder="Buscar por nome..." autocomplete="off">
-          </div>
-
-          <div class="mods-actions">
-            <button type="button" class="btn ghost" id="marcarTodos">Marcar todos</button>
-            <button type="button" class="btn ghost" id="desmarcarTodos">Desmarcar todos</button>
-            <span class="muted">|</span>
-            <button type="button" class="btn" id="presetBasico" title="Básico">Preset: Básico</button>
-            <button type="button" class="btn" id="presetCompleto" title="Todos os módulos">Preset: Completo</button>
-
-            <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
-              <span class="muted">Estado rápido:</span>
-              <label class="switch" title="Ativar/Desativar todos">
-                <input type="checkbox" id="masterSwitch">
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="legend">Selecione os módulos que a instituição poderá <strong>ver e acessar</strong>.</div>
-
-        <div class="mods-grid" id="modsGrid">
-          <!-- Cadastro -->
-          <div class="mod-card" data-key="cadastro" data-search="cadastro">
-            <h4>Cadastro</h4>
-            <div class="mod-desc">Cadastro de cidadãos / profissionais / perfis básicos.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>cadastro</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="cadastro" {% if 'cadastro' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Pacientes -->
-          <div class="mod-card" data-key="pacientes" data-search="pacientes">
-            <h4>Pacientes</h4>
-            <div class="mod-desc">Ficha do paciente, prontuário e visão consolidada.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>pacientes</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="pacientes" {% if 'pacientes' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Lista de Atendimentos -->
-          <div class="mod-card" data-key="atendimentos" data-search="lista de atendimentos atendimentos">
-            <h4>Lista de Atendimentos</h4>
-            <div class="mod-desc">Registro e listagem de atendimentos individuais e em grupo.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>atendimentos</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="atendimentos" {% if 'atendimentos' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Agenda -->
-          <div class="mod-card" data-key="agenda" data-search="agenda calendario horarios">
-            <h4>Agenda</h4>
-            <div class="mod-desc">Agenda semanal, criação e gestão de horários e salas.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>agenda</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="agenda" {% if 'agenda' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Exportações -->
-          <div class="mod-card" data-key="export" data-search="export exportar bpa-i apac ciha">
-            <h4>Export</h4>
-            <div class="mod-desc">Libere tudo ou selecione granularmente os formatos regulamentares.</div>
-            <div class="card-footer" style="justify-content:flex-start; gap:14px; flex-wrap:wrap;">
-              <span class="muted">Chave: <code>export</code></span>
-              <label class="switch" title="Liberar todas as exportações">
-                <input type="checkbox" id="export_all" name="modulos" value="export_all" {% if 'export_all' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-              <span class="muted">Tudo</span>
-              <span class="muted" style="opacity:.6;">|</span>
-              <label class="switch" title="BPA-i">
-                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_bpai" {% if 'export_bpai' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-              <span class="muted">BPA-i</span>
-              <label class="switch" title="APAC">
-                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_apac" {% if 'export_apac' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-              <span class="muted">APAC</span>
-              <label class="switch" title="CIHA">
-                <input type="checkbox" class="export-child" data-parent="export_all" name="modulos" value="export_ciha" {% if 'export_ciha' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-              <span class="muted">CIHA</span>
-            </div>
-          </div>
-
-          <!-- Financeiro -->
-          <div class="mod-card" data-key="financeiro" data-search="financeiro contas pagar receber">
-            <h4>Financeiro</h4>
-            <div class="mod-desc">Contas a pagar/receber, repasses e faturamento interno.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>financeiro</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="financeiro" {% if 'financeiro' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- RH -->
-          <div class="mod-card" data-key="rh" data-search="rh recursos humanos pessoas">
-            <h4>RH</h4>
-            <div class="mod-desc">Gestão de pessoas, cargos, férias e documentos de equipe.</div>
-            <div class="card-footer">
-              <span class="muted">Chave: <code>rh</code></span>
-              <label class="switch">
-                <input type="checkbox" name="modulos" value="rh" {% if 'rh' in habilitados %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="save-bar">
-          <div class="panel">
-            <span id="contadorSel">0 selecionados</span>
-            <button type="submit" class="btn primary">Salvar alterações</button>
-          </div>
-        </div>
-      </form>
+  <header class="mod-hero">
+    <div>
+      <span class="mod-kicker">Administração Master</span>
+      <h1>Central de Acessos</h1>
+      <p>
+        Configure módulos contratados e defina permissões por função, CBO e pessoa.
+      </p>
     </div>
-    {% endblock %}
+
+    <div class="mod-hero-card">
+      <span class="hero-label">Clínica atual</span>
+      <strong>{{ clinica.nome if clinica else "Não selecionada" }}</strong>
+      <small>{{ "Ativa" if clinica and clinica.ativo else "Inativa" }}</small>
+    </div>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mod-alerts">
+        {% for category, message in messages %}
+          <div class="mod-alert mod-alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="mod-toolbar">
+    <form method="get" action="{{ url_for('admin.modulos') }}" class="clinica-selector">
+      <label for="clinica_id">Selecionar clínica</label>
+      <div class="select-row">
+        <select name="clinica_id" id="clinica_id" onchange="this.form.submit()">
+          {% for c in clinicas %}
+            <option value="{{ c.id }}" {% if c.id == clinica_id %}selected{% endif %}>
+              {{ c.nome }}{% if not c.ativo %} — inativa{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-soft" type="submit">Carregar</button>
+      </div>
+    </form>
+
+    <div class="quick-actions">
+      <button class="btn btn-soft" type="button" id="btnExpandirTudo">Expandir tudo</button>
+      <button class="btn btn-soft" type="button" id="btnRecolherTudo">Recolher tudo</button>
+      <button class="btn btn-success" type="submit" form="formModulos">Salvar tudo</button>
+    </div>
   </div>
+
+  <form method="post" action="{{ url_for('admin.modulos', clinica_id=clinica_id) }}" id="formModulos">
+
+    <div class="mod-grid">
+
+      <aside class="mod-side">
+        <div class="side-card">
+          <h2>Resumo</h2>
+          <div class="stats">
+            <div>
+              <strong id="statAtivos">0</strong>
+              <span>Módulos ativos</span>
+            </div>
+            <div>
+              <strong>{{ usuarios|length }}</strong>
+              <span>Usuários ativos</span>
+            </div>
+            <div>
+              <strong>{{ cbos|length }}</strong>
+              <span>CBOs em uso</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="side-card tip">
+          <h2>Prioridade das regras</h2>
+          <p>
+            Pessoa vence CBO. CBO vence função. Função define o padrão geral.
+          </p>
+        </div>
+
+        <div class="side-card">
+          <h2>Níveis</h2>
+          <ul class="perfil-list">
+            {% for n in niveis_acesso %}
+              <li>
+                <span>{{ n.nome }}</span>
+                <small class="pill {% if n.valor == 0 %}off{% else %}ok{% endif %}">
+                  {{ n.valor }}
+                </small>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </aside>
+
+      <main class="mod-main">
+
+        <div class="mod-actions-top">
+          <div>
+            <h2>Matriz modular</h2>
+            <p>
+              Ative o módulo e defina acesso por função, CBO ou usuário específico.
+            </p>
+          </div>
+
+          <div class="quick-actions">
+            <button type="button" class="btn btn-soft" id="btnAtivarEssenciais">
+              Ativar essenciais
+            </button>
+            <button type="button" class="btn btn-soft danger" id="btnDesativarTodos">
+              Desativar todos
+            </button>
+            <button type="submit" class="btn btn-success">
+              Salvar alterações
+            </button>
+          </div>
+        </div>
+
+        {% set categorias = [] %}
+        {% for modulo in modulos %}
+          {% if modulo.categoria not in categorias %}
+            {% set _ = categorias.append(modulo.categoria) %}
+          {% endif %}
+        {% endfor %}
+
+        {% for categoria in categorias %}
+          <section class="categoria-card">
+            <button type="button" class="categoria-head" data-collapse="cat-{{ loop.index }}">
+              <div>
+                <h3>{{ categoria }}</h3>
+                <span>Permissões dos módulos desta categoria</span>
+              </div>
+              <span class="chevron">⌄</span>
+            </button>
+
+            <div class="categoria-body" id="cat-{{ loop.index }}">
+
+              {% for modulo in modulos if modulo.categoria == categoria %}
+                <article class="mod-card acesso-card"
+                         data-modulo-card
+                         data-codigo="{{ modulo.codigo }}">
+
+                  <div class="mod-card-main">
+                    <div class="mod-icon">
+                      <i data-feather="{{ modulo.icone or 'box' }}"></i>
+                    </div>
+
+                    <div class="mod-info">
+                      <div class="mod-title-row">
+                        <h4>{{ modulo.nome }}</h4>
+
+                        {% if modulo.master_only %}
+                          <span class="pill master">Master</span>
+                        {% endif %}
+                      </div>
+
+                      <p>{{ modulo.descricao }}</p>
+                      <code>{{ modulo.codigo }}</code>
+                    </div>
+                  </div>
+
+                  <div class="mod-switches">
+                    <label class="switch-line">
+                      <span>
+                        <strong>Módulo ativo</strong>
+                        <small>Libera esta tela para a clínica.</small>
+                      </span>
+
+                      <input
+                        type="checkbox"
+                        name="modulos_ativos"
+                        value="{{ modulo.codigo }}"
+                        class="js-modulo-ativo"
+                        {% if modulo.contratado %}checked{% endif %}
+                      >
+                      <b class="switch-ui"></b>
+                    </label>
+                  </div>
+
+                  <div class="access-panel">
+
+                    <div class="access-tabs">
+                      <button type="button" class="access-tab is-active" data-tab-target="role-{{ modulo.codigo }}">
+                        Funções
+                      </button>
+                      <button type="button" class="access-tab" data-tab-target="cbo-{{ modulo.codigo }}">
+                        CBOs
+                      </button>
+                      <button type="button" class="access-tab" data-tab-target="user-{{ modulo.codigo }}">
+                        Pessoas
+                      </button>
+                    </div>
+
+                    <div class="access-tab-panel is-active" id="role-{{ modulo.codigo }}">
+
+                      {% for role in roles_base %}
+                        {% set chave_role = modulo.codigo ~ "::ROLE::" ~ role.codigo %}
+                        {% set regra_role = regras_map.get(chave_role) %}
+                        {% set valor_role = regra_role.nivel_acesso if regra_role else 0 %}
+
+                        <section class="access-group">
+                          <div class="access-group-head">
+                            <div>
+                              <h5>{{ role.nome }}</h5>
+                              <span>Padrão para todos os usuários desta função</span>
+                            </div>
+
+                            {{ nivel_select("nivel__" ~ modulo.codigo ~ "__ROLE__" ~ role.codigo, valor_role) }}
+                          </div>
+
+                          {% set lista_role = usuarios_por_role.get(role.codigo, []) %}
+
+                          {% if lista_role %}
+                            <div class="people-mini-list">
+                              {% for pessoa in lista_role %}
+                                {% set chave_user = modulo.codigo ~ "::USUARIO::" ~ pessoa.id %}
+                                {% set regra_user = regras_map.get(chave_user) %}
+                                {% set valor_user = regra_user.nivel_acesso if regra_user else valor_role %}
+
+                                <div class="person-row" data-role="{{ pessoa.role }}" data-cbo="{{ pessoa.cbo_digits }}">
+                                  <div>
+                                    <strong>{{ pessoa.nome }}</strong>
+                                    <small>{{ pessoa.email or pessoa.cpf or "Sem identificação" }}</small>
+                                  </div>
+
+                                  {{ nivel_select("nivel__" ~ modulo.codigo ~ "__USUARIO__" ~ pessoa.id, valor_user) }}
+                                </div>
+                              {% endfor %}
+                            </div>
+                          {% else %}
+                            <p class="empty">Nenhum usuário ativo nesta função.</p>
+                          {% endif %}
+                        </section>
+                      {% endfor %}
+
+                    </div>
+
+                    <div class="access-tab-panel" id="cbo-{{ modulo.codigo }}">
+                      {% if cbos %}
+                        {% for cbo in cbos %}
+                          {% set chave_cbo = modulo.codigo ~ "::CBO::" ~ cbo.codigo %}
+                          {% set regra_cbo = regras_map.get(chave_cbo) %}
+                          {% set valor_cbo = regra_cbo.nivel_acesso if regra_cbo else 0 %}
+                          {% set profissionais = profissionais_por_cbo.get(cbo.codigo, []) %}
+
+                          <section class="access-group cbo-group">
+                            <button type="button" class="access-group-head cbo-toggle" data-cbo-toggle="cbo-{{ modulo.codigo }}-{{ cbo.codigo }}">
+                              <div>
+                                <h5>{{ cbo.codigo }} — {{ cbo.descricao }}</h5>
+                                <span>{{ cbo.total_profissionais }} profissional(is) vinculado(s)</span>
+                              </div>
+
+                              <span class="chevron">⌄</span>
+                            </button>
+
+                            <div class="cbo-body" id="cbo-{{ modulo.codigo }}-{{ cbo.codigo }}">
+                              <div class="cbo-level-row">
+                                <span>Permissão padrão para este CBO</span>
+                                {{ nivel_select("nivel__" ~ modulo.codigo ~ "__CBO__" ~ cbo.codigo, valor_cbo) }}
+                              </div>
+
+                              {% if profissionais %}
+                                <div class="people-mini-list">
+                                  {% for pessoa in profissionais %}
+                                    {% set chave_user = modulo.codigo ~ "::USUARIO::" ~ pessoa.id %}
+                                    {% set regra_user = regras_map.get(chave_user) %}
+                                    {% set valor_user = regra_user.nivel_acesso if regra_user else valor_cbo %}
+
+                                    <div class="person-row" data-role="{{ pessoa.role }}" data-cbo="{{ pessoa.cbo_digits }}">
+                                      <div>
+                                        <strong>{{ pessoa.nome }}</strong>
+                                        <small>{{ pessoa.email or pessoa.cpf or "Profissional" }}</small>
+                                      </div>
+
+                                      {{ nivel_select("nivel__" ~ modulo.codigo ~ "__USUARIO__" ~ pessoa.id, valor_user) }}
+                                    </div>
+                                  {% endfor %}
+                                </div>
+                              {% else %}
+                                <p class="empty">Nenhum profissional vinculado a este CBO.</p>
+                              {% endif %}
+                            </div>
+                          </section>
+                        {% endfor %}
+                      {% else %}
+                        <p class="empty">
+                          Nenhum CBO com profissional vinculado foi encontrado.
+                        </p>
+                      {% endif %}
+                    </div>
+
+                    <div class="access-tab-panel" id="user-{{ modulo.codigo }}">
+                      {% if usuarios %}
+                        <div class="people-mini-list full">
+                          {% for pessoa in usuarios %}
+                            {% set chave_user = modulo.codigo ~ "::USUARIO::" ~ pessoa.id %}
+                            {% set regra_user = regras_map.get(chave_user) %}
+                            {% set valor_user = regra_user.nivel_acesso if regra_user else 0 %}
+
+                            <div class="person-row" data-role="{{ pessoa.role }}" data-cbo="{{ pessoa.cbo_digits }}">
+                              <div>
+                                <strong>{{ pessoa.nome }}</strong>
+                                <small>
+                                  {{ pessoa.role }}
+                                  {% if pessoa.cbo_digits %}
+                                    · CBO {{ pessoa.cbo_digits }}
+                                  {% endif %}
+                                </small>
+                              </div>
+
+                              {{ nivel_select("nivel__" ~ modulo.codigo ~ "__USUARIO__" ~ pessoa.id, valor_user) }}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <p class="empty">Nenhum usuário ativo encontrado.</p>
+                      {% endif %}
+                    </div>
+
+                  </div>
+                </article>
+              {% endfor %}
+
+            </div>
+          </section>
+        {% endfor %}
+
+        <div class="save-footer">
+          <div>
+            <strong>Salvar matriz de acesso</strong>
+            <span>As regras serão aplicadas por função, CBO e pessoa.</span>
+          </div>
+
+          <button type="submit" class="btn btn-success btn-lg">
+            Salvar módulos e permissões
+          </button>
+        </div>
+
+      </main>
+    </div>
+  </form>
+</section>
 {% endblock %}
 
 {% block extra_js %}
   {{ super() }}
-  <script src="{{ url_for('admin.static', filename='js/modulos.js') }}" defer></script>
+  <script src="{{ url_for('admin.static', filename='js/modulos.js') }}"></script>
 {% endblock %}

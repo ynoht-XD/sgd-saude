@@ -1,0 +1,146 @@
+{% extends "layout.html" %}
+
+{% block title %}Agenda Médica - Coordenação{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('agenda_medica.static', filename='css/agenda_medica.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="am-page">
+
+  <header class="am-hero">
+    <div>
+      <span class="am-kicker">Coordenação</span>
+      <h1>Agenda Médica</h1>
+      <p>Libere datas por CBO, acompanhe marcações e aprove ou recuse solicitações.</p>
+    </div>
+
+    <div class="am-hero-card">
+      <strong id="amHoje">Hoje</strong>
+      <span>Controle de vagas e encaixes</span>
+    </div>
+  </header>
+
+  <section class="am-panel">
+    <div class="am-panel-head">
+      <div>
+        <h2 id="formTitulo">Liberar agenda</h2>
+        <p>Escolha o CBO, informe a data e defina a quantidade de vagas.</p>
+      </div>
+
+      <button type="button" class="am-btn am-btn-light" id="btnLimparForm">
+        Limpar
+      </button>
+    </div>
+
+    <form id="formAgenda" class="am-form">
+      <input type="hidden" id="agendaId">
+
+      <div class="am-field am-field-wide am-autocomplete-wrap">
+        <label for="cboBusca">CBO / Especialidade</label>
+        <input
+          type="text"
+          id="cboBusca"
+          placeholder="Digite ao menos 3 letras ou números..."
+          autocomplete="off"
+        >
+        <input type="hidden" id="cboCodigo">
+        <input type="hidden" id="cboDescricao">
+
+        <div class="am-suggestions" id="cboSugestoes"></div>
+      </div>
+
+      <div class="am-field">
+        <label for="dataAtendimento">Data</label>
+        <input type="date" id="dataAtendimento" required>
+      </div>
+
+      <div class="am-field">
+        <label for="vagasNormais">Vagas normais</label>
+        <input type="number" id="vagasNormais" min="0" value="0">
+      </div>
+
+      <div class="am-field">
+        <label for="vagasEncaixe">Vagas cedidas / encaixe</label>
+        <input type="number" id="vagasEncaixe" min="0" value="0">
+      </div>
+
+      <div class="am-field">
+        <label for="vagasTotal">Total de vagas</label>
+        <input type="number" id="vagasTotal" readonly value="0">
+      </div>
+
+      <div class="am-field am-field-wide">
+        <label for="observacao">Observação</label>
+        <textarea id="observacao" rows="3" placeholder="Ex: manhã, prioridade, orientação interna..."></textarea>
+      </div>
+
+      <div class="am-actions">
+        <button type="submit" class="am-btn am-btn-primary" id="btnSalvar">
+          Salvar agenda
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="am-section">
+    <div class="am-section-title">
+      <div>
+        <h2>Agendas futuras</h2>
+        <p>Datas que ainda vão acontecer.</p>
+      </div>
+      <span class="am-chip" id="countFuturas">0 registros</span>
+    </div>
+
+    <div class="am-grid" id="gridFuturas"></div>
+
+    <div class="am-pagination">
+      <button class="am-btn am-btn-light" id="prevFuturas">Anterior</button>
+      <span id="pageFuturas">Página 1</span>
+      <button class="am-btn am-btn-light" id="nextFuturas">Próxima</button>
+    </div>
+  </section>
+
+  <section class="am-section am-section-muted">
+    <div class="am-section-title">
+      <div>
+        <h2>Agendas passadas</h2>
+        <p>Histórico das datas já vencidas.</p>
+      </div>
+      <span class="am-chip" id="countPassadas">0 registros</span>
+    </div>
+
+    <div class="am-grid" id="gridPassadas"></div>
+
+    <div class="am-pagination">
+      <button class="am-btn am-btn-light" id="prevPassadas">Anterior</button>
+      <span id="pagePassadas">Página 1</span>
+      <button class="am-btn am-btn-light" id="nextPassadas">Próxima</button>
+    </div>
+  </section>
+
+</section>
+
+<dialog class="am-modal" id="modalMarcacoes">
+  <div class="am-modal-box">
+    <header class="am-modal-head">
+      <div>
+        <span class="am-kicker">Marcações</span>
+        <h2 id="modalTitulo">Agenda</h2>
+        <p id="modalSubtitulo"></p>
+      </div>
+
+      <button type="button" class="am-icon-btn" id="btnFecharModal">×</button>
+    </header>
+
+    <div class="am-modal-body" id="listaMarcacoes"></div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('agenda_medica.static', filename='js/coordenacao.js') }}"></script>
+{% endblock %}

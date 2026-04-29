@@ -1,0 +1,670 @@
+{% extends "layout.html" %}
+
+{% block title %}Procedimentos{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('procedimentos.static', filename='css/proced.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="proced-page">
+
+  <!-- HERO -->
+  <header class="proced-hero">
+    <div class="proced-hero__content">
+      <div class="proced-kicker">SGD · Procedimentos</div>
+      <h1>Consulta e filtros de procedimentos</h1>
+      <p>
+        Pesquise procedimentos importados, filtre por CID, CBO, serviços,
+        classificações, valores e complexidade.
+      </p>
+    </div>
+
+    <div class="proced-hero__actions">
+      <a href="{{ url_for('procedimentos.lote') }}" class="btn btn-secondary">
+        Pesquisa em lote
+      </a>
+    </div>
+  </header>
+
+  <!-- IMPORTAÇÃO -->
+  <section class="proced-card proced-import">
+    <div class="proced-card__head">
+      <div>
+        <h2>Importar base XLS</h2>
+        <p>Envie a planilha com os campos padronizados para atualizar a base.</p>
+      </div>
+    </div>
+
+    <div class="proced-import__toolbar">
+      <form
+        class="proced-import__form"
+        action="{{ url_for('procedimentos.importar_xls') }}"
+        method="POST"
+        enctype="multipart/form-data"
+        id="form-importacao"
+      >
+        <label class="filebox" for="arquivo">
+          <input type="file" name="arquivo" id="arquivo" accept=".xlsx,.xls" required>
+          <span class="filebox__label">Escolher planilha</span>
+          <span class="filebox__name" id="file-name">Nenhum arquivo selecionado</span>
+        </label>
+
+        <button type="submit" class="btn btn-primary">
+          Importar XLS
+        </button>
+      </form>
+
+      <form
+        action="{{ url_for('procedimentos.limpar_banco') }}"
+        method="POST"
+        class="proced-danger-form"
+        onsubmit="return confirm('Tem certeza que deseja limpar toda a base de procedimentos?');"
+      >
+        <button type="submit" class="btn btn-danger">
+          Limpar banco
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- FILTROS -->
+  <section class="proced-card proced-filtros">
+    <div class="proced-card__head">
+      <div>
+        <h2>Filtros</h2>
+        <p>Busque por código, descrição, CID, CBO, serviços e complexidade.</p>
+      </div>
+    </div>
+
+    <form method="GET" action="{{ url_for('procedimentos.index') }}" class="proced-filtros__grid" id="form-filtros">
+      <div class="field">
+        <label for="q">Código ou descrição</label>
+        <input
+          type="text"
+          name="q"
+          id="q"
+          placeholder="Ex.: 0301010048 ou consulta"
+          value="{{ request.args.get('q', '') }}"
+        >
+      </div>
+
+      <div class="field">
+        <label for="cid">CID(s)</label>
+        <input
+          type="text"
+          name="cid"
+          id="cid"
+          placeholder="Ex.: F700, F840"
+          value="{{ request.args.get('cid', '') }}"
+        >
+      </div>
+
+      <div class="field">
+        <label for="cbo">CBO(s)</label>
+        <input
+          type="text"
+          name="cbo"
+          id="cbo"
+          placeholder="Ex.: 223905, 251510"
+          value="{{ request.args.get('cbo', '') }}"
+        >
+      </div>
+
+      <div class="field">
+        <label for="complexidade">Complexidade</label>
+        <select name="complexidade" id="complexidade">
+          <option value="">Todas</option>
+          {% for cx in complexidades or [] %}
+            <option value="{{ cx }}" {% if request.args.get('complexidade') == cx %}selected{% endif %}>
+              {{ cx }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="proced-filtros__actions">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        <a href="{{ url_for('procedimentos.index') }}" class="btn btn-ghost">Limpar filtros</a>
+      </div>
+    </form>
+  </section>
+
+  <!-- FLASH -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <section class="proced-flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endwith %}
+
+  <!-- RESUMO -->
+  <section class="proced-summary">
+    <div class="summary-pill">
+      <span class="summary-pill__label">Resultados</span>
+      <strong>{{ total if total is defined else dados|length }}</strong>
+    </div>
+
+    <div class="summary-pill">
+      <span class="summary-pill__label">Por página</span>
+      <strong>{{ por_pagina if por_pagina is defined else 12 }}</strong>
+    </div>
+
+    <div class="summary-pill">
+      <span class="summary-pill__label">Página</span>
+      <strong>{{ pagina if pagina is defined else 1 }} / {{ total_paginas if total_paginas is defined else 1 }}</strong>
+    </div>
+
+    <div class="summary-pill">
+      <span class="summary-pill__label">Filtros ativos</span>
+      <strong id="filtros-ativos">—</strong>
+    </div>
+  </section>
+
+  <!-- RESULTADOS -->
+  <section class="proced-card proced-resultados">
+    <div class="proced-card__head">
+      <div>
+        <h2>Base de procedimentos</h2>
+        <p>Visualize procedimentos em cards, com valores, vínculos e detalhes completos.</p>
+      </div>
+    </div>
+
+    {% if dados %}
+      <div class="proced-cards-grid">
+        {% for item in dados %}
+          {% set cids_list = (item.cids_codigos or '').split(', ') if item.cids_codigos else [] %}
+          {% set cbos_list = (item.cbos_codigos or '').split(', ') if item.cbos_codigos else [] %}
+          {% set servicos_list = (item.servicos_codigos or '').split(', ') if item.servicos_codigos else [] %}
+          {% set classifs_list = (item.classificacoes_codigos or '').split(', ') if item.classificacoes_codigos else [] %}
+          {% set cx = (item.complexidade or '')|lower %}
+
+          <article class="proced-item-card">
+            <div class="proced-item-card__top">
+              <div class="proced-item-card__codigo">
+                <span class="label">Código</span>
+                <strong class="mono">{{ item.codigo or '—' }}</strong>
+              </div>
+
+              <div class="proced-item-card__badges">
+                {% if item.valor_total is not none %}
+                  <span class="badge badge-total">
+                    Total R$ {{ "%.2f"|format(item.valor_total|float) }}
+                  </span>
+                {% endif %}
+
+                {% if item.complexidade %}
+                  <span class="
+                    badge
+                    {% if 'alta' in cx %}badge-red
+                    {% elif 'média' in cx or 'media' in cx %}badge-yellow
+                    {% elif 'baixa' in cx %}badge-green
+                    {% else %}badge-neutral{% endif %}
+                  ">
+                    {{ item.complexidade }}
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="proced-item-card__body">
+              <h3 class="proced-item-card__title">{{ item.descricao or '—' }}</h3>
+
+              <!-- VALORES -->
+              <div class="proced-valores">
+                <div class="proced-valor-pill">
+                  <span>SH</span>
+                  <strong>R$ {{ "%.2f"|format((item.valor_sh or 0)|float) }}</strong>
+                </div>
+
+                <div class="proced-valor-pill">
+                  <span>SA</span>
+                  <strong>R$ {{ "%.2f"|format((item.valor_sa or 0)|float) }}</strong>
+                </div>
+
+                <div class="proced-valor-pill">
+                  <span>SP</span>
+                  <strong>R$ {{ "%.2f"|format((item.valor_sp or 0)|float) }}</strong>
+                </div>
+
+                <div class="proced-valor-pill proced-valor-pill--total">
+                  <span>Total</span>
+                  <strong>R$ {{ "%.2f"|format((item.valor_total or 0)|float) }}</strong>
+                </div>
+              </div>
+
+              <div class="proced-item-card__meta">
+                {% if item.co_financiamento or item.no_financiamento %}
+                  <span class="badge badge-fin">
+                    {{ item.co_financiamento or '' }}{% if item.co_financiamento and item.no_financiamento %} · {% endif %}{{ item.no_financiamento or '' }}
+                  </span>
+                {% endif %}
+
+                {% if item.co_rubrica or item.no_rubrica %}
+                  <span class="badge badge-rubrica">
+                    {{ item.co_rubrica or '' }}{% if item.co_rubrica and item.no_rubrica %} · {% endif %}{{ item.no_rubrica or '' }}
+                  </span>
+                {% endif %}
+
+                {% if item.competencia %}
+                  <span class="badge badge-neutral">{{ item.competencia }}</span>
+                {% endif %}
+              </div>
+
+              <div class="proced-item-card__section">
+                <div class="proced-item-card__section-head">
+                  <span>CIDs</span>
+                  <small>{{ item.qtd_cids or 0 }}</small>
+                </div>
+
+                <div class="chips">
+                  {% for cid in cids_list[:4] %}
+                    <span class="chip chip-cid">{{ cid }}</span>
+                  {% endfor %}
+
+                  {% if cids_list|length > 4 %}
+                    <button
+                      type="button"
+                      class="chip-more"
+                      data-modal-title="CIDs vinculados"
+                      data-modal-content="{{ item.cids_codigos or '' }}"
+                    >
+                      +{{ cids_list|length - 4 }} mais
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="proced-item-card__section">
+                <div class="proced-item-card__section-head">
+                  <span>CBOs</span>
+                  <small>{{ item.qtd_cbos or 0 }}</small>
+                </div>
+
+                <div class="chips">
+                  {% for cbo in cbos_list[:4] %}
+                    <span class="chip chip-cbo">{{ cbo }}</span>
+                  {% endfor %}
+
+                  {% if cbos_list|length > 4 %}
+                    <button
+                      type="button"
+                      class="chip-more"
+                      data-modal-title="CBOs vinculados"
+                      data-modal-content="{{ item.cbos_codigos or '' }}"
+                    >
+                      +{{ cbos_list|length - 4 }} mais
+                    </button>
+                  {% endif %}
+                </div>
+              </div>
+
+              <!-- SERVIÇOS + CLASSIFICAÇÕES LADO A LADO -->
+              <div class="proced-duo-sections">
+                <div class="proced-item-card__section">
+                  <div class="proced-item-card__section-head">
+                    <span>Serviços</span>
+                    <small>{{ item.qtd_servicos or 0 }}</small>
+                  </div>
+
+                  <div class="chips">
+                    {% for serv in servicos_list[:3] %}
+                      <span class="chip chip-serv">{{ serv }}</span>
+                    {% endfor %}
+
+                    {% if servicos_list|length > 3 %}
+                      <button
+                        type="button"
+                        class="chip-more"
+                        data-modal-title="Serviços vinculados"
+                        data-modal-content="{{ item.servicos_codigos or '' }}"
+                      >
+                        +{{ servicos_list|length - 3 }} mais
+                      </button>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="proced-item-card__section">
+                  <div class="proced-item-card__section-head">
+                    <span>Classificações</span>
+                    <small>{{ classifs_list|length }}</small>
+                  </div>
+
+                  <div class="chips">
+                    {% for cl in classifs_list[:3] %}
+                      <span class="chip chip-class">{{ cl }}</span>
+                    {% endfor %}
+
+                    {% if classifs_list|length > 3 %}
+                      <button
+                        type="button"
+                        class="chip-more"
+                        data-modal-title="Classificações vinculadas"
+                        data-modal-content="{{ item.classificacoes_codigos or '' }}"
+                      >
+                        +{{ classifs_list|length - 3 }} mais
+                      </button>
+                    {% endif %}
+
+                    {% if not classifs_list %}
+                      <span class="chip chip-muted">—</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="proced-item-card__footer">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm btn-ver-procedimento"
+                data-proced-id="{{ item.id }}"
+                data-proced-codigo="{{ item.codigo or '—' }}"
+                data-proced-nome="{{ item.descricao or '—' }}"
+                data-proced-complexidade="{{ item.complexidade or '—' }}"
+                data-proced-competencia="{{ item.competencia or '—' }}"
+                data-proced-valor-sh="{{ item.valor_sh or 0 }}"
+                data-proced-valor-sa="{{ item.valor_sa or 0 }}"
+                data-proced-valor-sp="{{ item.valor_sp or 0 }}"
+                data-proced-valor-total="{{ item.valor_total or 0 }}"
+                data-proced-co-financiamento="{{ item.co_financiamento or '—' }}"
+                data-proced-no-financiamento="{{ item.no_financiamento or '—' }}"
+                data-proced-co-rubrica="{{ item.co_rubrica or '—' }}"
+                data-proced-no-rubrica="{{ item.no_rubrica or '—' }}"
+                data-proced-cids-codigos="{{ item.cids_codigos or '—' }}"
+                data-proced-cids-descricoes="{{ item.cids_descricoes or '—' }}"
+                data-proced-cbos-codigos="{{ item.cbos_codigos or '—' }}"
+                data-proced-cbos-descricoes="{{ item.cbos_descricoes or '—' }}"
+                data-proced-servicos-codigos="{{ item.servicos_codigos or '—' }}"
+                data-proced-servicos-descricoes="{{ item.servicos_descricoes or '—' }}"
+                data-proced-classificacoes-codigos="{{ item.classificacoes_codigos or '—' }}"
+                data-proced-classificacoes-descricoes="{{ item.classificacoes_descricoes or '—' }}"
+                data-proced-qtd-cids="{{ item.qtd_cids or 0 }}"
+                data-proced-qtd-cbos="{{ item.qtd_cbos or 0 }}"
+                data-proced-qtd-servicos="{{ item.qtd_servicos or 0 }}"
+              >
+                Ver procedimento completo
+              </button>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      <!-- PAGINAÇÃO -->
+      <nav class="proced-pagination" aria-label="Paginação de procedimentos">
+        {% set pagina_atual = pagina if pagina is defined else 1 %}
+        {% set total_paginas_calc = total_paginas if total_paginas is defined else 1 %}
+
+        <a
+          class="page-btn {% if pagina_atual <= 1 %}is-disabled{% endif %}"
+          href="{% if pagina_atual > 1 %}{{ url_for('procedimentos.index', q=request.args.get('q',''), cid=request.args.get('cid',''), cbo=request.args.get('cbo',''), complexidade=request.args.get('complexidade',''), pagina=pagina_atual-1) }}{% else %}#{% endif %}"
+        >
+          ← Anterior
+        </a>
+
+        <div class="page-numbers">
+          {% for p in range(1, total_paginas_calc + 1) %}
+            {% if p == pagina_atual %}
+              <span class="page-number is-active">{{ p }}</span>
+            {% elif p >= pagina_atual - 2 and p <= pagina_atual + 2 %}
+              <a
+                class="page-number"
+                href="{{ url_for('procedimentos.index', q=request.args.get('q',''), cid=request.args.get('cid',''), cbo=request.args.get('cbo',''), complexidade=request.args.get('complexidade',''), pagina=p) }}"
+              >
+                {{ p }}
+              </a>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <a
+          class="page-btn {% if pagina_atual >= total_paginas_calc %}is-disabled{% endif %}"
+          href="{% if pagina_atual < total_paginas_calc %}{{ url_for('procedimentos.index', q=request.args.get('q',''), cid=request.args.get('cid',''), cbo=request.args.get('cbo',''), complexidade=request.args.get('complexidade',''), pagina=pagina_atual+1) }}{% else %}#{% endif %}"
+        >
+          Próxima →
+        </a>
+      </nav>
+    {% else %}
+      <div class="proced-empty">
+        <div class="proced-empty__icon">📄</div>
+        <h3>Nenhum procedimento encontrado</h3>
+        <p>Importe uma planilha ou ajuste os filtros para localizar registros.</p>
+      </div>
+    {% endif %}
+  </section>
+
+</section>
+
+<!-- MODAL GERAL -->
+<dialog id="proced-modal" class="proced-modal">
+  <div class="proced-modal__dialog">
+    <header class="proced-modal__head">
+      <h3 id="proced-modal-title">Detalhes</h3>
+      <button type="button" class="proced-modal__close" id="proced-modal-close" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="proced-modal__body" id="proced-modal-body"></div>
+  </div>
+</dialog>
+
+<!-- MODAL COMPLETO DO PROCEDIMENTO — SUPREMO -->
+<dialog id="proced-detalhe-modal" class="proced-modal proced-modal--xl">
+  <div class="proced-modal__dialog proced-modal__dialog--xl">
+
+    <header class="proced-full-head">
+      <div>
+        <span class="proced-full-kicker">Procedimento completo</span>
+        <h3 id="proced-detalhe-titulo">Detalhes do procedimento</h3>
+        <p id="proced-detalhe-subtitulo">Informações completas, vínculos, valores e classificações.</p>
+      </div>
+
+      <button type="button" class="proced-modal__close" id="proced-detalhe-close" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="proced-full-body">
+
+      <section class="proced-full-hero">
+        <div class="proced-full-code">
+          <span class="label">Código SIGTAP</span>
+          <strong class="mono" id="det-codigo">—</strong>
+        </div>
+
+        <div class="proced-full-title">
+          <span class="label">Descrição</span>
+          <h4 id="det-nome">—</h4>
+        </div>
+
+        <div class="proced-full-badges" id="det-badges"></div>
+      </section>
+
+      <section class="proced-full-section">
+        <div class="proced-full-section__head">
+          <div>
+            <h4>Resumo operacional</h4>
+            <p>Dados principais para identificação rápida do procedimento.</p>
+          </div>
+        </div>
+
+        <div class="proced-full-grid">
+          <article class="proced-info-box">
+            <span>Complexidade</span>
+            <strong id="det-complexidade">—</strong>
+          </article>
+
+          <article class="proced-info-box">
+            <span>Competência</span>
+            <strong id="det-competencia">—</strong>
+          </article>
+
+          <article class="proced-info-box">
+            <span>Total de CIDs</span>
+            <strong id="det-qtd-cids">0</strong>
+          </article>
+
+          <article class="proced-info-box">
+            <span>Total de CBOs</span>
+            <strong id="det-qtd-cbos">0</strong>
+          </article>
+
+          <article class="proced-info-box">
+            <span>Total de serviços</span>
+            <strong id="det-qtd-servicos">0</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="proced-full-section">
+        <div class="proced-full-section__head">
+          <div>
+            <h4>Valores do procedimento</h4>
+            <p>Composição financeira importada da base.</p>
+          </div>
+        </div>
+
+        <div class="proced-money-grid">
+          <article class="proced-money-card">
+            <span>Valor SH</span>
+            <strong id="det-valor-sh">R$ 0,00</strong>
+          </article>
+
+          <article class="proced-money-card">
+            <span>Valor SA</span>
+            <strong id="det-valor-sa">R$ 0,00</strong>
+          </article>
+
+          <article class="proced-money-card">
+            <span>Valor SP</span>
+            <strong id="det-valor-sp">R$ 0,00</strong>
+          </article>
+
+          <article class="proced-money-card proced-money-card--total">
+            <span>Valor Total</span>
+            <strong id="det-valor-total">R$ 0,00</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="proced-full-section">
+        <div class="proced-full-section__head">
+          <div>
+            <h4>Financiamento e rubrica</h4>
+            <p>Origem financeira e classificação administrativa do procedimento.</p>
+          </div>
+        </div>
+
+        <div class="proced-full-grid proced-full-grid--two">
+          <article class="proced-info-box proced-info-box--blue">
+            <span>Código do financiamento</span>
+            <strong id="det-co-financiamento">—</strong>
+          </article>
+
+          <article class="proced-info-box proced-info-box--blue">
+            <span>Financiamento</span>
+            <strong id="det-no-financiamento">—</strong>
+          </article>
+
+          <article class="proced-info-box proced-info-box--purple">
+            <span>Código da rubrica</span>
+            <strong id="det-co-rubrica">—</strong>
+          </article>
+
+          <article class="proced-info-box proced-info-box--purple">
+            <span>Rubrica</span>
+            <strong id="det-no-rubrica">—</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="proced-full-duo">
+        <article class="proced-full-section">
+          <div class="proced-full-section__head">
+            <div>
+              <h4>CIDs vinculados</h4>
+              <p>Códigos e descrições clínicas relacionados.</p>
+            </div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Códigos</strong>
+            <div id="det-cids-codigos">—</div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Descrições</strong>
+            <div id="det-cids-descricoes">—</div>
+          </div>
+        </article>
+
+        <article class="proced-full-section">
+          <div class="proced-full-section__head">
+            <div>
+              <h4>CBOs vinculados</h4>
+              <p>Ocupações profissionais autorizadas.</p>
+            </div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Códigos</strong>
+            <div id="det-cbos-codigos">—</div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Descrições</strong>
+            <div id="det-cbos-descricoes">—</div>
+          </div>
+        </article>
+      </section>
+
+      <section class="proced-full-duo">
+        <article class="proced-full-section">
+          <div class="proced-full-section__head">
+            <div>
+              <h4>Serviços vinculados</h4>
+              <p>Serviços associados ao procedimento.</p>
+            </div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Códigos</strong>
+            <div id="det-servicos-codigos">—</div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Descrições</strong>
+            <div id="det-servicos-descricoes">—</div>
+          </div>
+        </article>
+
+        <article class="proced-full-section">
+          <div class="proced-full-section__head">
+            <div>
+              <h4>Classificações vinculadas</h4>
+              <p>Subcategorias e classificações do serviço.</p>
+            </div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Códigos</strong>
+            <div id="det-classificacoes-codigos">—</div>
+          </div>
+
+          <div class="proced-list-box">
+            <strong>Descrições</strong>
+            <div id="det-classificacoes-descricoes">—</div>
+          </div>
+        </article>
+      </section>
+
+    </div>
+  </div>
+</dialog>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('procedimentos.static', filename='js/proced.js') }}"></script>
+{% endblock %}

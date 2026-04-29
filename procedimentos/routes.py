@@ -1,793 +1,832 @@
-# sgd/procedimentos/routes.py
-from __future__ import annotations
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
+import math
+import re
+from io import BytesIO
 
-import io
-import sqlite3
-from datetime import datetime
+import pandas as pd
 
-from flask import (
-    request, jsonify, render_template, flash, redirect, url_for, send_file
-)
-from openpyxl import load_workbook, Workbook
-
-from . import procedimentos_bp
 from db import conectar_db
+from . import procedimentos_bp
 
 
-# ============================================================
-# DICIONÁRIO DE PROFISSIONAIS ↔ CBO (referência / UI)
-# ============================================================
-
-CBO_GRUPOS: list[dict] = [
-    {"id": 1, "nome": "Serviço social", "codigos": ["251605"]},
-    {"id": 2, "nome": "Enfermagem", "codigos": ["223505"]},
-    {"id": 3, "nome": "Psicólogos", "codigos": ["251510"]},
-    {"id": 4, "nome": "Terapeuta Ocupacional", "codigos": ["223905"]},
-    {"id": 5, "nome": "Fonoaudiólogos", "codigos": ["223810"]},
-    {"id": 6, "nome": "Fisioterapeutas", "codigos": ["223605"]},
-    {"id": 7, "nome": "Pedagogos", "codigos": ["239425", "239415"]},
-    {"id": 8, "nome": "Nutricionista", "codigos": ["223710"]},
-    {"id": 9, "nome": "Neurologista", "codigos": ["225112"]},
-    {"id": 10, "nome": "Clínico", "codigos": ["225125"]},
-    {"id": 11, "nome": "Psiquiatra", "codigos": ["225133"]},
-    {"id": 12, "nome": "Ortopedista", "codigos": ["225270"]},
-    {"id": 13, "nome": "Otorrino", "codigos": ["225275"]},
-]
-
-CBO_POR_CODIGO: dict[str, str] = {}
-for g in CBO_GRUPOS:
-    for cod in g["codigos"]:
-        CBO_POR_CODIGO[cod] = g["nome"]
+# =========================================================
+# CONEXÃO (POSTGRES)
+# =========================================================
+def get_conn():
+    return conectar_db()
 
 
-# ============================================================
-# (Opcional) dicionário em memória — fallback
-# ============================================================
-
-PROCEDIMENTOS_POR_CBO: dict[str, list[dict]] = {
-    "223605": [
-        {"codigo": "0301010030", "descricao": "Avaliação fisioterapêutica", "cid": None, "idade_min": None, "idade_max": None, "sexo": None},
-        {"codigo": "0301010048", "descricao": "Atendimento fisioterapêutico individual", "cid": None, "idade_min": None, "idade_max": None, "sexo": None},
-    ],
-    "251510": [
-        {"codigo": "0301010021", "descricao": "Atendimento psicológico individual", "cid": None, "idade_min": None, "idade_max": None, "sexo": None},
-    ],
-    "223710": [
-        {"codigo": "0301010060", "descricao": "Atendimento nutricional individual", "cid": None, "idade_min": None, "idade_max": None, "sexo": None},
-    ],
-}
+# =========================================================
+# HELPERS
+# =========================================================
+def normalize_text(v):
+    return str(v or "").strip()
 
 
-# ============================================================
-# Helpers / Normalização
-# ============================================================
-
-COLS_ESPERADAS = [
-    "PA_COD",
-    "PA_CID",
-    "PA_DESCRICAO",
-    "PA_IDADEMN",
-    "PA_IDADEMX",
-    "PA_SEXO",
-    "PA_CBO",
-    "PA_CBO_NAME",
-]
+def only_digits(v):
+    return re.sub(r"\D+", "", str(v or ""))
 
 
-def _norm_txt(v) -> str:
-    if v is None:
-        return ""
-    return str(v).strip()
+def safe_like(v):
+    return f"%{normalize_text(v)}%"
 
 
-def _norm_int(v):
-    if v is None or str(v).strip() == "":
-        return None
+def to_float(v):
     try:
-        return int(float(str(v).strip()))
-    except Exception:
-        return None
+        txt = str(v or "").strip()
+        if not txt:
+            return 0.0
 
+        txt = txt.replace("R$", "").replace(" ", "")
 
-def _norm_sexo(v) -> str | None:
-    s = _norm_txt(v).upper()
-    if not s:
-        return None
-    s = s[0]  # M/F/A
-    if s not in ("M", "F", "A"):
-        return None
-    return s
-
-
-def _now_sql() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _row_to_dict(r):
-    if hasattr(r, "keys"):
-        return {k: r[k] for k in r.keys()}
-    return r
-
-
-def _norm_regra_fields(it: dict) -> dict:
-    """
-    ⭐ CRÍTICO:
-    Para o UNIQUE funcionar no SQLite, NÃO PODE deixar NULL em campos da regra.
-    Senão: NULL != NULL e você cria duplicatas “fantasma”.
-    """
-    it = dict(it)
-
-    it["pa_cid"] = _norm_txt(it.get("pa_cid"))  # '' se vazio
-    it["pa_sexo"] = _norm_txt(it.get("pa_sexo"))  # '' se vazio
-
-    mn = it.get("pa_idademn")
-    mx = it.get("pa_idademx")
-
-    it["pa_idademn"] = -1 if (mn is None or str(mn).strip() == "") else int(mn)
-    it["pa_idademx"] = -1 if (mx is None or str(mx).strip() == "") else int(mx)
-
-    # garante strings
-    it["pa_cod"] = _norm_txt(it.get("pa_cod"))
-    it["pa_descricao"] = _norm_txt(it.get("pa_descricao"))
-    it["pa_cbo"] = _norm_txt(it.get("pa_cbo"))
-    it["pa_cbo_name"] = _norm_txt(it.get("pa_cbo_name")) or None
-
-    return it
-
-
-# ============================================================
-# SQLite schema
-# ============================================================
-
-def ensure_procedimentos_schema(conn):
-    cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS procedimentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            pa_cod        TEXT NOT NULL,
-            pa_cid        TEXT NOT NULL DEFAULT '',
-            pa_descricao  TEXT NOT NULL,
-            pa_idademn    INTEGER NOT NULL DEFAULT -1,
-            pa_idademx    INTEGER NOT NULL DEFAULT -1,
-            pa_sexo       TEXT NOT NULL DEFAULT '',
-            pa_cbo        TEXT NOT NULL,
-            pa_cbo_name   TEXT,
-
-            ativo         INTEGER NOT NULL DEFAULT 1,
-            criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
-            atualizado_em TEXT
-        )
-    """)
-
-    # remove índices antigos (se existirem)
-    cur.execute("DROP INDEX IF EXISTS ux_procedimentos_cod_cbo")
-    cur.execute("DROP INDEX IF EXISTS ux_procedimentos_regra")
-
-    # ✅ índice único alinhado com a REGRA COMPLETA
-    cur.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS ux_procedimentos_regra
-        ON procedimentos (
-            pa_cod,
-            pa_cbo,
-            pa_cid,
-            pa_sexo,
-            pa_idademn,
-            pa_idademx
-        )
-    """)
-
-    conn.commit()
-
-
-# ============================================================
-# Leitura Excel (XLSX)
-# ============================================================
-
-def _ler_xlsx_procedimentos(file_bytes: bytes) -> tuple[list[dict], list[str]]:
-    wb = load_workbook(filename=io.BytesIO(file_bytes), data_only=True)
-    ws = wb.active
-
-    header = [(_norm_txt(c.value).upper()) for c in ws[1]]
-    header_map = {name: idx for idx, name in enumerate(header)}
-
-    faltando = [c for c in COLS_ESPERADAS if c not in header_map]
-    if faltando:
-        return [], [f"Colunas ausentes no Excel: {', '.join(faltando)}"]
-
-    rows: list[dict] = []
-    erros: list[str] = []
-
-    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        def get(col: str):
-            idx = header_map[col]
-            return row[idx] if idx < len(row) else None
-
-        pa_cod = _norm_txt(get("PA_COD"))
-        pa_desc = _norm_txt(get("PA_DESCRICAO"))
-        pa_cbo = _norm_txt(get("PA_CBO"))
-
-        if not pa_cod and not pa_desc and not pa_cbo:
-            continue
-
-        if not pa_cod or not pa_desc or not pa_cbo:
-            erros.append(f"Linha {i}: PA_COD/PA_DESCRICAO/PA_CBO são obrigatórios.")
-            continue
-
-        it = {
-            "pa_cod": pa_cod,
-            "pa_cid": _norm_txt(get("PA_CID")) or "",
-            "pa_descricao": pa_desc,
-            "pa_idademn": _norm_int(get("PA_IDADEMN")),
-            "pa_idademx": _norm_int(get("PA_IDADEMX")),
-            "pa_sexo": _norm_sexo(get("PA_SEXO")) or "",
-            "pa_cbo": pa_cbo,
-            "pa_cbo_name": _norm_txt(get("PA_CBO_NAME")) or None,
-        }
-
-        rows.append(_norm_regra_fields(it))
-
-    return rows, erros
-
-
-# ============================================================
-# CRUD helpers (form -> dict)
-# ============================================================
-
-def _ler_form_procedimento() -> tuple[dict | None, str | None]:
-    pa_cod = _norm_txt(request.form.get("pa_cod"))
-    pa_desc = _norm_txt(request.form.get("pa_descricao"))
-    pa_cbo = _norm_txt(request.form.get("pa_cbo"))
-
-    if not pa_cod or not pa_desc or not pa_cbo:
-        return None, "PA_COD, PA_DESCRICAO e PA_CBO são obrigatórios."
-
-    data = {
-        "pa_cod": pa_cod,
-        "pa_cid": _norm_txt(request.form.get("pa_cid")) or "",
-        "pa_descricao": pa_desc,
-        "pa_idademn": _norm_int(request.form.get("pa_idademn")),
-        "pa_idademx": _norm_int(request.form.get("pa_idademx")),
-        "pa_sexo": _norm_sexo(request.form.get("pa_sexo")) or "",
-        "pa_cbo": pa_cbo,
-        "pa_cbo_name": _norm_txt(request.form.get("pa_cbo_name")) or None,
-    }
-    return _norm_regra_fields(data), None
-
-
-# ============================================================
-# UPSERT por regra completa (casa com o índice UNIQUE)
-# ============================================================
-
-def _upsert_regra(cur, it: dict, now: str) -> tuple[int, int]:
-    """
-    UPSERT por regra completa:
-    - Tenta inserir (INSERT OR IGNORE)
-    - Se ignorou, faz UPDATE por mesma regra completa
-    Retorna (inseridos, atualizados)
-    """
-    it = _norm_regra_fields(it)
-
-    insert_sql = """
-        INSERT OR IGNORE INTO procedimentos (
-          pa_cod, pa_cid, pa_descricao, pa_idademn, pa_idademx, pa_sexo,
-          pa_cbo, pa_cbo_name, ativo, atualizado_em
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-    """
-
-    update_sql = """
-        UPDATE procedimentos
-           SET pa_descricao  = ?,
-               pa_cbo_name   = ?,
-               ativo         = 1,
-               atualizado_em = ?
-         WHERE pa_cod = ?
-           AND pa_cbo = ?
-           AND pa_cid = ?
-           AND pa_sexo = ?
-           AND pa_idademn = ?
-           AND pa_idademx = ?
-    """
-
-    cur.execute(
-        insert_sql,
-        (
-            it["pa_cod"],
-            it["pa_cid"],
-            it["pa_descricao"],
-            it["pa_idademn"],
-            it["pa_idademx"],
-            it["pa_sexo"],
-            it["pa_cbo"],
-            it["pa_cbo_name"],
-            now,
-        ),
-    )
-
-    if cur.rowcount == 1:
-        return 1, 0
-
-    cur.execute(
-        update_sql,
-        (
-            it["pa_descricao"],
-            it["pa_cbo_name"],
-            now,
-            it["pa_cod"],
-            it["pa_cbo"],
-            it["pa_cid"],
-            it["pa_sexo"],
-            it["pa_idademn"],
-            it["pa_idademx"],
-        ),
-    )
-    return 0, 1
-
-
-# ============================================================
-# Queries
-# ============================================================
-
-def _listar_procedimentos_db(conn, limit: int = 200):
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, pa_cod, pa_cid, pa_descricao, pa_idademn, pa_idademx, pa_sexo, pa_cbo, pa_cbo_name
-          FROM procedimentos
-         WHERE ativo = 1
-         ORDER BY pa_cbo ASC, pa_descricao COLLATE NOCASE ASC
-         LIMIT ?
-        """,
-        (int(limit),),
-    )
-    rows = cur.fetchall()
-
-    out: list[dict] = []
-    for r in rows:
-        if hasattr(r, "keys"):
-            out.append({k: r[k] for k in r.keys()})
+        if "," in txt and "." in txt:
+            txt = txt.replace(".", "").replace(",", ".")
         else:
-            out.append(
-                {
-                    "id": r[0],
-                    "pa_cod": r[1],
-                    "pa_cid": r[2],
-                    "pa_descricao": r[3],
-                    "pa_idademn": r[4],
-                    "pa_idademx": r[5],
-                    "pa_sexo": r[6],
-                    "pa_cbo": r[7],
-                    "pa_cbo_name": r[8],
-                }
-            )
-    return out
+            txt = txt.replace(",", ".")
 
-
-def filtrar_procedimentos(cbo: str, cid: str | None = None, idade: int | None = None, sexo: str | None = None) -> list[dict]:
-    if not cbo:
-        return []
-
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
-
-    where = ["pa_cbo = ?", "ativo = 1"]
-    params: list = [cbo]
-
-    if cid:
-        where.append("(pa_cid = '' OR pa_cid = ?)")
-        params.append(cid.strip())
-
-    if idade is not None:
-        where.append("(pa_idademn = -1 OR pa_idademn <= ?)")
-        where.append("(pa_idademx = -1 OR pa_idademx >= ?)")
-        params.extend([idade, idade])
-
-    if sexo:
-        sx = _norm_sexo(sexo)
-        if sx:
-            where.append("(pa_sexo = '' OR pa_sexo = 'A' OR pa_sexo = ?)")
-            params.append(sx)
-
-    sql = f"""
-        SELECT pa_cod, pa_cid, pa_descricao, pa_idademn, pa_idademx, pa_sexo, pa_cbo, pa_cbo_name
-          FROM procedimentos
-         WHERE {' AND '.join(where)}
-         ORDER BY pa_descricao COLLATE NOCASE ASC
-    """
-    cur.execute(sql, params)
-    rows = cur.fetchall()
-
-    if rows:
-        out: list[dict] = []
-        for r in rows:
-            if hasattr(r, "keys"):
-                out.append({k: r[k] for k in r.keys()})
-            else:
-                out.append(
-                    {
-                        "pa_cod": r[0],
-                        "pa_cid": r[1],
-                        "pa_descricao": r[2],
-                        "pa_idademn": r[3],
-                        "pa_idademx": r[4],
-                        "pa_sexo": r[5],
-                        "pa_cbo": r[6],
-                        "pa_cbo_name": r[7],
-                    }
-                )
-        return out
-
-    # fallback dicionário
-    todos = PROCEDIMENTOS_POR_CBO.get(cbo, [])
-    out2: list[dict] = []
-    for p in todos:
-        if cid and p.get("cid") and p["cid"] != cid:
-            continue
-        if idade is not None:
-            if p.get("idade_min") is not None and idade < p["idade_min"]:
-                continue
-            if p.get("idade_max") is not None and idade > p["idade_max"]:
-                continue
-        out2.append(
-            {
-                "pa_cod": p["codigo"],
-                "pa_cid": p.get("cid") or "",
-                "pa_descricao": p["descricao"],
-                "pa_idademn": p.get("idade_min") if p.get("idade_min") is not None else -1,
-                "pa_idademx": p.get("idade_max") if p.get("idade_max") is not None else -1,
-                "pa_sexo": p.get("sexo") or "",
-                "pa_cbo": cbo,
-                "pa_cbo_name": CBO_POR_CODIGO.get(cbo),
-            }
-        )
-    return out2
-
-
-# ============================================================
-# Rotas
-# ============================================================
-
-@procedimentos_bp.get("/")
-def pagina_base_procedimentos():
-    conn = conectar_db()
-    procedimentos_preview = _listar_procedimentos_db(conn, limit=50)
-
-    return render_template(
-        "procedimentos.html",
-        cbo_grupos=CBO_GRUPOS,
-        procedimentos=procedimentos_preview,
-    )
-
-
-@procedimentos_bp.get("/api/sugeridos")
-def api_procedimentos_sugeridos():
-    cbo = (request.args.get("cbo") or "").strip()
-    cid = (request.args.get("cid") or "").strip() or None
-    sexo = (request.args.get("sexo") or "").strip() or None
-
-    idade_raw = request.args.get("idade")
-    idade: int | None = None
-    if idade_raw and str(idade_raw).isdigit():
-        idade = int(idade_raw)
-
-    itens = filtrar_procedimentos(cbo=cbo, cid=cid, idade=idade, sexo=sexo)
-
-    return jsonify(
-        {
-            "ok": True,
-            "cbo": cbo,
-            "cbo_nome": CBO_POR_CODIGO.get(cbo),
-            "cid": cid,
-            "idade": idade,
-            "sexo": _norm_sexo(sexo) if sexo else None,
-            "total": len(itens),
-            "items": itens,
-            "cols": COLS_ESPERADAS,
-        }
-    )
-
-
-@procedimentos_bp.post("/criar")
-def criar_procedimento():
-    data, err = _ler_form_procedimento()
-    if err:
-        flash(err, "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
-
-    now = _now_sql()
-    try:
-        _upsert_regra(cur, data, now)
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.rollback()
-        flash("Conflito: já existe um procedimento com a MESMA regra (código+cbo+cid+sexo+idades).", "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    flash("Procedimento salvo com sucesso.", "success")
-    return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-
-@procedimentos_bp.post("/<int:proc_id>/editar")
-def editar_procedimento(proc_id: int):
-    data, err = _ler_form_procedimento()
-    if err:
-        flash(err, "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
-
-    now = _now_sql()
-
-    try:
-        cur.execute(
-            """
-            UPDATE procedimentos
-               SET pa_cod = ?,
-                   pa_cid = ?,
-                   pa_descricao = ?,
-                   pa_idademn = ?,
-                   pa_idademx = ?,
-                   pa_sexo = ?,
-                   pa_cbo = ?,
-                   pa_cbo_name = ?,
-                   atualizado_em = ?
-             WHERE id = ?
-            """,
-            (
-                data["pa_cod"],
-                data["pa_cid"],
-                data["pa_descricao"],
-                data["pa_idademn"],
-                data["pa_idademx"],
-                data["pa_sexo"],
-                data["pa_cbo"],
-                data["pa_cbo_name"],
-                now,
-                proc_id,
-            ),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.rollback()
-        flash("Conflito: essa edição cria uma regra duplicada (mesmo código+cbo+cid+sexo+idades).", "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    flash("Procedimento atualizado.", "success")
-    return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-
-@procedimentos_bp.post("/<int:proc_id>/remover")
-def remover_procedimento(proc_id: int):
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE procedimentos SET ativo = 0, atualizado_em = ? WHERE id = ?",
-        (_now_sql(), proc_id),
-    )
-    conn.commit()
-
-    flash("Procedimento removido (desativado).", "success")
-    return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-
-@procedimentos_bp.post("/importar")
-def importar_planilha_procedimentos():
-    f = request.files.get("file")
-    if not f or not f.filename:
-        flash("Envie um arquivo .xlsx no campo 'file'.", "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    if not f.filename.lower().endswith(".xlsx"):
-        flash("Formato inválido. Envie um arquivo .xlsx.", "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    itens, erros = _ler_xlsx_procedimentos(f.read())
-
-    if erros:
-        flash(
-            "Importação com problemas: " + " | ".join(erros[:6]) + (" ..." if len(erros) > 6 else ""),
-            "error",
-        )
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    if not itens:
-        flash("Nenhuma linha válida encontrada no Excel.", "info")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
-
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-
-    # PRAGMAs para performance (seguro pra import grande)
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA temp_store=MEMORY")
+        return float(txt)
     except Exception:
-        pass
+        return 0.0
 
-    cur = conn.cursor()
 
-    now = _now_sql()
-    inseridos = 0
-    atualizados = 0
+def to_int(v):
+    try:
+        txt = only_digits(v)
+        return int(txt) if txt else 0
+    except Exception:
+        return 0
+
+
+def get_col(row, *names):
+    """
+    Busca uma coluna no DataFrame tolerando nomes alternativos.
+    Exemplo: codigo, co_procedimento, Código etc.
+    """
+    for name in names:
+        if name in row:
+            return row.get(name)
+    return ""
+
+
+# =========================================================
+# SCHEMA (POSTGRES)
+# =========================================================
+def ensure_schema():
+    conn = get_conn()
 
     try:
-        for it in itens:
-            ins, upd = _upsert_regra(cur, it, now)
-            inseridos += ins
-            atualizados += upd
+        cur = conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS procedimentos (
+                id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+
+                codigo TEXT,
+                descricao TEXT,
+                complexidade TEXT,
+                competencia TEXT,
+
+                valor_sh NUMERIC(14, 2) DEFAULT 0,
+                valor_sa NUMERIC(14, 2) DEFAULT 0,
+                valor_sp NUMERIC(14, 2) DEFAULT 0,
+                valor_total NUMERIC(14, 2) DEFAULT 0,
+
+                co_financiamento TEXT,
+                no_financiamento TEXT,
+                co_rubrica TEXT,
+                no_rubrica TEXT,
+
+                qtd_cids INTEGER DEFAULT 0,
+                cids_codigos TEXT,
+                cids_descricoes TEXT,
+
+                qtd_cbos INTEGER DEFAULT 0,
+                cbos_codigos TEXT,
+                cbos_descricoes TEXT,
+
+                qtd_servicos INTEGER DEFAULT 0,
+                servicos_codigos TEXT,
+                servicos_descricoes TEXT,
+
+                classificacoes_codigos TEXT,
+                classificacoes_descricoes TEXT,
+
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Colunas novas, caso a tabela já exista antiga
+        alter_columns = {
+            "codigo": "TEXT",
+            "descricao": "TEXT",
+            "complexidade": "TEXT",
+            "competencia": "TEXT",
+            "valor_sh": "NUMERIC(14, 2) DEFAULT 0",
+            "valor_sa": "NUMERIC(14, 2) DEFAULT 0",
+            "valor_sp": "NUMERIC(14, 2) DEFAULT 0",
+            "valor_total": "NUMERIC(14, 2) DEFAULT 0",
+            "co_financiamento": "TEXT",
+            "no_financiamento": "TEXT",
+            "co_rubrica": "TEXT",
+            "no_rubrica": "TEXT",
+            "qtd_cids": "INTEGER DEFAULT 0",
+            "cids_codigos": "TEXT",
+            "cids_descricoes": "TEXT",
+            "qtd_cbos": "INTEGER DEFAULT 0",
+            "cbos_codigos": "TEXT",
+            "cbos_descricoes": "TEXT",
+            "qtd_servicos": "INTEGER DEFAULT 0",
+            "servicos_codigos": "TEXT",
+            "servicos_descricoes": "TEXT",
+            "classificacoes_codigos": "TEXT",
+            "classificacoes_descricoes": "TEXT",
+            "criado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+            "atualizado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        }
+
+        for col, col_type in alter_columns.items():
+            cur.execute(f"""
+                ALTER TABLE procedimentos
+                ADD COLUMN IF NOT EXISTS {col} {col_type}
+            """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_procedimentos_codigo
+            ON procedimentos (codigo)
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_procedimentos_competencia
+            ON procedimentos (competencia)
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_procedimentos_complexidade
+            ON procedimentos (complexidade)
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_procedimentos_financiamento
+            ON procedimentos (co_financiamento)
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_procedimentos_rubrica
+            ON procedimentos (co_rubrica)
+        """)
 
         conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
+
+
+# =========================================================
+# LISTAGEM / PESQUISA
+# =========================================================
+@procedimentos_bp.route("/")
+def index():
+    ensure_schema()
+
+    q = normalize_text(request.args.get("q"))
+    codigo = normalize_text(request.args.get("codigo"))
+    descricao = normalize_text(request.args.get("descricao"))
+    complexidade = normalize_text(request.args.get("complexidade"))
+    competencia = normalize_text(request.args.get("competencia"))
+    cid = normalize_text(request.args.get("cid"))
+    cbo = normalize_text(request.args.get("cbo"))
+    servico = normalize_text(request.args.get("servico"))
+    financiamento = normalize_text(request.args.get("financiamento"))
+    rubrica = normalize_text(request.args.get("rubrica"))
+
+    pagina = max(1, request.args.get("pagina", 1, type=int))
+    por_pagina = 12
+    offset = (pagina - 1) * por_pagina
+
+    conn = get_conn()
+
+    try:
+        cur = conn.cursor()
+
+        where = ["1=1"]
+        params = []
+
+        if q:
+            where.append("""
+                (
+                    codigo ILIKE %s OR
+                    descricao ILIKE %s OR
+                    cids_codigos ILIKE %s OR
+                    cids_descricoes ILIKE %s OR
+                    cbos_codigos ILIKE %s OR
+                    cbos_descricoes ILIKE %s OR
+                    servicos_codigos ILIKE %s OR
+                    servicos_descricoes ILIKE %s OR
+                    classificacoes_codigos ILIKE %s OR
+                    classificacoes_descricoes ILIKE %s
+                )
+            """)
+            like = safe_like(q)
+            params.extend([like] * 10)
+
+        if codigo:
+            where.append("codigo ILIKE %s")
+            params.append(safe_like(codigo))
+
+        if descricao:
+            where.append("descricao ILIKE %s")
+            params.append(safe_like(descricao))
+
+        if complexidade:
+            where.append("complexidade ILIKE %s")
+            params.append(safe_like(complexidade))
+
+        if competencia:
+            where.append("competencia ILIKE %s")
+            params.append(safe_like(competencia))
+
+        if cid:
+            where.append("(cids_codigos ILIKE %s OR cids_descricoes ILIKE %s)")
+            params.extend([safe_like(cid), safe_like(cid)])
+
+        if cbo:
+            where.append("(cbos_codigos ILIKE %s OR cbos_descricoes ILIKE %s)")
+            params.extend([safe_like(cbo), safe_like(cbo)])
+
+        if servico:
+            where.append("""
+                (
+                    servicos_codigos ILIKE %s OR
+                    servicos_descricoes ILIKE %s OR
+                    classificacoes_codigos ILIKE %s OR
+                    classificacoes_descricoes ILIKE %s
+                )
+            """)
+            params.extend([safe_like(servico)] * 4)
+
+        if financiamento:
+            where.append("(co_financiamento ILIKE %s OR no_financiamento ILIKE %s)")
+            params.extend([safe_like(financiamento), safe_like(financiamento)])
+
+        if rubrica:
+            where.append("(co_rubrica ILIKE %s OR no_rubrica ILIKE %s)")
+            params.extend([safe_like(rubrica), safe_like(rubrica)])
+
+        where_sql = " AND ".join(where)
+
+        # TOTAL
+        cur.execute(f"""
+            SELECT COUNT(*)
+            FROM procedimentos
+            WHERE {where_sql}
+        """, params)
+
+        total = cur.fetchone()[0] or 0
+        total_paginas = max(1, math.ceil(total / por_pagina))
+
+        # DADOS
+        cur.execute(f"""
+            SELECT
+                id,
+                codigo,
+                descricao,
+                complexidade,
+                competencia,
+                valor_sh,
+                valor_sa,
+                valor_sp,
+                valor_total,
+                co_financiamento,
+                no_financiamento,
+                co_rubrica,
+                no_rubrica,
+                qtd_cids,
+                cids_codigos,
+                cids_descricoes,
+                qtd_cbos,
+                cbos_codigos,
+                cbos_descricoes,
+                qtd_servicos,
+                servicos_codigos,
+                servicos_descricoes,
+                classificacoes_codigos,
+                classificacoes_descricoes
+            FROM procedimentos
+            WHERE {where_sql}
+            ORDER BY codigo ASC NULLS LAST, descricao ASC NULLS LAST
+            LIMIT %s OFFSET %s
+        """, params + [por_pagina, offset])
+
+        rows = cur.fetchall()
+
+        # 🔥 AQUI ESTÁ A CORREÇÃO
+        cols = [desc[0] for desc in cur.description]
+        dados = [dict(zip(cols, row)) for row in rows]
+
+        filtros = {
+            "q": q,
+            "codigo": codigo,
+            "descricao": descricao,
+            "complexidade": complexidade,
+            "competencia": competencia,
+            "cid": cid,
+            "cbo": cbo,
+            "servico": servico,
+            "financiamento": financiamento,
+            "rubrica": rubrica,
+        }
+
+        return render_template(
+            "proced.html",
+            dados=dados,
+            filtros=filtros,
+            pagina=pagina,
+            total_paginas=total_paginas,
+            total=total,
+        )
+
+    finally:
+        conn.close()
+# =========================================================
+# API - DETALHE DO PROCEDIMENTO
+# =========================================================
+@procedimentos_bp.route("/api/<int:procedimento_id>")
+def api_detalhe(procedimento_id):
+    ensure_schema()
+
+    conn = get_conn()
+
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                id,
+                codigo,
+                descricao,
+                complexidade,
+                competencia,
+                valor_sh,
+                valor_sa,
+                valor_sp,
+                valor_total,
+                co_financiamento,
+                no_financiamento,
+                co_rubrica,
+                no_rubrica,
+                qtd_cids,
+                cids_codigos,
+                cids_descricoes,
+                qtd_cbos,
+                cbos_codigos,
+                cbos_descricoes,
+                qtd_servicos,
+                servicos_codigos,
+                servicos_descricoes,
+                classificacoes_codigos,
+                classificacoes_descricoes
+            FROM procedimentos
+            WHERE id = %s
+        """, (procedimento_id,))
+
+        row = cur.fetchone()
+
+        if not row:
+            return jsonify({"ok": False, "erro": "Procedimento não encontrado"}), 404
+
+        cols = [desc[0] for desc in cur.description]
+        item = dict(zip(cols, row))
+
+        return jsonify({"ok": True, "procedimento": item})
+
+    finally:
+        conn.close()
+
+
+# =========================================================
+# IMPORTAÇÃO XLSX
+# =========================================================
+@procedimentos_bp.route("/importar", methods=["POST"])
+def importar_xls():
+    ensure_schema()
+
+    file = request.files.get("arquivo")
+
+    if not file:
+        flash("Arquivo não enviado.", "error")
+        return redirect(url_for("procedimentos.index"))
+
+
+    try:
+        df = pd.read_excel(file, dtype=str).fillna("")
+        df.columns = [normalize_text(c).lower() for c in df.columns]
+    except Exception as e:
+        flash(f"Erro ao ler arquivo: {e}", "error")
+        return redirect(url_for("procedimentos.index"))
+
+    conn = get_conn()
+
+    try:
+        cur = conn.cursor()
+
+        # Importação substitutiva
+        cur.execute("DELETE FROM procedimentos")
+
+        total = 0
+
+        for _, row in df.iterrows():
+            valor_sh = to_float(get_col(row, "valor_sh", "vl_sh"))
+            valor_sa = to_float(get_col(row, "valor_sa", "vl_sa"))
+            valor_sp = to_float(get_col(row, "valor_sp", "vl_sp"))
+
+            valor_total_planilha = to_float(get_col(row, "valor_total", "vl_total"))
+
+            if valor_total_planilha > 0:
+                valor_total = valor_total_planilha
+            else:
+                valor_total = valor_sh + valor_sa + valor_sp
+
+            cur.execute("""
+                INSERT INTO procedimentos (
+                    codigo,
+                    descricao,
+                    complexidade,
+                    competencia,
+
+                    valor_sh,
+                    valor_sa,
+                    valor_sp,
+                    valor_total,
+
+                    co_financiamento,
+                    no_financiamento,
+                    co_rubrica,
+                    no_rubrica,
+
+                    qtd_cids,
+                    cids_codigos,
+                    cids_descricoes,
+
+                    qtd_cbos,
+                    cbos_codigos,
+                    cbos_descricoes,
+
+                    qtd_servicos,
+                    servicos_codigos,
+                    servicos_descricoes,
+
+                    classificacoes_codigos,
+                    classificacoes_descricoes,
+
+                    atualizado_em
+                )
+                VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    CURRENT_TIMESTAMP
+                )
+            """, (
+                normalize_text(get_col(row, "codigo", "co_procedimento")),
+                normalize_text(get_col(row, "descricao", "no_procedimento")),
+                normalize_text(get_col(row, "complexidade", "tp_complexidade")),
+                normalize_text(get_col(row, "competencia", "dt_competencia")),
+
+                valor_sh,
+                valor_sa,
+                valor_sp,
+                valor_total,
+
+                normalize_text(get_col(row, "co_financiamento")),
+                normalize_text(get_col(row, "no_financiamento")),
+                normalize_text(get_col(row, "co_rubrica")),
+                normalize_text(get_col(row, "no_rubrica")),
+
+                to_int(get_col(row, "qtd_cids")),
+                normalize_text(get_col(row, "cids_codigos")),
+                normalize_text(get_col(row, "cids_descricoes")),
+
+                to_int(get_col(row, "qtd_cbos")),
+                normalize_text(get_col(row, "cbos_codigos")),
+                normalize_text(get_col(row, "cbos_descricoes")),
+
+                to_int(get_col(row, "qtd_servicos")),
+                normalize_text(get_col(row, "servicos_codigos")),
+                normalize_text(get_col(row, "servicos_descricoes")),
+
+                normalize_text(get_col(row, "classificacoes_codigos")),
+                normalize_text(get_col(row, "classificacoes_descricoes")),
+            ))
+
+            total += 1
+
+        conn.commit()
+        flash(f"{total} procedimentos importados com sucesso.", "success")
+
     except Exception as e:
         conn.rollback()
-        flash(f"Falha ao importar: {e}", "error")
-        return redirect(url_for("procedimentos.pagina_base_procedimentos"))
+        flash(f"Erro na importação: {e}", "error")
 
-    flash(
-        f"Importação concluída: {len(itens)} linha(s). Inseridos: {inseridos}. Atualizados: {atualizados}.",
-        "success",
-    )
-    return redirect(url_for("procedimentos.pagina_base_procedimentos"))
+    finally:
+        conn.close()
+
+    return redirect(url_for("procedimentos.index"))
 
 
-@procedimentos_bp.get("/exportar.xlsx")
-def exportar_procedimentos_excel():
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
+# =========================================================
+# EXCLUSÃO INDIVIDUAL
+# =========================================================
+@procedimentos_bp.route("/excluir/<int:procedimento_id>", methods=["POST"])
+def excluir(procedimento_id):
+    ensure_schema()
 
-    cur.execute("""
-        SELECT
-          pa_cod, pa_cid, pa_descricao, pa_idademn, pa_idademx, pa_sexo, pa_cbo, pa_cbo_name
-        FROM procedimentos
-        WHERE ativo = 1
-        ORDER BY pa_cbo ASC, pa_descricao COLLATE NOCASE ASC
-    """)
-    rows = cur.fetchall()
+    conn = get_conn()
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "PROCEDIMENTOS"
+    try:
+        cur = conn.cursor()
 
-    ws.append(COLS_ESPERADAS)
+        cur.execute("DELETE FROM procedimentos WHERE id = %s", (procedimento_id,))
 
-    for r in rows:
-        if hasattr(r, "keys"):
-            ws.append(
-                [
-                    r["pa_cod"], r["pa_cid"], r["pa_descricao"], r["pa_idademn"],
-                    r["pa_idademx"], r["pa_sexo"], r["pa_cbo"], r["pa_cbo_name"],
-                ]
-            )
+        if cur.rowcount == 0:
+            flash("Procedimento não encontrado.", "warning")
         else:
-            ws.append([r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]])
+            flash("Procedimento excluído com sucesso.", "success")
 
-    widths = {"A": 14, "B": 10, "C": 55, "D": 10, "E": 10, "F": 8, "G": 12, "H": 22}
-    for col, w in widths.items():
-        ws.column_dimensions[col].width = w
+        conn.commit()
 
-    bio = io.BytesIO()
-    wb.save(bio)
-    bio.seek(0)
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao excluir procedimento: {e}", "error")
 
-    fname = f"procedimentos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-    return send_file(
-        bio,
-        as_attachment=True,
-        download_name=fname,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    finally:
+        conn.close()
+
+    return redirect(url_for("procedimentos.index"))
 
 
-@procedimentos_bp.get("/api/list")
-def api_listar_procedimentos():
-    """
-    GET /procedimentos/api/list?page=1&per_page=20&cbo=&cid=&codigo=&nome=&idade=
-    Retorna procedimentos do banco (paginação + filtros + contadores).
-    """
-    page = request.args.get("page", "1")
-    per_page = request.args.get("per_page", "20")
+# =========================================================
+# LIMPAR BASE
+# =========================================================
+@procedimentos_bp.route("/limpar", methods=["POST"])
+def limpar():
+    ensure_schema()
+
+    conn = get_conn()
 
     try:
-        page_i = max(1, int(page))
-    except Exception:
-        page_i = 1
+        cur = conn.cursor()
+        cur.execute("DELETE FROM procedimentos")
+        conn.commit()
+
+        flash("Base de procedimentos limpa com sucesso.", "success")
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Erro ao limpar base: {e}", "error")
+
+    finally:
+        conn.close()
+
+    return redirect(url_for("procedimentos.index"))
+
+
+# =========================================================
+# EXPORTAÇÃO XLSX DOS FILTROS
+# =========================================================
+@procedimentos_bp.route("/exportar", methods=["GET"])
+def exportar():
+    ensure_schema()
+
+    q = normalize_text(request.args.get("q"))
+    codigo = normalize_text(request.args.get("codigo"))
+    descricao = normalize_text(request.args.get("descricao"))
+    complexidade = normalize_text(request.args.get("complexidade"))
+    competencia = normalize_text(request.args.get("competencia"))
+    cid = normalize_text(request.args.get("cid"))
+    cbo = normalize_text(request.args.get("cbo"))
+    servico = normalize_text(request.args.get("servico"))
+    financiamento = normalize_text(request.args.get("financiamento"))
+    rubrica = normalize_text(request.args.get("rubrica"))
+
+    conn = get_conn()
 
     try:
-        per_i = int(per_page)
-        if per_i < 1 or per_i > 200:
-            per_i = 20
-    except Exception:
-        per_i = 20
+        cur = conn.cursor()
 
-    cbo    = (request.args.get("cbo") or "").strip()
-    cid    = (request.args.get("cid") or "").strip()
-    codigo = (request.args.get("codigo") or "").strip()
-    nome   = (request.args.get("nome") or "").strip()
+        where = ["1=1"]
+        params = []
 
-    idade_raw = (request.args.get("idade") or "").strip()
-    idade = int(idade_raw) if idade_raw.isdigit() else None
+        if q:
+            where.append("""
+                (
+                    codigo ILIKE %s OR
+                    descricao ILIKE %s OR
+                    cids_codigos ILIKE %s OR
+                    cids_descricoes ILIKE %s OR
+                    cbos_codigos ILIKE %s OR
+                    cbos_descricoes ILIKE %s OR
+                    servicos_codigos ILIKE %s OR
+                    servicos_descricoes ILIKE %s OR
+                    classificacoes_codigos ILIKE %s OR
+                    classificacoes_descricoes ILIKE %s
+                )
+            """)
+            like = safe_like(q)
+            params.extend([like] * 10)
 
-    conn = conectar_db()
-    ensure_procedimentos_schema(conn)
-    cur = conn.cursor()
+        if codigo:
+            where.append("codigo ILIKE %s")
+            params.append(safe_like(codigo))
 
-    # total geral (sem filtros)
-    cur.execute("SELECT COUNT(1) FROM procedimentos WHERE ativo = 1")
-    total_all = int(cur.fetchone()[0] or 0)
+        if descricao:
+            where.append("descricao ILIKE %s")
+            params.append(safe_like(descricao))
 
-    where = ["ativo = 1"]
-    params: list = []
+        if complexidade:
+            where.append("complexidade ILIKE %s")
+            params.append(safe_like(complexidade))
 
-    if cbo:
-        where.append("pa_cbo = ?")
-        params.append(cbo)
+        if competencia:
+            where.append("competencia ILIKE %s")
+            params.append(safe_like(competencia))
 
-    if cid:
-        where.append("(pa_cid = '' OR pa_cid = ?)")
-        params.append(cid)
+        if cid:
+            where.append("(cids_codigos ILIKE %s OR cids_descricoes ILIKE %s)")
+            params.extend([safe_like(cid), safe_like(cid)])
 
-    if codigo:
-        where.append("pa_cod LIKE ?")
-        params.append(f"%{codigo}%")
+        if cbo:
+            where.append("(cbos_codigos ILIKE %s OR cbos_descricoes ILIKE %s)")
+            params.extend([safe_like(cbo), safe_like(cbo)])
 
-    if nome:
-        where.append("LOWER(pa_descricao) LIKE ?")
-        params.append(f"%{nome.lower()}%")
+        if servico:
+            where.append("""
+                (
+                    servicos_codigos ILIKE %s OR
+                    servicos_descricoes ILIKE %s OR
+                    classificacoes_codigos ILIKE %s OR
+                    classificacoes_descricoes ILIKE %s
+                )
+            """)
+            params.extend([safe_like(servico)] * 4)
 
-    if idade is not None:
-        where.append("(pa_idademn = -1 OR pa_idademn <= ?)")
-        where.append("(pa_idademx = -1 OR pa_idademx >= ?)")
-        params.extend([idade, idade])
+        if financiamento:
+            where.append("(co_financiamento ILIKE %s OR no_financiamento ILIKE %s)")
+            params.extend([safe_like(financiamento), safe_like(financiamento)])
 
-    where_sql = " AND ".join(where)
+        if rubrica:
+            where.append("(co_rubrica ILIKE %s OR no_rubrica ILIKE %s)")
+            params.extend([safe_like(rubrica), safe_like(rubrica)])
 
-    # total filtrado
-    cur.execute(f"SELECT COUNT(1) FROM procedimentos WHERE {where_sql}", params)
-    total_filtered = int(cur.fetchone()[0] or 0)
+        where_sql = " AND ".join(where)
 
-    pages = max(1, (total_filtered + per_i - 1) // per_i)
-    if page_i > pages:
-        page_i = pages
+        cur.execute(f"""
+            SELECT
+                codigo,
+                descricao,
+                complexidade,
+                competencia,
+                valor_sh,
+                valor_sa,
+                valor_sp,
+                valor_total,
+                co_financiamento,
+                no_financiamento,
+                co_rubrica,
+                no_rubrica,
+                qtd_cids,
+                cids_codigos,
+                cids_descricoes,
+                qtd_cbos,
+                cbos_codigos,
+                cbos_descricoes,
+                qtd_servicos,
+                servicos_codigos,
+                servicos_descricoes,
+                classificacoes_codigos,
+                classificacoes_descricoes
+            FROM procedimentos
+            WHERE {where_sql}
+            ORDER BY codigo ASC NULLS LAST, descricao ASC NULLS LAST
+        """, params)
 
-    offset = (page_i - 1) * per_i
+        rows = cur.fetchall()
+        cols = [desc[0] for desc in cur.description]
 
-    cur.execute(
-        f"""
-        SELECT pa_cod, pa_descricao, pa_cid, pa_cbo
-          FROM procedimentos
-         WHERE {where_sql}
-         ORDER BY pa_cbo ASC, pa_descricao COLLATE NOCASE ASC
-         LIMIT ? OFFSET ?
-        """,
-        params + [per_i, offset],
+        df = pd.DataFrame(rows, columns=cols)
+
+        mem = BytesIO()
+
+        with pd.ExcelWriter(mem, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="procedimentos")
+
+        mem.seek(0)
+
+        return send_file(
+            mem,
+            as_attachment=True,
+            download_name="procedimentos_filtrados.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    finally:
+        conn.close()
+
+# =========================================================
+# PESQUISA EM LOTE
+# =========================================================
+@procedimentos_bp.route("/lote", methods=["GET", "POST"])
+def lote():
+    ensure_schema()
+
+    resultados = []
+    total_enviados = 0
+    total_encontrados = 0
+
+    if request.method == "POST":
+        texto = request.form.get("codigos", "") or ""
+        codigos = [
+            normalize_text(c)
+            for c in re.split(r"[\n,; ]+", texto)
+            if normalize_text(c)
+        ]
+
+        total_enviados = len(codigos)
+
+        if codigos:
+            conn = get_conn()
+
+            try:
+                cur = conn.cursor()
+
+                for codigo in codigos:
+                    cur.execute("""
+                        SELECT
+                            id,
+                            codigo,
+                            descricao,
+                            complexidade,
+                            competencia,
+                            valor_sh,
+                            valor_sa,
+                            valor_sp,
+                            valor_total,
+                            co_financiamento,
+                            no_financiamento,
+                            co_rubrica,
+                            no_rubrica,
+                            qtd_cids,
+                            cids_codigos,
+                            cids_descricoes,
+                            qtd_cbos,
+                            cbos_codigos,
+                            cbos_descricoes,
+                            qtd_servicos,
+                            servicos_codigos,
+                            servicos_descricoes,
+                            classificacoes_codigos,
+                            classificacoes_descricoes
+                        FROM procedimentos
+                        WHERE codigo = %s
+                        LIMIT 1
+                    """, (codigo,))
+
+                    row = cur.fetchone()
+
+                    if row:
+                        cols = [desc[0] for desc in cur.description]
+                        item = dict(zip(cols, row))
+                        item["encontrado"] = True
+                        resultados.append(item)
+                        total_encontrados += 1
+                    else:
+                        resultados.append({
+                            "codigo": codigo,
+                            "descricao": "Não encontrado",
+                            "encontrado": False
+                        })
+
+            finally:
+                conn.close()
+
+    return render_template(
+        "proced_lote.html",
+        resultados=resultados,
+        total_enviados=total_enviados,
+        total_encontrados=total_encontrados
     )
-    rows = cur.fetchall()
 
-    items = [
-        {"pa_cod": r[0], "pa_descricao": r[1], "pa_cid": r[2], "pa_cbo": r[3]}
-        for r in rows
-    ]
-
-    return jsonify(
-        {
-            "ok": True,
-            "page": page_i,
-            "per_page": per_i,
-            "total_all": total_all,
-            "total_filtered": total_filtered,
-            "pages": pages,
-            "items": items,
-        }
-    )
+# =========================================================
+# LIMPAR BANCO - ALIAS PARA COMPATIBILIDADE COM O TEMPLATE
+# =========================================================
+@procedimentos_bp.route("/limpar-banco", methods=["POST"])
+def limpar_banco():
+    return limpar()

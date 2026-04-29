@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>SGD</title>
 
   <link rel="stylesheet" href="/static/css/base.css">
@@ -12,27 +11,16 @@
 
 <body class="has-slim-topbar app-shell">
 
-  {% set role = (session.get('role') or '')|upper %}
+  {% set usuario = session.get('usuario') or session.get('user') or session.get('auth_user') or {} %}
+  {% set role = (session.get('role') or usuario.get('role') or '')|upper %}
+  {% set is_master = session.get('is_master') or usuario.get('is_master') or role in ['MASTER', 'ROOT', 'SUPERADMIN'] %}
 
-  {% set is_admin        = (role == 'ADMIN') %}
-  {% set is_recepcao     = (role in ['RECEPCAO', 'RECEPÇÃO']) %}
-  {% set is_profissional = (role in ['PROFISSIONAL', 'PROFISSIONAIS']) %}
-
-  {% set can_agenda      = is_admin or is_recepcao or is_profissional %}
-  {% set can_cadastro    = is_admin or is_recepcao or is_profissional %}
-  {% set can_lista       = is_admin or is_recepcao or is_profissional %}
-  {% set can_pacientes   = is_admin or is_recepcao or is_profissional %}
-  {% set can_pts         = is_admin or is_profissional %}
-  {% set can_digitador   = is_admin or is_profissional %}
-  {% set can_registros   = is_admin %}
-  {% set can_export      = is_admin %}
-  {% set can_avaliacoes  = is_admin or is_profissional %}
-  {% set can_comercial   = is_admin or is_recepcao %}
-
-  {% if is_admin %}
+  {% if is_master or can_modulo('admin_painel', 'ver') %}
     {% set home_url = url_for('admin.admin_home') %}
-  {% else %}
+  {% elif can_modulo('lista_atendimentos', 'ver') %}
     {% set home_url = url_for('atendimentos.lista_atendimentos') %}
+  {% else %}
+    {% set home_url = url_for('index') %}
   {% endif %}
 
   <div class="topbar-slim">
@@ -55,7 +43,13 @@
           </div>
           <div class="user-block">
             <span class="user-name">{{ session.get('nome') }}</span>
-            <span class="user-role">{{ session.get('role') }}</span>
+            <span class="user-role">
+              {% if is_master %}
+                MASTER
+              {% else %}
+                {{ session.get('role') }}
+              {% endif %}
+            </span>
           </div>
         </div>
         <a class="btn-logout" href="{{ url_for('auth.logout') }}">Sair</a>
@@ -70,8 +64,6 @@
 
     <aside class="sidebar modern-sidebar is-collapsed" id="sidebar">
       <div class="sidebar-header">
-
-
         <button class="toggle-btn" type="button" aria-label="Fechar menu" id="sidebarToggleBtn">
           ✕
         </button>
@@ -81,14 +73,16 @@
 
       <ul class="menu">
 
+        {% if is_master or can_modulo('dashboard', 'ver') %}
         <li>
           <a href="{{ url_for('index') }}">
             <span class="ico">🏠</span>
             <span class="txt">Início</span>
           </a>
         </li>
+        {% endif %}
 
-        {% if can_agenda %}
+        {% if is_master or can_modulo('agenda', 'ver') %}
         <li>
           <a href="{{ url_for('agenda.visualizar_agenda') }}">
             <span class="ico">🗓️</span>
@@ -97,7 +91,7 @@
         </li>
         {% endif %}
 
-        {% if is_admin or is_profissional %}
+        {% if is_master or can_modulo('meus_atendimentos', 'ver') %}
         <li>
           <a href="{{ url_for('meus_atendimentos.index') }}">
             <span class="ico">🧑‍⚕️</span>
@@ -106,7 +100,7 @@
         </li>
         {% endif %}
 
-        {% if can_cadastro %}
+        {% if is_master or can_modulo('cadastro', 'ver') %}
         <li>
           <a href="{{ url_for('cadastro.cadastrar_paciente') }}">
             <span class="ico">📝</span>
@@ -115,7 +109,7 @@
         </li>
         {% endif %}
 
-        {% if can_lista %}
+        {% if is_master or can_modulo('lista_atendimentos', 'ver') %}
         <li>
           <a href="{{ url_for('atendimentos.lista_atendimentos') }}">
             <span class="ico">📋</span>
@@ -124,7 +118,7 @@
         </li>
         {% endif %}
 
-        {% if can_avaliacoes %}
+        {% if is_master or can_modulo('avaliacoes', 'ver') %}
         <li>
           <a href="{{ url_for('avaliacoes.index') }}">
             <span class="ico">📑</span>
@@ -133,7 +127,7 @@
         </li>
         {% endif %}
 
-        {% if can_pacientes %}
+        {% if is_master or can_modulo('pacientes', 'ver') %}
         <li>
           <a href="{{ url_for('pacientes.listar_pacientes') }}">
             <span class="ico">👥</span>
@@ -142,7 +136,7 @@
         </li>
         {% endif %}
 
-        {% if can_pts %}
+        {% if is_master or can_modulo('pts', 'ver') %}
         <li>
           <a href="{{ url_for('pts.pts_visualizar') }}">
             <span class="ico">📌</span>
@@ -151,7 +145,7 @@
         </li>
         {% endif %}
 
-        {% if can_registros %}
+        {% if is_master or can_modulo('registros', 'ver') %}
         <li>
           <a href="{{ url_for('registros.pagina_registros') }}">
             <span class="ico">🗂️</span>
@@ -160,7 +154,7 @@
         </li>
         {% endif %}
 
-        {% if can_comercial %}
+        {% if is_master or can_modulo('financeiro', 'ver') or can_modulo('combos', 'ver') %}
         <li class="menu-group">
           <a href="#" class="menu-toggle" data-menu-toggle="comercial" aria-expanded="false">
             <span class="ico">💼</span>
@@ -169,23 +163,28 @@
           </a>
 
           <ul class="submenu" id="submenu-comercial" hidden>
+            {% if is_master or can_modulo('financeiro', 'ver') %}
             <li>
               <a href="{{ url_for('financeiro.financeiro_index') }}">
                 <span class="ico">💰</span>
                 <span class="txt">Financeiro</span>
               </a>
             </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('combos', 'ver') %}
             <li>
               <a href="{{ url_for('financeiro.comercial_index') }}">
                 <span class="ico">🧩</span>
                 <span class="txt">Combos</span>
               </a>
             </li>
+            {% endif %}
           </ul>
         </li>
         {% endif %}
 
-        {% if can_export %}
+        {% if is_master or can_modulo('export_bpai', 'ver') or can_modulo('export_apac', 'ver') %}
         <li class="menu-group">
           <a href="#" class="menu-toggle" data-menu-toggle="exportacoes" aria-expanded="false">
             <span class="ico">📦</span>
@@ -194,35 +193,95 @@
           </a>
 
           <ul class="submenu" id="submenu-exportacoes" hidden>
+            {% if is_master or can_modulo('export_bpai', 'ver') %}
             <li>
               <a href="{{ url_for('export.bpa_form') }}">
                 <span class="ico">🧾</span>
                 <span class="txt">BPA-i</span>
               </a>
             </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('export_apac', 'ver') %}
             <li>
               <a href="{{ url_for('export.apac_atualizar') }}">
                 <span class="ico">📄</span>
                 <span class="txt">APAC</span>
               </a>
             </li>
+            {% endif %}
           </ul>
         </li>
         {% endif %}
 
-        {% if is_admin %}
-        <li>
-          <a href="{{ url_for('admin.admin_home') }}">
+        {% if is_master or can_modulo('admin_painel', 'ver') or can_modulo('admin_usuarios', 'ver') or can_modulo('admin_modulos', 'ver') or can_modulo('admin_cbo', 'ver') or can_modulo('admin_cid', 'ver') or can_modulo('admin_cep_ibge', 'ver') %}
+        <li class="menu-group">
+          <a href="#" class="menu-toggle" data-menu-toggle="admin" aria-expanded="false">
             <span class="ico">⚙️</span>
             <span class="txt">Admin</span>
+            <span class="chev">▾</span>
           </a>
+
+          <ul class="submenu" id="submenu-admin" hidden>
+            {% if is_master or can_modulo('admin_painel', 'ver') %}
+            <li>
+              <a href="{{ url_for('admin.admin_home') }}">
+                <span class="ico">🏛️</span>
+                <span class="txt">Painel Admin</span>
+              </a>
+            </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('admin_usuarios', 'ver') %}
+            <li>
+              <a href="/admin/usuarios">
+                <span class="ico">👤</span>
+                <span class="txt">Usuários</span>
+              </a>
+            </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('admin_modulos', 'ver') %}
+            <li>
+              <a href="/admin/modulos">
+                <span class="ico">🧩</span>
+                <span class="txt">Módulos</span>
+              </a>
+            </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('admin_cbo', 'ver') %}
+            <li>
+              <a href="/admin/cbo">
+                <span class="ico">📚</span>
+                <span class="txt">CBO</span>
+              </a>
+            </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('admin_cid', 'ver') %}
+            <li>
+              <a href="/admin/cid">
+                <span class="ico">🏷️</span>
+                <span class="txt">CID</span>
+              </a>
+            </li>
+            {% endif %}
+
+            {% if is_master or can_modulo('admin_cep_ibge', 'ver') %}
+            <li>
+              <a href="/admin/cep-ibge">
+                <span class="ico">🌎</span>
+                <span class="txt">CEP / IBGE</span>
+              </a>
+            </li>
+            {% endif %}
+          </ul>
         </li>
         {% endif %}
       </ul>
 
-      <div class="sidebar-footer">
-
-      </div>
+      <div class="sidebar-footer"></div>
     </aside>
 
     <main class="main-content modern-main-content" id="mainContent">

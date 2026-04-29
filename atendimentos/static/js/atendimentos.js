@@ -1,45 +1,44 @@
 // sgd/atendimentos/static/js/atendimentos.js
-// ==========================================================
-// Atendimento
-// - Autocomplete de paciente
-// - Resumo do paciente
-// - Último atendimento
-// - Combo/plano ativo + toggle para consumir sessão
-// - Procedimentos sugeridos (CBO logado + CID paciente)
-// - Salvar via fetch JSON
-// - Remove da fila só se salvou de verdade
-// ==========================================================
+
+const PROC_PADRAO = {
+  codigo: "0301010048",
+  descricao: "CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)",
+  quantidade: 1,
+};
+
+let sugestoesCache = [];
+let ultimoAtendimentoCache = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("📦 [atendimentos.js] carregado!");
 
-  inicializarAutocompletePaciente();
-  prefFillPacienteFromURL();
-  inicializarProcedimentosSugestao();
-  inicializarSalvarERedirecionar();
-  inicializarComboToggleWatch();
+  initComboCollapse();
+  initComboToggle();
+  initEvolucaoOculta();
+
+  initPacienteFromURL();
+
+  initProcedimentos();
+  initModalSugestoes();
+  initHistoricoProcedimentos();
+  initVozEvolucao();
+  initSalvar();
 });
 
-/* ===========================================
-   Helpers
-   =========================================== */
-function fmtISOToBR(iso) {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || "-";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+/* ==========================================================
+   HELPERS
+========================================================== */
+
+function qs(sel, root = document) {
+  return root.querySelector(sel);
 }
 
-function getQueryParam(name) {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(name);
+function qsa(sel, root = document) {
+  return Array.from(root.querySelectorAll(sel));
 }
 
-function debounce(fn, wait = 250) {
-  let t = null;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), wait);
-  };
+function getParam(name) {
+  return new URLSearchParams(window.location.search).get(name) || "";
 }
 
 function escapeHTML(s) {
@@ -51,30 +50,28 @@ function escapeHTML(s) {
     .replaceAll("'", "&#039;");
 }
 
-function getFilaId() {
-  const hid = document.getElementById("fila_id");
-  const hiddenVal = (hid?.value || "").trim();
-  if (hiddenVal) return hiddenVal;
-
-  const qsVal = (getQueryParam("fila_id") || "").trim();
-  if (qsVal) return qsVal;
-
-  return "";
+function normalize(s) {
+  return String(s || "").trim().toLowerCase();
 }
 
-function calcIdadeFromISO(iso) {
-  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "—";
+function fmtISOToBR(value) {
+  if (!value) return "—";
+  const iso = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return value;
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
 
+function calcIdade(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return "—";
+
+  const nasc = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
   const hoje = new Date();
-  const nasc = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(nasc.getTime())) return "—";
 
   let idade = hoje.getFullYear() - nasc.getFullYear();
   const m = hoje.getMonth() - nasc.getMonth();
 
-  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
-    idade--;
-  }
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
 
   return `${idade} ano(s)`;
 }
@@ -89,769 +86,1044 @@ function setValue(id, value) {
   if (el) el.value = value ?? "";
 }
 
-function setHidden(el, hidden) {
-  if (!el) return;
-  el.hidden = !!hidden;
+function getPacienteId() {
+  return (qs("#nomePaciente")?.value || getParam("paciente_id") || "").trim();
 }
 
-function normalizeText(s) {
-  return String(s || "").trim().toLowerCase();
+function getFilaId() {
+  return (qs("#fila_id")?.value || getParam("fila_id") || "").trim();
 }
 
-/* ===========================================
-   Fetchers
-   =========================================== */
-async function fetchDadosPaciente(id) {
+function debounce(fn, delay = 180) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+/* ==========================================================
+   FETCHERS
+========================================================== */
+
+async function fetchJSON(url, options = {}) {
+  const resp = await fetch(url, options);
+  const data = await resp.json().catch(() => null);
+
+  if (!resp.ok) {
+    throw new Error(data?.error || `Erro HTTP ${resp.status}`);
+  }
+
+  return data;
+}
+
+async function fetchPaciente(id) {
   if (!id) return null;
-  try {
-    const resp = await fetch(`/atendimentos/api/paciente?id=${encodeURIComponent(id)}`);
-    if (!resp.ok) return null;
-    const j = await resp.json();
-    if (!j.ok || !j.found) return null;
-    return j;
-  } catch (e) {
-    console.error("❌ Erro ao carregar dados do paciente:", e);
-    return null;
-  }
+  const j = await fetchJSON(`/atendimentos/api/paciente?id=${encodeURIComponent(id)}`);
+  return j?.ok && j?.found ? j : null;
 }
 
-async function fetchUltimoAtendimento(pacienteId) {
-  if (!pacienteId) return { ok: true, found: false };
-  try {
-    const resp = await fetch(`/atendimentos/api/ultimo_atendimento?id=${encodeURIComponent(pacienteId)}`);
-    if (!resp.ok) return { ok: false };
-    const j = await resp.json();
-    return j || { ok: false };
-  } catch (e) {
-    console.error("❌ Erro ao carregar último atendimento:", e);
-    return { ok: false };
-  }
+async function fetchUltimo(id) {
+  if (!id) return { ok: true, found: false };
+  return fetchJSON(`/atendimentos/api/ultimo_atendimento?id=${encodeURIComponent(id)}`);
 }
 
-async function fetchComboAtivo(pacienteId) {
-  if (!pacienteId) return { ok: true, item: null };
-  try {
-    const resp = await fetch(`/atendimentos/api/paciente/${encodeURIComponent(pacienteId)}/combo`);
-    if (!resp.ok) return { ok: false, item: null };
-    const j = await resp.json();
-    return j || { ok: false, item: null };
-  } catch (e) {
-    console.error("❌ Erro ao carregar combo ativo:", e);
-    return { ok: false, item: null };
-  }
+async function fetchCombo(id) {
+  if (!id) return { ok: true, item: null };
+  return fetchJSON(`/atendimentos/api/paciente/${encodeURIComponent(id)}/combo`);
 }
 
-async function fetchProcedimentosSugeridos(pacienteId) {
-  if (!pacienteId) return { ok: true, items: [] };
-  try {
-    const resp = await fetch(`/atendimentos/api/procedimentos_sugeridos?paciente_id=${encodeURIComponent(pacienteId)}`);
-    if (!resp.ok) return { ok: false, items: [] };
-    const j = await resp.json();
-    return j || { ok: false, items: [] };
-  } catch (e) {
-    console.error("❌ Erro ao carregar procedimentos sugeridos:", e);
-    return { ok: false, items: [] };
-  }
+async function fetchSugestoesProcedimentos(id) {
+  if (!id) return { ok: true, items: [] };
+  return fetchJSON(`/atendimentos/api/procedimentos_sugeridos?paciente_id=${encodeURIComponent(id)}`);
 }
 
-/* ===========================================
-   Resumo do paciente
-   =========================================== */
-function preencherBlocoPaciente(dados) {
+/* ==========================================================
+   PACIENTE
+========================================================== */
+
+function preencherPaciente(dados) {
   if (!dados) return;
 
   setText("info-nome", dados.nome || "—");
   setText("info-prontuario", dados.prontuario || "—");
   setText("info-mod", dados.mod || "—");
-
-  const nascFmt = /^\d{4}-\d{2}-\d{2}$/.test(dados.nascimento || "")
-    ? fmtISOToBR(dados.nascimento)
-    : (dados.nascimento || "—");
-
-  setText("info-nascimento", nascFmt);
-  setText("info-idade", calcIdadeFromISO(dados.nascimento));
-  setText("info-cid", dados.cid || "-");
+  setText("info-nascimento", fmtISOToBR(dados.nascimento));
+  setText("info-idade", calcIdade(dados.nascimento));
+  setText("info-cid", dados.cid || "—");
 }
 
-/* ===========================================
-   Último atendimento
-   =========================================== */
-function preencherUltimoAtendimento(info) {
-  const btnVer = document.getElementById("btnVerUltimo");
-  if (!btnVer) return;
+function preencherUltimo(info) {
+  const btn = qs("#btnVerUltimo");
 
-  let ultimoAtendimentoId = null;
-
-  if (info && info.ok && info.found) {
+  if (info?.ok && info?.found) {
     setText("ua-data", fmtISOToBR(info.data));
-    setText("ua-profissional", info.profissional || "-");
-    setText("ua-procedimento", info.procedimento || "-");
-    setText("ua-codigo", info.codigo_sigtap || "-");
-    ultimoAtendimentoId = info.id || null;
+    setText("ua-profissional", info.profissional || "—");
+
+    if (btn) {
+      btn.dataset.id = info.id || "";
+      btn.disabled = false;
+    }
   } else {
     setText("ua-data", "—");
     setText("ua-profissional", "—");
-    setText("ua-procedimento", "—");
-    setText("ua-codigo", "—");
-    ultimoAtendimentoId = null;
+
+    if (btn) {
+      btn.dataset.id = "";
+      btn.disabled = false;
+    }
+  }
+}
+
+async function carregarPacienteCompleto(id) {
+  if (!id) {
+    resetCombo();
+    preencherUltimo({ ok: true, found: false });
+    return;
   }
 
-  btnVer.onclick = async (ev) => {
-    ev.preventDefault();
-    if (!ultimoAtendimentoId) {
+  try {
+    const paciente = await fetchPaciente(id);
+    if (paciente) preencherPaciente(paciente);
+
+    const ultimo = await fetchUltimo(id);
+    preencherUltimo(ultimo);
+
+    const combo = await fetchCombo(id);
+    preencherCombo(combo);
+
+    await carregarSugestoesProcedimentos(false);
+
+    document.dispatchEvent(new CustomEvent("paciente:selecionado", {
+      detail: { pacienteId: id }
+    }));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function initPacienteFromURL() {
+  const pid = getParam("paciente_id");
+  const nome = getParam("paciente_nome");
+
+  if (pid) setValue("nomePaciente", pid);
+  if (nome) setText("info-nome", nome);
+
+  carregarPacienteCompleto(pid || getPacienteId());
+
+  qs("#btnVerUltimo")?.addEventListener("click", async () => {
+    const aid = qs("#btnVerUltimo")?.dataset.id;
+
+    if (!aid) {
       alert("Nenhum atendimento encontrado para este paciente.");
       return;
     }
 
     try {
-      const r = await fetch(`/atendimentos/${ultimoAtendimentoId}.json`);
-      if (!r.ok) throw new Error("Falha ao carregar atendimento");
-      const j = await r.json();
+      const j = await fetchJSON(`/atendimentos/${aid}.json`);
 
       if (window.UCModal) {
         window.UCModal.fill(j);
         window.UCModal.open();
       } else {
-        window.open(`/atendimentos/${ultimoAtendimentoId}.json`, "_blank");
+        alert(`Último atendimento:\n\nData: ${fmtISOToBR(j.data_atendimento)}\nProfissional: ${j.profissional_nome || "—"}`);
       }
     } catch (e) {
-      console.error(e);
-      alert("Não foi possível abrir o atendimento.");
+      alert(e.message || "Erro ao abrir o atendimento.");
     }
+  });
+}
+
+/* ==========================================================
+   COMBO
+========================================================== */
+
+function initComboCollapse() {
+  const btn = qs("#btnToggleComboPanel");
+  const body = qs("#comboPanelBody");
+  const status = qs("#comboCollapseStatus");
+
+  if (!btn || !body) return;
+
+  function setExpanded(expanded) {
+    btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    body.hidden = !expanded;
+    body.classList.toggle("is-collapsed", !expanded);
+    body.classList.toggle("is-expanded", expanded);
+
+    const custom = btn.dataset.statusText || "";
+    if (status) status.textContent = expanded ? "Aberto" : (custom || "Recolhido");
+  }
+
+  setExpanded(false);
+
+  btn.addEventListener("click", () => {
+    setExpanded(btn.getAttribute("aria-expanded") !== "true");
+  });
+
+  window.atdComboCollapse = {
+    open: () => setExpanded(true),
+    close: () => setExpanded(false),
+    status: (txt) => {
+      btn.dataset.statusText = txt || "Recolhido";
+      if (btn.getAttribute("aria-expanded") !== "true" && status) {
+        status.textContent = btn.dataset.statusText;
+      }
+    },
   };
 }
 
-/* ===========================================
-   Combo / plano ativo
-   =========================================== */
-function resetComboCard() {
-  const comboCard = document.getElementById("comboCard");
-  const comboEmptyCard = document.getElementById("comboEmptyCard");
-  const toggle = document.getElementById("toggleUsarCombo");
+function resetCombo() {
+  qs("#comboCard")?.setAttribute("hidden", "");
+  qs("#comboEmptyCard")?.removeAttribute("hidden");
 
-  setHidden(comboCard, true);
-  setHidden(comboEmptyCard, false);
+  setValue("combo_plano_id", "");
+  setValue("combo_plano_nome", "");
 
   setText("comboNome", "—");
   setText("comboContratadas", "0");
   setText("comboUsadas", "0");
   setText("comboRestantes", "0");
-  setText("comboTipoBadge", "Combo");
-  setText("comboStatusBadge", "Ativo");
-  setValue("combo_plano_id", "");
-  setValue("combo_plano_nome", "");
 
-  const restantesCard = document.getElementById("comboRestantesCard");
-  if (restantesCard) {
-    restantesCard.classList.remove("is-zero");
-  }
-
+  const toggle = qs("#toggleUsarCombo");
   if (toggle) {
     toggle.checked = false;
     toggle.disabled = true;
   }
 
-  atualizarTextoToggleCombo();
+  window.atdComboCollapse?.status("Sem combo/plano ativo");
+  window.atdComboCollapse?.close();
 }
 
-function atualizarTextoToggleCombo() {
-  const toggle = document.getElementById("toggleUsarCombo");
-  const help = document.getElementById("comboHelpText");
-  const restantes = Number(document.getElementById("comboRestantes")?.textContent || 0);
+function atualizarTextoCombo() {
+  const help = qs("#comboHelpText");
+  const toggle = qs("#toggleUsarCombo");
+  const restantes = Number(qs("#comboRestantes")?.textContent || 0);
 
   if (!help) return;
 
   if (!toggle || toggle.disabled) {
     help.textContent = "Sem combo/plano ativo vinculado para consumo automático de sessão.";
-    return;
-  }
-
-  if (restantes <= 0) {
-    help.textContent = "Este combo/plano não possui sessões restantes. O consumo automático foi bloqueado.";
-    return;
-  }
-
-  if (toggle.checked) {
-    help.textContent = "Ao salvar o atendimento, 1 sessão será consumida deste combo/plano.";
+  } else if (restantes <= 0) {
+    help.textContent = "Este combo/plano não possui sessões restantes.";
+  } else if (toggle.checked) {
+    help.textContent = "Ao salvar, 1 sessão será consumida deste combo/plano.";
   } else {
     help.textContent = "Este atendimento será salvo sem consumir sessão do combo/plano.";
   }
 }
 
-function preencherComboCard(resp) {
-  const comboCard = document.getElementById("comboCard");
-  const comboEmptyCard = document.getElementById("comboEmptyCard");
-  const toggle = document.getElementById("toggleUsarCombo");
-  const restantesCard = document.getElementById("comboRestantesCard");
-  const statusBadge = document.getElementById("comboStatusBadge");
+function preencherCombo(resp) {
+  const item = resp?.item;
 
-  const item = resp?.item || null;
-  if (!item || !item.id) {
-    resetComboCard();
+  if (!item?.id) {
+    resetCombo();
     return;
   }
 
-  setHidden(comboCard, false);
-  setHidden(comboEmptyCard, true);
+  qs("#comboCard")?.removeAttribute("hidden");
+  qs("#comboEmptyCard")?.setAttribute("hidden", "");
 
   const nome = item.combo_nome || item.nome_plano || "Combo/Plano";
-  const tipo = item.tipo === "plano" ? "Plano" : "Combo";
-  const status = item.status || "Ativo";
-  const contratadas = Number(item.sessoes_contratadas || 0);
-  const usadas = Number(item.sessoes_usadas || 0);
   const restantes = Number(item.sessoes_restantes || 0);
 
   setText("comboNome", nome);
-  setText("comboContratadas", String(contratadas));
-  setText("comboUsadas", String(usadas));
+  setText("comboTipoBadge", item.tipo === "plano" ? "Plano" : "Combo");
+  setText("comboStatusBadge", item.status || "Ativo");
+  setText("comboContratadas", String(item.sessoes_contratadas || 0));
+  setText("comboUsadas", String(item.sessoes_usadas || 0));
   setText("comboRestantes", String(restantes));
-  setText("comboTipoBadge", tipo);
-  setText("comboStatusBadge", status);
 
   setValue("combo_plano_id", item.id);
   setValue("combo_plano_nome", nome);
 
-  if (statusBadge) {
-    statusBadge.className = "atd-badge atd-badge--soft";
-    if (normalizeText(status) === "encerrado" || restantes <= 0) {
-      statusBadge.classList.add("is-zero");
-    }
-  }
-
-  if (restantesCard) {
-    restantesCard.classList.toggle("is-zero", restantes <= 0);
-  }
-
+  const toggle = qs("#toggleUsarCombo");
   if (toggle) {
     toggle.disabled = restantes <= 0;
-    toggle.checked = restantes > 0; // ligado por padrão se houver saldo
+    toggle.checked = restantes > 0;
   }
 
-  atualizarTextoToggleCombo();
+  window.atdComboCollapse?.status(`${restantes} sessão(ões) restantes`);
+  window.atdComboCollapse?.close();
+  atualizarTextoCombo();
 }
 
-function inicializarComboToggleWatch() {
-  const toggle = document.getElementById("toggleUsarCombo");
-  if (!toggle) return;
-
-  toggle.addEventListener("change", () => {
-    atualizarTextoToggleCombo();
-  });
+function initComboToggle() {
+  qs("#toggleUsarCombo")?.addEventListener("change", atualizarTextoCombo);
 }
 
-/* ===========================================
-   Autocomplete paciente
-   =========================================== */
-function inicializarAutocompletePaciente() {
-  const input = document.getElementById("nomePaciente");
-  const lista = document.getElementById("listaPacientes");
-  const campoHidden = document.getElementById("nomePacienteId");
+/* ==========================================================
+   PROCEDIMENTOS + SUGESTÕES INLINE
+========================================================== */
 
-  if (!input || !lista || !campoHidden) {
-    console.warn("⚠️ Campos de paciente/autocomplete não encontrados.");
+function isProcRowEmpty(row) {
+  const proc = qs('input[name="procedimento[]"]', row)?.value || "";
+  const cod = qs('input[name="codigoProcedimento[]"]', row)?.value || "";
+  return !proc.trim() && !cod.trim();
+}
+
+function setProcRow(row, proc = {}) {
+  if (!row) return;
+
+  const inp = qs('input[name="procedimento[]"]', row);
+  const cod = qs('input[name="codigoProcedimento[]"]', row);
+  const qtd = qs('input[name="quantidadeProcedimento[]"]', row);
+
+  if (inp) inp.value = proc.procedimento || proc.descricao || "";
+  if (cod) cod.value = proc.codigo_sigtap || proc.codigo || "";
+  if (qtd) qtd.value = proc.quantidade || 1;
+
+  esconderSugestoesInline(row);
+}
+
+function criarLinhaProcedimento(proc = {}) {
+  const row = document.createElement("div");
+  row.className = "proc-row atd-proc-row";
+
+  row.innerHTML = `
+    <div class="proc-col proc-col--desc">
+      <label class="sr-only">Procedimento</label>
+
+      <div class="proc-input-inline">
+        <input type="text"
+               name="procedimento[]"
+               class="input proc-input"
+               placeholder="Digite o código ou nome do procedimento"
+               autocomplete="off"
+               value="${escapeHTML(proc.procedimento || proc.descricao || "")}">
+      </div>
+
+      <div class="proc-inline-suggestions" hidden></div>
+    </div>
+
+    <input type="hidden"
+           name="codigoProcedimento[]"
+           class="proc-codigo"
+           value="${escapeHTML(proc.codigo_sigtap || proc.codigo || "")}">
+
+    <div class="proc-col proc-col--qtd">
+      <label class="sr-only">Quantidade</label>
+      <input type="number"
+             name="quantidadeProcedimento[]"
+             class="input proc-qtd"
+             min="1"
+             value="${escapeHTML(proc.quantidade || 1)}">
+    </div>
+
+    <div class="proc-col proc-col--actions">
+      <button type="button" class="btn btn--ghost btnRemoveProc">
+        Remover
+      </button>
+    </div>
+  `;
+
+  return row;
+}
+
+function garantirProcedimentoPadrao() {
+  const wrap = qs("#procedimentosWrap");
+  if (!wrap) return;
+
+  const rows = qsa(".proc-row", wrap);
+
+  if (!rows.length) {
+    wrap.appendChild(criarLinhaProcedimento(PROC_PADRAO));
     return;
   }
 
-  let lastFetchCtl = null;
+  if (isProcRowEmpty(rows[0])) {
+    setProcRow(rows[0], PROC_PADRAO);
+  }
+}
 
-  function clearList() {
-    lista.innerHTML = "";
-    lista.style.display = "none";
-    lista.hidden = true;
+function limparProcedimentos({ comPadrao = true } = {}) {
+  const wrap = qs("#procedimentosWrap");
+  if (!wrap) return;
+
+  wrap.innerHTML = "";
+  wrap.appendChild(criarLinhaProcedimento(comPadrao ? PROC_PADRAO : {}));
+}
+
+function adicionarProcedimento(proc = {}) {
+  const wrap = qs("#procedimentosWrap");
+  if (!wrap) return;
+
+  const rows = qsa(".proc-row", wrap);
+
+  if (rows.length === 1 && isProcRowEmpty(rows[0])) {
+    setProcRow(rows[0], proc);
+    return;
   }
 
-  function renderSugestao(p) {
-    const li = document.createElement("li");
-    li.textContent = p.nome;
-    li.dataset.id = p.id;
-    li.tabIndex = 0;
+  wrap.appendChild(criarLinhaProcedimento(proc));
+}
 
-    li.addEventListener("click", () => selectPaciente(p));
-    li.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") selectPaciente(p);
-    });
+function filtrarSugestoes(term) {
+  const t = normalize(term);
+  if (!t) return [];
 
-    return li;
+  return sugestoesCache
+    .filter((p) =>
+      normalize(p.codigo).includes(t) ||
+      normalize(p.descricao).includes(t)
+    )
+    .slice(0, 8);
+}
+
+function mostrarSugestoesInline(row, items) {
+  const box = qs(".proc-inline-suggestions", row);
+  if (!box) return;
+
+  if (!items.length) {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
   }
 
-  async function aplicarCargaCompletaPaciente(pacienteId) {
-    document.dispatchEvent(
-      new CustomEvent("paciente:selecionado", { detail: { pacienteId } })
-    );
+  box.innerHTML = items.map((p) => `
+    <button type="button"
+            class="proc-inline-item"
+            data-codigo="${escapeHTML(p.codigo)}"
+            data-descricao="${escapeHTML(p.descricao)}">
+      <strong>${escapeHTML(p.codigo || "—")}</strong>
+      <span>${escapeHTML(p.descricao || "")}</span>
+    </button>
+  `).join("");
+
+  box.hidden = false;
+}
+
+function esconderSugestoesInline(row) {
+  const box = qs(".proc-inline-suggestions", row);
+  if (!box) return;
+  box.hidden = true;
+  box.innerHTML = "";
+}
+
+async function carregarSugestoesProcedimentos(showAlert = true) {
+  const pacienteId = getPacienteId();
+
+  if (!pacienteId) {
+    if (showAlert) alert("Paciente não identificado.");
+    return [];
   }
 
-  async function selectPaciente(paciente) {
-    input.value = paciente.nome || "";
-    campoHidden.value = paciente.id || "";
-    clearList();
+  const j = await fetchSugestoesProcedimentos(pacienteId);
+  sugestoesCache = j?.items || [];
 
-    preencherBlocoPaciente(paciente);
+  const cids = (j?.paciente_cids || []).join(", ") || "—";
+  const resumo = qs("#sugestoesProcResumo");
 
-    if (paciente.id) {
-      const dados = await fetchDadosPaciente(paciente.id);
-      if (dados) preencherBlocoPaciente(dados);
+  if (resumo) {
+    resumo.textContent = `CBO: ${j?.cbo || "—"} · CID(s): ${cids} · ${sugestoesCache.length} procedimento(s)`;
+  }
 
-      const infoUlt = await fetchUltimoAtendimento(paciente.id);
-      preencherUltimoAtendimento(infoUlt);
+  renderSugestoesModal(sugestoesCache);
+  return sugestoesCache;
+}
 
-      const comboResp = await fetchComboAtivo(paciente.id);
-      preencherComboCard(comboResp);
+function initProcedimentos() {
+  const wrap = qs("#procedimentosWrap");
+  const btnAdd = qs("#btnAddProcedimento");
 
-      await aplicarCargaCompletaPaciente(paciente.id);
-    } else {
-      resetComboCard();
-      preencherUltimoAtendimento({ ok: true, found: false });
+  if (!wrap) return;
+
+  garantirProcedimentoPadrao();
+
+  btnAdd?.addEventListener("click", () => adicionarProcedimento({}));
+
+  wrap.addEventListener("input", debounce(async (e) => {
+    const input = e.target.closest('input[name="procedimento[]"]');
+    if (!input) return;
+
+    const row = input.closest(".proc-row");
+    const cod = qs('input[name="codigoProcedimento[]"]', row);
+
+    if (cod) cod.value = "";
+
+    if (!sugestoesCache.length) {
+      await carregarSugestoesProcedimentos(false);
     }
-  }
 
-  input.addEventListener(
-    "input",
-    debounce(async () => {
-      const termo = input.value.trim();
-      campoHidden.value = "";
-      clearList();
+    mostrarSugestoesInline(row, filtrarSugestoes(input.value));
+  }, 160));
 
-      if (termo.length < 2) {
-        resetComboCard();
-        return;
-      }
+  wrap.addEventListener("focusin", async (e) => {
+    const input = e.target.closest('input[name="procedimento[]"]');
+    if (!input) return;
 
-      if (lastFetchCtl) lastFetchCtl.abort();
-      lastFetchCtl = new AbortController();
+    if (!sugestoesCache.length) {
+      await carregarSugestoesProcedimentos(false);
+    }
 
-      try {
-        const res = await fetch(
-          `/atendimentos/api/sugestoes_pacientes?termo=${encodeURIComponent(termo)}`,
-          { signal: lastFetchCtl.signal }
-        );
+    const row = input.closest(".proc-row");
+    mostrarSugestoesInline(row, filtrarSugestoes(input.value));
+  });
 
-        if (!res.ok) throw new Error("HTTP " + res.status);
+  wrap.addEventListener("click", (e) => {
+    const sug = e.target.closest(".proc-inline-item");
+    if (sug) {
+      const row = sug.closest(".proc-row");
+      setProcRow(row, {
+        codigo: sug.dataset.codigo || "",
+        descricao: sug.dataset.descricao || "",
+        quantidade: 1,
+      });
+      return;
+    }
 
-        const sugestoes = await res.json();
-        if (!Array.isArray(sugestoes) || sugestoes.length === 0) {
-          clearList();
-          return;
-        }
+    const btn = e.target.closest(".btnRemoveProc");
+    if (!btn) return;
 
-        sugestoes.forEach((p) => lista.appendChild(renderSugestao(p)));
-        lista.hidden = false;
-        lista.style.display = "block";
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          console.error("❌ Erro ao buscar sugestões:", err);
-        }
-      }
-    }, 220)
-  );
+    const row = btn.closest(".proc-row");
+    row?.remove();
 
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && lista.children.length > 0) {
-      e.preventDefault();
-      const first = lista.querySelector("li");
-      if (!first) return;
-      const p = { id: first.dataset.id, nome: first.textContent };
-      selectPaciente(p);
+    if (!qsa(".proc-row", wrap).length) {
+      wrap.appendChild(criarLinhaProcedimento(PROC_PADRAO));
     }
   });
 
   document.addEventListener("click", (e) => {
-    if (!lista.contains(e.target) && e.target !== input) {
-      clearList();
-    }
+    if (e.target.closest(".proc-row")) return;
+    qsa(".proc-row", wrap).forEach(esconderSugestoesInline);
   });
 }
 
-/* ===========================================
-   Prefill paciente vindo da fila
-   =========================================== */
-function prefFillPacienteFromURL() {
-  const pid = getQueryParam("paciente_id") || "";
-  const nome = getQueryParam("paciente_nome") || "";
+/* ==========================================================
+   MODAL SUGESTÕES
+========================================================== */
 
-  if (!pid && !nome) {
-    resetComboCard();
-    preencherUltimoAtendimento({ ok: true, found: false });
+function renderSugestoesModal(items) {
+  const lista = qs("#listaSugestoesProc");
+  const termo = normalize(qs("#buscaSugestaoProc")?.value || "");
+
+  if (!lista) return;
+
+  const filtrados = (items || []).filter((p) => {
+    if (!termo) return true;
+    return normalize(p.codigo).includes(termo) || normalize(p.descricao).includes(termo);
+  });
+
+  if (!filtrados.length) {
+    lista.innerHTML = `<p class="atd-empty">Nenhum procedimento encontrado.</p>`;
     return;
   }
 
-  const input = document.getElementById("nomePaciente");
-  const campoHidden = document.getElementById("nomePacienteId");
-
-  if (input && nome) input.value = nome;
-  if (campoHidden && pid) campoHidden.value = pid;
-
-  preencherBlocoPaciente({ id: pid, nome });
-
-  (async () => {
-    if (pid) {
-      const dados = await fetchDadosPaciente(pid);
-      if (dados) preencherBlocoPaciente(dados);
-
-      const infoUlt = await fetchUltimoAtendimento(pid);
-      preencherUltimoAtendimento(infoUlt);
-
-      const comboResp = await fetchComboAtivo(pid);
-      preencherComboCard(comboResp);
-
-      document.dispatchEvent(
-        new CustomEvent("paciente:selecionado", { detail: { pacienteId: pid } })
-      );
-    } else {
-      resetComboCard();
-      preencherUltimoAtendimento({ ok: true, found: false });
-    }
-  })();
+  lista.innerHTML = filtrados.map((p) => `
+    <label class="atd-sugestao-proc">
+      <input type="checkbox"
+             data-codigo="${escapeHTML(p.codigo)}"
+             data-descricao="${escapeHTML(p.descricao)}">
+      <span>
+        <strong>${escapeHTML(p.descricao)}</strong>
+        <small>${escapeHTML(p.codigo)} · Competência ${escapeHTML(p.competencia || "—")}</small>
+      </span>
+    </label>
+  `).join("");
 }
 
-/* ===========================================
-   Procedimentos sugeridos (dropdown custom)
-   =========================================== */
-function inicializarProcedimentosSugestao() {
-  const wrap = document.getElementById("procedimentosWrap");
-  const btnAdd = document.getElementById("btnAddProcedimento");
-  const campoPacienteId = document.getElementById("nomePacienteId");
+function initModalSugestoes() {
+  const modal = qs("#modalSugestoesProc");
 
-  if (!wrap) return;
+  qs("#btnAbrirSugestoesProc")?.addEventListener("click", async () => {
+    if (!modal) return;
 
-  const cache = new Map();
-  let currentPacienteId = "";
-  let activeDropdown = null;
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.setAttribute("open", "");
 
-  function loadHintContainer() {
-    let hint = document.getElementById("hint-procs");
-    if (!hint) {
-      hint = document.createElement("p");
-      hint.id = "hint-procs";
-      hint.className = "atd-section-sub";
-      const head = document.querySelector(".atd-section-head > div");
-      if (head) head.appendChild(hint);
-    }
-    return hint;
-  }
+    await carregarSugestoesProcedimentos();
+  });
 
-  function setHint(text) {
-    const el = loadHintContainer();
-    if (el) el.textContent = text || "";
-  }
+  qs("#btnFecharSugestoesProc")?.addEventListener("click", () => {
+    if (typeof modal?.close === "function") modal.close();
+    else modal?.removeAttribute("open");
+  });
 
-  async function loadProcedimentos(pacienteId) {
-    currentPacienteId = pacienteId || "";
+  qs("#buscaSugestaoProc")?.addEventListener("input", () => {
+    renderSugestoesModal(sugestoesCache);
+  });
 
-    if (!pacienteId) {
-      setHint("Procedimentos opcionais. Se desejar, escolha conforme as sugestões disponíveis para o paciente.");
-      return { ok: true, items: [] };
-    }
+  qs("#btnAdicionarSelecionadosProc")?.addEventListener("click", () => {
+    const marcados = qsa("#listaSugestoesProc input:checked");
 
-    if (cache.has(pacienteId)) {
-      return cache.get(pacienteId);
-    }
-
-    setHint("Carregando procedimentos compatíveis…");
-
-    const j = await fetchProcedimentosSugeridos(pacienteId);
-    if (!j || !j.ok) {
-      setHint("Não foi possível carregar procedimentos sugeridos.");
-      const empty = { ok: false, items: [] };
-      cache.set(pacienteId, empty);
-      return empty;
-    }
-
-    cache.set(pacienteId, j);
-    const cids = (j.paciente_cids || []).join(", ") || "—";
-    setHint(`Sugestões filtradas por CBO ${j.cbo || "—"} e CID(s) ${cids}.`);
-    return j;
-  }
-
-  function closeDropdown(dd) {
-    if (!dd) return;
-    dd.remove();
-    if (activeDropdown === dd) activeDropdown = null;
-  }
-
-  function closeAnyDropdown() {
-    if (activeDropdown) closeDropdown(activeDropdown);
-  }
-
-  function ensureHost(inpProc) {
-    let host = inpProc.closest(".proc-host");
-    if (host) return host;
-
-    const parent = inpProc.parentElement;
-    host = document.createElement("div");
-    host.className = "proc-host";
-    host.style.position = "relative";
-
-    parent.insertBefore(host, inpProc);
-    host.appendChild(inpProc);
-
-    return host;
-  }
-
-  function mkDropdown(host) {
-    closeAnyDropdown();
-
-    const dd = document.createElement("div");
-    dd.className = "proc-sug-list";
-    dd.setAttribute("role", "listbox");
-    host.appendChild(dd);
-
-    activeDropdown = dd;
-    return dd;
-  }
-
-  function normalize(str) {
-    return (str || "").toString().trim().toLowerCase();
-  }
-
-  function filterItems(items, term) {
-    const t = normalize(term);
-    if (!t) return items.slice(0, 80);
-
-    return items
-      .filter((x) =>
-        normalize(x.descricao).includes(t) || normalize(x.codigo).includes(t)
-      )
-      .slice(0, 80);
-  }
-
-  function renderDropdown(dd, items, onPick) {
-    dd.innerHTML = "";
-
-    if (!items || items.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "proc-sug-empty";
-      empty.textContent = "Nenhum procedimento compatível encontrado.";
-      dd.appendChild(empty);
+    if (!marcados.length) {
+      alert("Selecione pelo menos um procedimento.");
       return;
     }
 
-    items.forEach((p, idx) => {
-      const it = document.createElement("div");
-      it.className = "proc-sug-item";
-      it.setAttribute("role", "option");
-      it.dataset.idx = String(idx);
-
-      it.innerHTML = `
-        <div class="proc-sug-desc">${escapeHTML(p.descricao || "")}</div>
-        <div class="proc-sug-code">${escapeHTML(p.codigo || "")}</div>
-      `;
-
-      it.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        onPick(p);
+    marcados.forEach((ck) => {
+      adicionarProcedimento({
+        codigo: ck.dataset.codigo || "",
+        descricao: ck.dataset.descricao || "",
+        quantidade: 1,
       });
-
-      dd.appendChild(it);
-    });
-  }
-
-  function setActiveItem(dd, idx) {
-    const items = Array.from(dd.querySelectorAll(".proc-sug-item"));
-    items.forEach((el) => el.classList.remove("is-active"));
-
-    const el = items[idx];
-    if (el) {
-      el.classList.add("is-active");
-      el.scrollIntoView({ block: "nearest" });
-    }
-  }
-
-  function bindRow(row) {
-    if (!row) return;
-
-    const inpProc = row.querySelector('input[name="procedimento[]"]');
-    const inpCod = row.querySelector('input[name="codigoProcedimento[]"]');
-    if (!inpProc || !inpCod) return;
-
-    inpProc.removeAttribute("list");
-
-    const host = ensureHost(inpProc);
-
-    let state = {
-      open: false,
-      dd: null,
-      filtered: [],
-      activeIndex: 0,
-      itemsBase: [],
-    };
-
-    if (inpProc.dataset.boundProc === "1") return;
-    inpProc.dataset.boundProc = "1";
-
-    async function open(term = "") {
-      const pid = (currentPacienteId || campoPacienteId?.value || "").trim();
-      const bag = await loadProcedimentos(pid);
-      state.itemsBase = bag?.items || [];
-      state.filtered = filterItems(state.itemsBase, term);
-      state.activeIndex = 0;
-
-      if (!state.dd) state.dd = mkDropdown(host);
-      state.open = true;
-
-      renderDropdown(state.dd, state.filtered, (p) => {
-        inpProc.value = (p.descricao || "").trim();
-        inpCod.value = (p.codigo || "").trim();
-        closeDropdown(state.dd);
-        state.dd = null;
-        state.open = false;
-      });
-
-      setActiveItem(state.dd, state.activeIndex);
-    }
-
-    function close() {
-      if (state.dd) closeDropdown(state.dd);
-      state.dd = null;
-      state.open = false;
-    }
-
-    inpProc.addEventListener("focus", async () => {
-      await open(inpProc.value || "");
     });
 
-    inpProc.addEventListener(
-      "input",
-      debounce(async () => {
-        await open(inpProc.value || "");
-      }, 120)
-    );
-
-    inpProc.addEventListener("keydown", (e) => {
-      if (!state.open || !state.dd) return;
-
-      const max = (state.filtered?.length || 0) - 1;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        state.activeIndex = Math.min(max, state.activeIndex + 1);
-        setActiveItem(state.dd, state.activeIndex);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        state.activeIndex = Math.max(0, state.activeIndex - 1);
-        setActiveItem(state.dd, state.activeIndex);
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const pick = state.filtered[state.activeIndex];
-        if (pick) {
-          inpProc.value = (pick.descricao || "").trim();
-          inpCod.value = (pick.codigo || "").trim();
-        }
-        close();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        close();
-      }
-    });
-
-    document.addEventListener("mousedown", (ev) => {
-      if (!state.open) return;
-      if (!host.contains(ev.target)) close();
-    });
-  }
-
-  function bindAllRows() {
-    wrap.querySelectorAll(".proc-row").forEach((row) => bindRow(row));
-  }
-
-  document.addEventListener("paciente:selecionado", async (ev) => {
-    const pacienteId = ev?.detail?.pacienteId || "";
-    await loadProcedimentos(pacienteId);
-    bindAllRows();
+    if (typeof modal?.close === "function") modal.close();
+    else modal?.removeAttribute("open");
   });
-
-  btnAdd?.addEventListener("click", () => {
-    setTimeout(() => bindAllRows(), 0);
-  });
-
-  wrap.addEventListener("click", (e) => {
-    const btn = e.target.closest(".btnRemoveProc");
-    if (!btn) return;
-    setTimeout(() => bindAllRows(), 0);
-  });
-
-  bindAllRows();
-
-  const initialPid = (campoPacienteId?.value || "").trim();
-  if (initialPid) loadProcedimentos(initialPid);
-  else {
-    setHint("Procedimentos opcionais. Se desejar, escolha conforme as sugestões disponíveis para o paciente.");
-  }
 }
 
-/* ===========================================
-   Salvar -> remover da fila -> redirect
-   =========================================== */
-function inicializarSalvarERedirecionar() {
-  const form = document.getElementById("form-atendimento") || document.getElementById("formAtendimento");
-  if (!form) return;
+/* ==========================================================
+   HISTÓRICO
+========================================================== */
 
-  if (form.dataset.bindSave === "1") return;
-  form.dataset.bindSave = "1";
+function renderHistoricoProcedimentos(info) {
+  const box = qs("#historicoProcedimentosBox");
+  const lista = qs("#historicoProcedimentosLista");
+  const hint = qs("#historicoProcedimentosHint");
 
-  const btnSubmit = form.querySelector('[type="submit"]');
-  const toggleCombo = document.getElementById("toggleUsarCombo");
-  const comboPlanoId = document.getElementById("combo_plano_id");
+  if (!box || !lista) return;
 
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
+  const procs = info?.procedimentos || [];
 
-    if (btnSubmit) btnSubmit.disabled = true;
+  if (!procs.length) {
+    box.hidden = true;
+    lista.innerHTML = "";
+    return;
+  }
+
+  box.hidden = false;
+  if (hint) hint.textContent = `${procs.length} procedimento(s) encontrado(s) no último atendimento`;
+
+  lista.innerHTML = procs.map((p) => `
+    <button type="button"
+            class="atd-chip atd-chip-proc"
+            data-codigo="${escapeHTML(p.codigo_sigtap || "")}"
+            data-procedimento="${escapeHTML(p.procedimento || "")}">
+      ${escapeHTML(p.codigo_sigtap || "")} · ${escapeHTML(p.procedimento || "")}
+    </button>
+  `).join("");
+}
+
+function initHistoricoProcedimentos() {
+  document.addEventListener("paciente:selecionado", async (ev) => {
+    const pacienteId = ev.detail?.pacienteId;
+    if (!pacienteId) return;
 
     try {
-      const fd = new FormData(form);
-      const filaId = getFilaId();
+      ultimoAtendimentoCache = await fetchUltimo(pacienteId);
+      renderHistoricoProcedimentos(ultimoAtendimentoCache);
+    } catch (e) {
+      console.warn(e);
+    }
+  });
 
-      if (filaId && !fd.get("fila_id")) {
-        fd.set("fila_id", filaId);
-      }
+  qs("#historicoProcedimentosLista")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".atd-chip-proc");
+    if (!btn) return;
 
-      // garante contabilização consistente
-      if (comboPlanoId?.value) {
-        fd.set("combo_plano_id", comboPlanoId.value);
+    adicionarProcedimento({
+      codigo: btn.dataset.codigo || "",
+      descricao: btn.dataset.procedimento || "",
+      quantidade: 1,
+    });
+  });
 
-        if (toggleCombo?.checked && !toggleCombo?.disabled) {
-          fd.set("contabiliza_sessao", "1");
-        } else {
-          fd.set("contabiliza_sessao", "0");
-        }
+  qs("#btnUsarUltimosProcs")?.addEventListener("click", async () => {
+    const pacienteId = getPacienteId();
+
+    if (!pacienteId) {
+      alert("Paciente não identificado.");
+      return;
+    }
+
+    if (!ultimoAtendimentoCache) {
+      ultimoAtendimentoCache = await fetchUltimo(pacienteId);
+    }
+
+    const procs = ultimoAtendimentoCache?.procedimentos || [];
+
+    if (!procs.length) {
+      alert("Nenhum procedimento anterior encontrado para este paciente.");
+      return;
+    }
+
+    limparProcedimentos({ comPadrao: false });
+
+    procs.forEach((p, idx) => {
+      const item = {
+        descricao: p.procedimento || "",
+        codigo: p.codigo_sigtap || "",
+        quantidade: 1,
+      };
+
+      if (idx === 0) setProcRow(qs(".proc-row"), item);
+      else adicionarProcedimento(item);
+    });
+  });
+}
+
+/* ==========================================================
+   VOZ
+========================================================== */
+
+function initVozEvolucao() {
+  const btn = qs("#btnFalarEvolucao");
+  const textarea = qs("#evolucao");
+  const status = qs("#voiceStatus");
+
+  if (!btn || !textarea) return;
+
+  if (status) {
+    status.hidden = true;
+    status.style.display = "none";
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    btn.disabled = true;
+    btn.textContent = "🎙️ Indisponível";
+    return;
+  }
+
+  const rec = new SpeechRecognition();
+  rec.lang = "pt-BR";
+  rec.continuous = true;
+  rec.interimResults = true;
+
+  let listening = false;
+  let baseText = "";
+  let finalTranscript = "";
+
+  function setListening(on) {
+    listening = on;
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.classList.toggle("is-listening", on);
+    btn.textContent = on ? "🔴 Ouvindo" : "🎙️ Falar";
+
+    if (status) {
+      status.hidden = !on;
+      status.style.display = on ? "inline-flex" : "none";
+    }
+  }
+
+  rec.onstart = () => setListening(true);
+  rec.onend = () => setListening(false);
+
+  rec.onerror = (event) => {
+    console.warn("Erro no reconhecimento de voz:", event.error);
+    setListening(false);
+  };
+
+  rec.onresult = (event) => {
+    let interimTranscript = "";
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript.trim();
+
+      if (event.results[i].isFinal) {
+        finalTranscript += `${transcript} `;
       } else {
-        fd.set("combo_plano_id", "");
-        fd.set("contabiliza_sessao", "0");
+        interimTranscript += ` ${transcript}`;
+      }
+    }
+
+    textarea.value = [
+      baseText.trim(),
+      finalTranscript.trim(),
+      interimTranscript.trim(),
+    ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  };
+
+  btn.addEventListener("click", () => {
+    if (listening) {
+      rec.stop();
+      return;
+    }
+
+    baseText = textarea.value || "";
+    finalTranscript = "";
+
+    try {
+      rec.start();
+    } catch (e) {
+      console.warn("Reconhecimento já iniciado ou indisponível:", e);
+    }
+  });
+}
+
+/* ==========================================================
+   EVOLUÇÃO OCULTA
+========================================================== */
+
+function initEvolucaoOculta() {
+  const btn = qs("#btnToggleEvolucaoOculta");
+  const body = qs("#evolucaoOcultaBody");
+  const boxCbos = qs("#boxCbosAutorizados");
+
+  if (btn && body) {
+    function setOpen(open) {
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      body.hidden = !open;
+      body.classList.toggle("is-collapsed", !open);
+      body.classList.toggle("is-expanded", open);
+    }
+
+    setOpen(false);
+
+    btn.addEventListener("click", () => {
+      setOpen(btn.getAttribute("aria-expanded") !== "true");
+    });
+  }
+
+  qsa('input[name="evolucao_oculta_visibilidade"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const selected = qs('input[name="evolucao_oculta_visibilidade"]:checked')?.value;
+      if (boxCbos) boxCbos.hidden = selected !== "cbos";
+    });
+  });
+}
+
+/* ==========================================================
+   SALVAR
+========================================================== */
+
+function hasProcedimento() {
+  return qsa('input[name="procedimento[]"]').some((el) => (el.value || "").trim());
+}
+
+function initSalvar() {
+  const form = qs("#form-atendimento");
+  if (!form || form.dataset.bound === "1") return;
+
+  form.dataset.bound = "1";
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const pacienteId = getPacienteId();
+
+    if (!pacienteId) {
+      alert("Paciente não informado. Volte pela fila ou selecione um paciente.");
+      return;
+    }
+
+    setValue("nomePaciente", pacienteId);
+
+    const btn = form.querySelector('[type="submit"]');
+    if (btn) btn.disabled = true;
+
+    try {
+      garantirProcedimentoPadrao();
+
+      const fd = new FormData(form);
+
+      fd.set("nomePaciente", pacienteId);
+      fd.set("fila_id", getFilaId());
+
+      const comboId = qs("#combo_plano_id")?.value || "";
+      const toggle = qs("#toggleUsarCombo");
+
+      fd.set("combo_plano_id", comboId);
+      fd.set(
+        "contabiliza_sessao",
+        comboId && toggle?.checked && !toggle?.disabled ? "1" : "0"
+      );
+
+      if (!hasProcedimento()) {
+        const ok = confirm("Nenhum procedimento foi selecionado. Deseja salvar mesmo assim?");
+
+        if (!ok) {
+          if (btn) btn.disabled = false;
+          return;
+        }
+
+        fd.set("enviar_sem_procedimento", "1");
+      } else {
+        fd.set("enviar_sem_procedimento", "0");
       }
 
-      const resp = await fetch(form.action || window.location.pathname, {
+      const resp = await fetch(form.action, {
         method: "POST",
         body: fd,
-        headers: {
-          "X-Requested-With": "XMLHttpRequest"
-        }
+        headers: { "X-Requested-With": "XMLHttpRequest" },
       });
 
       const data = await resp.json().catch(() => null);
 
-      if (!resp.ok || !data || data.ok !== true) {
-        throw new Error(data?.error || "Falha ao salvar o atendimento.");
-      }
-
-      // remove da fila só se o save foi realmente ok
-      if (filaId) {
-        try {
-          await fetch(`/atendimentos/api/fila/${encodeURIComponent(filaId)}`, {
-            method: "DELETE"
-          });
-          try {
-            localStorage.setItem(`fila:removida:${filaId}`, String(Date.now()));
-          } catch (_) {}
-        } catch (e) {
-          console.warn("⚠️ Não foi possível remover da fila:", e);
-        }
+      if (!resp.ok || !data?.ok) {
+        throw new Error(data?.error || "Falha ao salvar atendimento.");
       }
 
       window.location.href = data.redirect || "/atendimentos/";
     } catch (err) {
       console.error(err);
-      alert(err.message || "Erro ao finalizar atendimento.");
-      if (btnSubmit) btnSubmit.disabled = false;
+      alert(err.message || "Erro ao salvar atendimento.");
+
+      if (btn) btn.disabled = false;
     }
   });
 }
+
+// ====== EXTRA FINAL ======
+
+// CANCELAR
+function initCancelar() {
+  const btn = qs("#btnCancelarAtendimento");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    if (confirm("Deseja cancelar o atendimento?")) {
+      window.location.href = "/atendimentos/";
+    }
+  });
+}
+
+// ==========================================================
+// CBO AUTORIZADOS (AUTOCOMPLETE BONITO)
+// ==========================================================
+
+function initCboAutocomplete() {
+  const input = qs("#cboSearchOculto");
+  const boxSug = qs("#cboSugestoesOcultas");
+  const listaSel = qs("#cbosSelecionadosOcultos");
+  const hidden = qs("#evolucao_oculta_cbos");
+
+  if (!input || !boxSug || !listaSel || !hidden) return;
+
+  let selecionados = [];
+
+  function renderSelecionados() {
+    listaSel.innerHTML = selecionados.map(cbo => `
+      <div class="atd-cbo-chip" data-codigo="${cbo.codigo}">
+        <span>${cbo.codigo} - ${cbo.descricao}</span>
+        <button type="button" class="remove-cbo">×</button>
+      </div>
+    `).join("");
+
+    hidden.value = selecionados.map(c => c.codigo).join(",");
+  }
+
+  async function buscarCbos(term) {
+    if (!term || term.length < 2) {
+      boxSug.hidden = true;
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/atendimentos/api/cbos_sugestoes?q=${encodeURIComponent(term)}`);
+      const data = await resp.json();
+
+      if (!data.ok) return;
+
+      const items = data.items || [];
+
+      if (!items.length) {
+        boxSug.hidden = true;
+        return;
+      }
+
+      boxSug.innerHTML = items.map(i => `
+        <div class="atd-cbo-item"
+             data-codigo="${i.codigo}"
+             data-descricao="${i.descricao}">
+          <strong>${i.codigo}</strong>
+          <span>${i.descricao}</span>
+        </div>
+      `).join("");
+
+      boxSug.hidden = false;
+
+    } catch (e) {
+      console.error("Erro ao buscar CBO:", e);
+    }
+  }
+
+  input.addEventListener("input", debounce(e => {
+    buscarCbos(e.target.value);
+  }, 200));
+
+  boxSug.addEventListener("click", e => {
+    const item = e.target.closest(".atd-cbo-item");
+    if (!item) return;
+
+    const codigo = item.dataset.codigo;
+    const descricao = item.dataset.descricao;
+
+    if (selecionados.find(c => c.codigo === codigo)) return;
+
+    selecionados.push({ codigo, descricao });
+    renderSelecionados();
+
+    input.value = "";
+    boxSug.hidden = true;
+  });
+
+  listaSel.addEventListener("click", e => {
+    if (!e.target.classList.contains("remove-cbo")) return;
+
+    const chip = e.target.closest(".atd-cbo-chip");
+    const codigo = chip.dataset.codigo;
+
+    selecionados = selecionados.filter(c => c.codigo !== codigo);
+    renderSelecionados();
+  });
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".atd-cbo-search-wrap")) {
+      boxSug.hidden = true;
+    }
+  });
+}
+
+// ==========================================================
+// MELHORIA VOZ (ANTI DUPLICAÇÃO)
+// ==========================================================
+
+function initVozEvolucaoMelhorado() {
+  const btn = qs("#btnFalarEvolucao");
+  const textarea = qs("#evolucao");
+  const status = qs("#voiceStatus");
+
+  if (!btn || !textarea) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) return;
+
+  const rec = new SpeechRecognition();
+  rec.lang = "pt-BR";
+  rec.continuous = true;
+  rec.interimResults = false; // 🔥 REMOVE DUPLICAÇÃO
+
+  let listening = false;
+
+  function toggle(on) {
+    listening = on;
+    btn.textContent = on ? "🔴 Ouvindo" : "🎙️ Falar";
+    btn.classList.toggle("is-listening", on);
+
+    if (status) {
+      status.hidden = !on;
+    }
+  }
+
+  rec.onstart = () => toggle(true);
+  rec.onend = () => toggle(false);
+
+  rec.onresult = (e) => {
+    let text = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      text += e.results[i][0].transcript + " ";
+    }
+
+    textarea.value += " " + text.trim();
+  };
+
+  btn.addEventListener("click", () => {
+    if (listening) rec.stop();
+    else rec.start();
+  });
+}
+
+// ==========================================================
+// INICIALIZAÇÃO FINAL
+// ==========================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  initCancelar();
+  initCboAutocomplete();
+  initVozEvolucaoMelhorado();
+});

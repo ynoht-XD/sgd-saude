@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ dados.procedimento.co_procedimento }} · SIGTAP</title>
+
+  <style>
+    :root{
+      --sig-bg:
+        radial-gradient(circle at top left, rgba(59,130,246,.10), transparent 28%),
+        radial-gradient(circle at top right, rgba(16,185,129,.08), transparent 24%),
+        linear-gradient(180deg, #f8fbff 0%, #f4f7fb 100%);
+      --sig-card: rgba(255,255,255,.94);
+      --sig-card-strong: #ffffff;
+      --sig-card-soft: #f8fbff;
+
+      --sig-line: #dbe6f3;
+      --sig-line-soft: #eaf1f8;
+
+      --sig-text: #102033;
+      --sig-muted: #66778f;
+      --sig-muted-2: #7b8ba1;
+
+      --sig-primary: #2563eb;
+      --sig-primary-2: #1d4ed8;
+      --sig-primary-3: #1e40af;
+      --sig-primary-soft: #eff6ff;
+
+      --sig-success: #0f9f6e;
+      --sig-success-soft: #ecfdf5;
+
+      --sig-warning: #d97706;
+      --sig-warning-soft: #fff7ed;
+
+      --sig-danger: #dc2626;
+      --sig-danger-soft: #fef2f2;
+
+      --sig-shadow:
+        0 10px 30px rgba(15, 23, 42, .08),
+        0 2px 10px rgba(15, 23, 42, .04);
+      --sig-shadow-md:
+        0 18px 46px rgba(15, 23, 42, .10),
+        0 2px 10px rgba(15, 23, 42, .04);
+
+      --sig-radius-xl: 24px;
+      --sig-radius-lg: 18px;
+      --sig-radius-md: 14px;
+      --sig-radius-sm: 12px;
+
+      --sig-max: 1320px;
+
+      --sig-font:
+        "Nunito",
+        "Avenir Next Rounded",
+        "Segoe UI",
+        "Trebuchet MS",
+        system-ui,
+        -apple-system,
+        sans-serif;
+    }
+
+    *{ box-sizing:border-box; }
+
+    html,body{
+      margin:0;
+      padding:0;
+      font-family:var(--sig-font);
+      color:var(--sig-text);
+      background:var(--sig-bg);
+    }
+
+    body{ min-height:100vh; }
+
+    .page-sigtap{
+      width:min(var(--sig-max), calc(100% - 28px));
+      margin:22px auto 40px;
+    }
+
+    .sig-detail{
+      display:grid;
+      gap:18px;
+    }
+
+    .sig-detail-card{
+      background:var(--sig-card);
+      backdrop-filter: blur(8px);
+      border:1px solid rgba(255,255,255,.65);
+      box-shadow:var(--sig-shadow);
+      border-radius:var(--sig-radius-xl);
+      overflow:hidden;
+    }
+
+    .sig-hero{
+      position:relative;
+      overflow:hidden;
+      background:
+        radial-gradient(circle at top right, rgba(37,99,235,.10), transparent 38%),
+        radial-gradient(circle at bottom left, rgba(59,130,246,.05), transparent 32%),
+        linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+    }
+
+    .sig-hero::after{
+      content:"";
+      position:absolute;
+      inset:auto -80px -80px auto;
+      width:220px;
+      height:220px;
+      background:radial-gradient(circle, rgba(37,99,235,.10), transparent 70%);
+      pointer-events:none;
+    }
+
+    .sig-detail-head{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:16px;
+      padding:22px 22px 0;
+    }
+
+    .sig-detail-title{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      width:100%;
+      position:relative;
+      z-index:1;
+    }
+
+    .sig-detail-title h3{
+      margin:0;
+      font-size:1.45rem;
+      line-height:1.2;
+      color:#0f172a;
+      letter-spacing:-.02em;
+    }
+
+    .sig-btn-ghost{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      min-height:42px;
+      padding:10px 14px;
+      border-radius:999px;
+      text-decoration:none;
+      color:var(--sig-primary-2);
+      background:var(--sig-primary-soft);
+      border:1px solid #bfdbfe;
+      font-weight:800;
+      transition:.18s ease;
+    }
+
+    .sig-btn-ghost:hover{
+      transform:translateY(-1px);
+      box-shadow:0 10px 20px rgba(37,99,235,.12);
+      background:#dbeafe;
+    }
+
+    .sig-proc-code{
+      font-size:1.9rem !important;
+      letter-spacing:-.04em;
+      line-height:1;
+      font-weight:900;
+    }
+
+    .sig-sub{
+      margin:0;
+      color:var(--sig-muted);
+      font-size:1rem;
+      line-height:1.6;
+      font-weight:600;
+      max-width:1100px;
+    }
+
+    .sig-meta{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      padding-bottom:20px;
+    }
+
+    .sig-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      min-height:38px;
+      padding:9px 14px;
+      border-radius:999px;
+      background:#f8fbff;
+      color:#25405f;
+      border:1px solid var(--sig-line);
+      font-size:.93rem;
+      font-weight:800;
+      line-height:1;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
+    }
+
+    .sig-chip.primary{
+      background:linear-gradient(180deg, #2d74ff 0%, #1d4ed8 100%);
+      color:#fff;
+      border-color:transparent;
+      box-shadow:
+        0 12px 22px rgba(37,99,235,.22),
+        inset 0 1px 0 rgba(255,255,255,.18);
+    }
+
+    .sig-divider{
+      height:1px;
+      background:linear-gradient(90deg, transparent, var(--sig-line), transparent);
+      margin:2px 22px 0;
+    }
+
+    .sig-section-body{
+      padding:18px 22px 22px;
+    }
+
+    .sig-section-header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .sig-section-header h4{
+      margin:0;
+      font-size:1rem;
+      letter-spacing:-.01em;
+      font-weight:900;
+    }
+
+    .sig-section-header p{
+      margin:4px 0 0;
+      color:var(--sig-muted);
+      font-size:.92rem;
+      line-height:1.55;
+    }
+
+    .sig-list-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:14px;
+    }
+
+    .sig-list-grid--tight{
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+    }
+
+    .sig-span-2{
+      grid-column:span 2;
+    }
+
+    .sig-span-4{
+      grid-column:1 / -1;
+    }
+
+    .sig-list-box{
+      min-width:0;
+      background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,251,255,.96));
+      border:1px solid var(--sig-line-soft);
+      border-radius:var(--sig-radius-lg);
+      padding:14px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.8),
+        0 3px 10px rgba(15,23,42,.03);
+    }
+
+    .sig-list-box h4{
+      margin:0 0 12px;
+      font-size:.82rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:var(--sig-muted);
+      font-weight:900;
+    }
+
+    .sig-data-group{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+
+    .sig-data-card{
+      flex:1 1 260px;
+      min-width:220px;
+      max-width:100%;
+      padding:12px;
+      border:1px solid var(--sig-line);
+      background:#fff;
+      border-radius:16px;
+      box-shadow:0 1px 2px rgba(15,23,42,.03);
+      transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .sig-data-card:hover{
+      transform:translateY(-2px);
+      box-shadow:0 10px 24px rgba(15,23,42,.06);
+      border-color:rgba(37,99,235,.18);
+    }
+
+    .sig-data-card.empty{
+      border-style:dashed;
+      color:var(--sig-muted);
+      background:#f8fafc;
+    }
+
+    .sig-data-stack{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-width:0;
+      max-width:100%;
+    }
+
+    .sig-data-top{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+      flex-wrap:wrap;
+      color:#13324f;
+      font-size:.95rem;
+      font-weight:800;
+      line-height:1.35;
+    }
+
+    .sig-data-code{
+      flex:0 0 auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .sig-data-desc{
+      display:block;
+      width:100%;
+      font-size:.82rem;
+      line-height:1.5;
+      color:var(--sig-muted-2);
+      font-weight:600;
+      margin-top:1px;
+      padding-left:2px;
+      word-break:break-word;
+    }
+
+    .sig-pill-list{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      min-height:34px;
+      align-items:flex-start;
+    }
+
+    .sig-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      max-width:100%;
+      padding:9px 12px;
+      border-radius:999px;
+      border:1px solid var(--sig-line);
+      background:var(--sig-card-strong);
+      color:#14314e;
+      font-size:.95rem;
+      line-height:1.35;
+      font-weight:800;
+      box-shadow:0 1px 2px rgba(15,23,42,.03);
+      word-break:break-word;
+    }
+
+    .sig-pill.empty{
+      color:var(--sig-muted);
+      background:#f8fafc;
+      border-style:dashed;
+    }
+
+    .flag{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:.72rem;
+      font-weight:900;
+      line-height:1;
+      color:#065f46;
+      background:var(--sig-success-soft);
+      border:1px solid #a7f3d0;
+      flex:0 0 auto;
+    }
+
+    .flag.flag-info{
+      color:#1e3a8a;
+      background:#eff6ff;
+      border-color:#bfdbfe;
+    }
+
+    .sig-fin-card{
+      min-height:100%;
+    }
+
+    .sig-fin-value{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    .sig-fin-main{
+      font-size:.96rem;
+      font-weight:800;
+      color:#13324f;
+      line-height:1.35;
+      word-break:break-word;
+    }
+
+    .sig-fin-sub{
+      font-size:.8rem;
+      color:var(--sig-muted-2);
+      line-height:1.45;
+      font-weight:600;
+      word-break:break-word;
+    }
+
+    .sig-highlight-grid{
+      display:grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+      gap:12px;
+    }
+
+    .sig-highlight{
+      padding:14px;
+      border-radius:18px;
+      border:1px solid var(--sig-line-soft);
+      background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      box-shadow:0 6px 20px rgba(15,23,42,.04);
+    }
+
+    .sig-highlight-label{
+      display:block;
+      margin-bottom:8px;
+      color:var(--sig-muted);
+      font-size:.76rem;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-weight:900;
+    }
+
+    .sig-highlight-value{
+      display:block;
+      color:var(--sig-text);
+      font-size:1.05rem;
+      font-weight:900;
+      line-height:1.2;
+      word-break:break-word;
+    }
+
+    .sig-floating-top{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      z-index:30;
+      width:46px;
+      height:46px;
+      border:none;
+      border-radius:999px;
+      background:linear-gradient(180deg, #2d74ff 0%, #1d4ed8 100%);
+      color:#fff;
+      font-size:1.1rem;
+      font-weight:900;
+      cursor:pointer;
+      box-shadow:0 14px 28px rgba(37,99,235,.28);
+      transition:.18s ease;
+      display:none;
+    }
+
+    .sig-floating-top.show{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .sig-floating-top:hover{
+      transform:translateY(-2px);
+    }
+
+    .is-hidden{
+      display:none !important;
+    }
+
+    @media (max-width: 1180px){
+      .sig-list-grid--tight,
+      .sig-highlight-grid{
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px){
+      .page-sigtap{
+        width:min(100% - 18px, 100%);
+        margin:10px auto 24px;
+      }
+
+      .sig-detail-head{
+        padding:18px 16px 0;
+      }
+
+      .sig-section-body{
+        padding:14px 16px 16px;
+      }
+
+      .sig-detail-title h3{
+        font-size:1.18rem;
+      }
+
+      .sig-proc-code{
+        font-size:1.45rem !important;
+      }
+
+      .sig-list-grid,
+      .sig-list-grid--tight,
+      .sig-highlight-grid{
+        grid-template-columns:1fr;
+      }
+
+      .sig-span-2,
+      .sig-span-4{
+        grid-column:auto;
+      }
+
+      .sig-chip,
+      .sig-pill{
+        font-size:.9rem;
+      }
+
+      .sig-data-card{
+        flex:1 1 100%;
+        min-width:0;
+      }
+
+      .sig-meta{
+        padding-bottom:16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page-sigtap sig-detail">
+
+    <section class="sig-detail-card sig-hero">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <a class="sig-btn-ghost" href="{{ url_for('sigtap.index') }}">← Voltar</a>
+
+          <h3 class="sig-proc-code">{{ dados.procedimento.co_procedimento }}</h3>
+          <p class="sig-sub">
+            {{ dados.procedimento.no_procedimento or "Descrição não encontrada." }}
+          </p>
+
+          <div class="sig-meta">
+            <span class="sig-chip primary">
+              Procedimento: {{ dados.procedimento.co_procedimento }}
+            </span>
+
+            <span class="sig-chip">
+              Competência: {{ dados.procedimento.competencia or "—" }}
+            </span>
+
+            <span class="sig-chip" data-field="tp_complexidade" data-raw="{{ dados.procedimento.tp_complexidade or '' }}">
+              Complexidade: <strong>{{ dados.procedimento.tp_complexidade or "—" }}</strong>
+            </span>
+
+            <span class="sig-chip" data-field="tp_sexo" data-raw="{{ dados.procedimento.tp_sexo or '' }}">
+              Sexo: <strong>{{ dados.procedimento.tp_sexo or "—" }}</strong>
+            </span>
+
+            <span class="sig-chip">
+              CIDs: {{ dados.total_cids or 0 }}
+            </span>
+
+            <span class="sig-chip">
+              CBOs: {{ dados.total_ocupacoes or 0 }}
+            </span>
+
+            <span class="sig-chip">
+              Serviços: {{ dados.total_servicos or 0 }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-section-body">
+        <div class="sig-section-header">
+          <div>
+            <h4>Resumo rápido</h4>
+            <p>Visão geral dos principais dados do procedimento.</p>
+          </div>
+        </div>
+
+        <div class="sig-highlight-grid">
+          <article class="sig-highlight">
+            <span class="sig-highlight-label">Financiamento</span>
+            <strong class="sig-highlight-value">
+              {{ dados.procedimento.financiamento_label or dados.procedimento.co_financiamento or "—" }}
+            </strong>
+          </article>
+
+          <article class="sig-highlight">
+            <span class="sig-highlight-label">Rubrica</span>
+            <strong class="sig-highlight-value">
+              {{ dados.procedimento.rubrica_label or dados.procedimento.co_rubrica or "—" }}
+            </strong>
+          </article>
+
+          <article class="sig-highlight">
+            <span class="sig-highlight-label">Valor SH</span>
+            <strong class="sig-highlight-value" data-field="vl_sh" data-raw="{{ dados.procedimento.vl_sh or '' }}">
+              {{ dados.procedimento.vl_sh or "—" }}
+            </strong>
+          </article>
+
+          <article class="sig-highlight">
+            <span class="sig-highlight-label">Valor SA</span>
+            <strong class="sig-highlight-value" data-field="vl_sa" data-raw="{{ dados.procedimento.vl_sa or '' }}">
+              {{ dados.procedimento.vl_sa or "—" }}
+            </strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>CIDs vinculados</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-box">
+          <h4>CID + descrição</h4>
+          <div class="sig-data-group">
+            {% for cid in dados.cids %}
+              <div class="sig-data-card">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span class="sig-data-code">{{ cid.co_cid }}</span>
+                    {% if cid.st_principal in ['S', '1'] %}
+                      <span class="flag">Principal</span>
+                    {% endif %}
+                  </div>
+                  <span class="sig-data-desc">
+                    {{ cid.no_cid or "Descrição do CID não encontrada." }}
+                  </span>
+                </div>
+              </div>
+            {% else %}
+              <div class="sig-data-card empty">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span>Nenhum CID vinculado.</span>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>CBOs vinculados</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-box">
+          <h4>CBO + descrição da ocupação</h4>
+          <div class="sig-data-group">
+            {% for cbo in dados.ocupacoes %}
+              <div class="sig-data-card">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span class="sig-data-code">{{ cbo.co_ocupacao }}</span>
+                  </div>
+                  <span class="sig-data-desc">
+                    {{ cbo.no_ocupacao or "Descrição da ocupação não encontrada." }}
+                  </span>
+                </div>
+              </div>
+            {% else %}
+              <div class="sig-data-card empty">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span>Nenhum CBO vinculado.</span>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>Serviços vinculados</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-box">
+          <h4>Serviço + classificação</h4>
+          <div class="sig-data-group">
+            {% for servico in dados.servicos %}
+              <div class="sig-data-card">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span class="sig-data-code">{{ servico.co_servico or "—" }}</span>
+                    {% if servico.co_classificacao %}
+                      <span class="flag flag-info">Class. {{ servico.co_classificacao }}</span>
+                    {% endif %}
+                  </div>
+
+                  <span class="sig-data-desc">
+                    {% if servico.no_servico %}
+                      {{ servico.no_servico }}
+                    {% else %}
+                      Serviço sem descrição cadastrada.
+                    {% endif %}
+                    {% if servico.no_classificacao %}
+                      <br>{{ servico.no_classificacao }}
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+            {% else %}
+              <div class="sig-data-card empty">
+                <div class="sig-data-stack">
+                  <div class="sig-data-top">
+                    <span>Nenhum serviço vinculado.</span>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>Características</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-grid sig-list-grid--tight">
+          <div class="sig-list-box">
+            <h4>Complexidade</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="tp_complexidade" data-raw="{{ dados.procedimento.tp_complexidade or '' }}">
+                {{ dados.procedimento.tp_complexidade or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Sexo</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="tp_sexo" data-raw="{{ dados.procedimento.tp_sexo or '' }}">
+                {{ dados.procedimento.tp_sexo or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Idade mínima</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="vl_idade_minima" data-raw="{{ dados.procedimento.vl_idade_minima or '' }}">
+                {{ dados.procedimento.vl_idade_minima or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Idade máxima</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="vl_idade_maxima" data-raw="{{ dados.procedimento.vl_idade_maxima or '' }}">
+                {{ dados.procedimento.vl_idade_maxima or "—" }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>Execução e permanência</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-grid sig-list-grid--tight">
+          <div class="sig-list-box">
+            <h4>Qtd. máxima</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="qt_maxima_execucao" data-raw="{{ dados.procedimento.qt_maxima_execucao or '' }}">
+                {{ dados.procedimento.qt_maxima_execucao or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Dias permanência</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="qt_dias_permanencia" data-raw="{{ dados.procedimento.qt_dias_permanencia or '' }}">
+                {{ dados.procedimento.qt_dias_permanencia or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Pontos</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="qt_pontos" data-raw="{{ dados.procedimento.qt_pontos or '' }}">
+                {{ dados.procedimento.qt_pontos or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Tempo permanência</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="qt_tempo_permanencia" data-raw="{{ dados.procedimento.qt_tempo_permanencia or '' }}">
+                {{ dados.procedimento.qt_tempo_permanencia or "—" }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sig-detail-card">
+      <div class="sig-detail-head">
+        <div class="sig-detail-title">
+          <h3>Financeiro e classificação</h3>
+        </div>
+      </div>
+      <div class="sig-divider"></div>
+
+      <div class="sig-section-body">
+        <div class="sig-list-grid sig-list-grid--tight">
+          <div class="sig-list-box sig-fin-card sig-span-2">
+            <h4>Financiamento</h4>
+            <div class="sig-fin-value">
+              <span class="sig-fin-main">
+                {{ dados.procedimento.financiamento_label or dados.procedimento.co_financiamento or "—" }}
+              </span>
+              <span class="sig-fin-sub">
+                Código: {{ dados.procedimento.co_financiamento or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box sig-fin-card sig-span-2">
+            <h4>Rubrica</h4>
+            <div class="sig-fin-value">
+              <span class="sig-fin-main">
+                {{ dados.procedimento.rubrica_label or dados.procedimento.co_rubrica or "—" }}
+              </span>
+              <span class="sig-fin-sub">
+                Código: {{ dados.procedimento.co_rubrica or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Valor SH</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="vl_sh" data-raw="{{ dados.procedimento.vl_sh or '' }}">
+                {{ dados.procedimento.vl_sh or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box">
+            <h4>Valor SA</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="vl_sa" data-raw="{{ dados.procedimento.vl_sa or '' }}">
+                {{ dados.procedimento.vl_sa or "—" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="sig-list-box sig-span-2">
+            <h4>Valor SP</h4>
+            <div class="sig-pill-list">
+              <span class="sig-pill" data-field="vl_sp" data-raw="{{ dados.procedimento.vl_sp or '' }}">
+                {{ dados.procedimento.vl_sp or "—" }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <button id="btnTopo" class="sig-floating-top" type="button" aria-label="Voltar ao topo">↑</button>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = (sel, root = document) => root.querySelector(sel);
+      const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+      function formatMoneyFromCents(raw) {
+        const value = String(raw || "").trim();
+        if (!/^\\d+$/.test(value)) return value;
+        const cents = Number(value);
+        if (Number.isNaN(cents)) return value;
+
+        return (cents / 100).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      function translateComplexity(raw) {
+        const map = {
+          "1": "Baixa complexidade",
+          "2": "Média complexidade",
+          "3": "Alta complexidade",
+        };
+        return map[String(raw || "").trim().toUpperCase()] || raw || "—";
+      }
+
+      function translateSex(raw) {
+        const map = {
+          "M": "Masculino",
+          "F": "Feminino",
+          "A": "Ambos",
+          "N": "Não se aplica",
+          "I": "Ignorado",
+        };
+        return map[String(raw || "").trim().toUpperCase()] || raw || "—";
+      }
+
+      function formatAge(raw) {
+        const value = String(raw || "").trim();
+        if (!/^\\d+$/.test(value)) return value || "—";
+        return `${Number(value)} ano(s)`;
+      }
+
+      function formatNumericPills() {
+        const moneyFields = new Set(["vl_sh", "vl_sa", "vl_sp"]);
+        const ageFields = new Set(["vl_idade_minima", "vl_idade_maxima"]);
+
+        $$("[data-field]").forEach((el) => {
+          const field = el.dataset.field;
+          const raw = (el.dataset.raw ?? el.textContent ?? "").trim();
+
+          if (!raw || raw === "—") return;
+
+          if (field === "tp_complexidade") {
+            const translated = translateComplexity(raw);
+            if (el.tagName === "SPAN" && el.textContent.includes("Complexidade:")) {
+              el.innerHTML = `Complexidade: <strong>${translated}</strong>`;
+            } else {
+              el.textContent = translated;
+            }
+            return;
+          }
+
+          if (field === "tp_sexo") {
+            const translated = translateSex(raw);
+            if (el.tagName === "SPAN" && el.textContent.includes("Sexo:")) {
+              el.innerHTML = `Sexo: <strong>${translated}</strong>`;
+            } else {
+              el.textContent = translated;
+            }
+            return;
+          }
+
+          if (moneyFields.has(field)) {
+            el.textContent = formatMoneyFromCents(raw);
+            return;
+          }
+
+          if (ageFields.has(field)) {
+            el.textContent = formatAge(raw);
+            return;
+          }
+
+          if (/^\\d+$/.test(raw)) {
+            el.textContent = String(Number(raw));
+          }
+        });
+      }
+
+      function setupTopButton() {
+        const btnTopo = $("#btnTopo");
+        if (!btnTopo) return;
+
+        const toggleTopo = () => {
+          if (window.scrollY > 260) {
+            btnTopo.classList.add("show");
+          } else {
+            btnTopo.classList.remove("show");
+          }
+        };
+
+        btnTopo.addEventListener("click", () => {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+
+        window.addEventListener("scroll", toggleTopo, { passive: true });
+        toggleTopo();
+      }
+
+      function setupTooltips() {
+        $$(".sig-data-card, .sig-pill, .sig-chip").forEach((el) => {
+          const text = (el.textContent || "").replace(/\\s+/g, " ").trim();
+          if (text && !el.getAttribute("title")) {
+            el.setAttribute("title", text);
+          }
+        });
+      }
+
+      function init() {
+        formatNumericPills();
+        setupTopButton();
+        setupTooltips();
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>

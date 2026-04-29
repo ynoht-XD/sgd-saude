@@ -15,6 +15,8 @@
     filaSyncHoje: "/atendimentos/api/fila/sync_hoje",
     declaracao: (id) => `/atendimentos/declaracao/${id}`,
     profissionais: "/atendimentos/api/profissionais",
+
+    chamarTv: "/atendimentos/chama-na-tela/chamar",
   };
 
   const STATUS = {
@@ -343,6 +345,13 @@
     const prio = normalizeText(filterPrio);
 
     return list.filter(it => {
+      const status = normalizeText(it.status || "");
+
+      // Esconde quem já foi atendido/finalizado
+      if (["finalizado", "atendido", "concluido", "concluído"].includes(status)) {
+        return false;
+      }
+
       if (profId && String(it.profissional_id) !== profId) return false;
       if (prio && normalizeText(it.prioridade) !== prio) return false;
 
@@ -413,6 +422,10 @@
     const obs = escapeHtml(it.obs || "—");
     const status = normalizeText(it.status || (it.em_atendimento ? STATUS.ATENDENDO : ""));
 
+    const pacienteId = escapeHtml(it.paciente_id || "");
+    const pacienteNome = escapeHtml(it.paciente_nome || "");
+    const profissionalNome = escapeHtml(it.profissional_nome || "");
+
     const combo = it?.combo || null;
     const temCombo = !!(combo && combo.id);
     const comboRestantes = Number(combo?.sessoes_restantes || 0);
@@ -427,55 +440,24 @@
         </button>
 
         <div class="menu-pop" hidden role="menu">
-          <button class="menu-item" data-acao="atender" role="menuitem">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-8 1.5-8 4v2h16v-2c0-2.5-5-4-8-4Z" fill="currentColor"/>
-            </svg>
-            <span>Atender</span>
-          </button>
-
-          <button class="menu-item" data-acao="editar" role="menuitem">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M3 17.25V21h3.75l11-11.04-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.42l-2.34-2.34a1 1 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82Z" fill="currentColor"/>
-            </svg>
-            <span>Editar…</span>
-          </button>
-
-          <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener" role="menuitem">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-7-6Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-              <polyline points="13 3 13 9 19 9" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Gerar declaração</span>
-          </a>
-
-          <button class="menu-item" data-acao="falta" role="menuitem">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
-              <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <span>Marcar falta</span>
-          </button>
-
-          <button class="menu-item danger" data-acao="remover" role="menuitem">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
-                    stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Remover</span>
-          </button>
+          <button class="menu-item" data-acao="atender" role="menuitem">Atender</button>
+          <button class="menu-item" data-acao="editar" role="menuitem">Editar…</button>
+          <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener" role="menuitem">Gerar declaração</a>
+          <button class="menu-item" data-acao="falta" role="menuitem">Marcar falta</button>
+          <button class="menu-item danger" data-acao="remover" role="menuitem">Remover</button>
         </div>
       </div>
     `;
 
     return `
       <article class="fila-card ${semSaldo ? "is-sem-saldo" : ""}"
-               data-id="${id}"
-               data-prof="${escapeHtml(it.profissional_id || "")}"
-               data-prio="${escapeHtml(it.prioridade || "")}"
-               data-status="${escapeHtml(status)}"
-               data-tem-combo="${temCombo ? 1 : 0}"
-               data-combo-restantes="${comboRestantes}">
+              data-id="${id}"
+              data-prof="${escapeHtml(it.profissional_id || "")}"
+              data-prio="${escapeHtml(it.prioridade || "")}"
+              data-status="${escapeHtml(status)}"
+              data-tem-combo="${temCombo ? 1 : 0}"
+              data-combo-restantes="${comboRestantes}">
+
         <header class="fila-card-head">
           <div class="fila-card-time">
             <span class="fila-card-label">Hora</span>
@@ -502,7 +484,7 @@
           <section class="fila-card-group">
             <span class="fila-card-mini-label">Profissional</span>
             <div class="fila-card-main">
-              <strong>${escapeHtml(it.profissional_nome || "—")}</strong>
+              <strong>${profissionalNome || "—"}</strong>
             </div>
           </section>
 
@@ -524,20 +506,34 @@
         </div>
 
         <footer class="fila-card-actions">
-          <button class="btn atender" title="Atender" data-acao="atender" aria-label="Atender" type="button">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-8 1.5-8 4v2h16v-2c0-2.5-5-4-8-4Z" fill="currentColor"/>
-            </svg>
+          <button
+            class="btn chamar-tv"
+            title="Chamar paciente na TV"
+            data-acao="chamar-tv"
+            data-paciente-id="${pacienteId}"
+            data-paciente-nome="${pacienteNome}"
+            data-profissional-nome="${profissionalNome}"
+            data-setor="Recepção"
+            type="button">
+            📢 Chamar na TV
           </button>
 
-          <button class="btn remover" title="Excluir" data-acao="remover" aria-label="Excluir" type="button">
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
-                    stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
+          <div class="acoes-secundarias">
+            <button class="btn atender" title="Atender" data-acao="atender" aria-label="Atender" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-8 1.5-8 4v2h16v-2c0-2.5-5-4-8-4Z" fill="currentColor"/>
+              </svg>
+            </button>
 
-          ${menuHtml}
+            <button class="btn remover" title="Excluir" data-acao="remover" aria-label="Excluir" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
+                      stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+
+            ${menuHtml}
+          </div>
         </footer>
       </article>
     `;
@@ -569,7 +565,12 @@
 
   async function carregarFila() {
     const data = await jfetch(API.filaList);
-    allItems = Array.isArray(data) ? data : [];
+
+    allItems = (Array.isArray(data) ? data : []).filter(it => {
+      const status = normalizeText(it.status || "");
+      return !["finalizado", "atendido", "concluido", "concluído"].includes(status);
+    });
+
     renderFila(allItems);
   }
 
@@ -699,85 +700,161 @@
   document.addEventListener("click", (e) => {
     if (e.target.closest(".menu-pop")) e.stopPropagation();
   }, true);
+// ============================================================
+// Ações dos cards
+// ============================================================
+cardsFila?.addEventListener("click", async (e) => {
+  const ac = e.target.closest("[data-acao]");
+  if (!ac) return;
+
+  closeAllMenus();
+
+  const card = ac.closest(".fila-card[data-id]");
+  const id = card ? Number(card.dataset.id) : null;
+  if (!id) return;
+
+  const acao = ac.dataset.acao;
 
   // ============================================================
-  // Ações dos cards
+  // CHAMAR PACIENTE NA TV
   // ============================================================
-  cardsFila?.addEventListener("click", async (e) => {
-    const ac = e.target.closest("[data-acao]");
-    if (!ac) return;
+  if (acao === "chamar-tv") {
+    const payload = {
+      paciente_id: ac.dataset.pacienteId || "",
+      paciente_nome: ac.dataset.pacienteNome || "",
+      profissional_nome: ac.dataset.profissionalNome || "",
+      setor: ac.dataset.setor || "Recepção"
+    };
 
-    closeAllMenus();
+    if (!payload.paciente_nome) {
+      alert("Paciente inválido para chamada.");
+      return;
+    }
 
-    const card = ac.closest(".fila-card[data-id]");
-    const id = card ? Number(card.dataset.id) : null;
-    if (!id) return;
+    const textoOriginal = ac.innerHTML;
+    ac.disabled = true;
+    ac.innerHTML = "Chamando...";
 
-    const acao = ac.dataset.acao;
+    try {
+      const data = await jfetch(API.chamarTv, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
 
-    if (acao === "atender") {
-      try {
-        const pid = card.querySelector("[data-pid]")?.dataset.pid || "";
-        const ptxt = card.querySelector("[data-pid] strong")?.textContent.trim() || "";
-
-        if (!pid) {
-          alert("Paciente não identificado para este atendimento.");
-          return;
-        }
-
-        try {
-          await fetch(API.filaUpdate(id), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: STATUS.ATENDENDO })
-          });
-          card.setAttribute("data-status", STATUS.ATENDENDO);
-        } catch (err) {
-          console.warn("Não foi possível marcar como 'atendendo':", err?.message);
-        }
-
-        const url =
-          `/atendimentos/registrar?fila_id=${encodeURIComponent(id)}` +
-          `&paciente_id=${encodeURIComponent(pid)}` +
-          `&paciente_nome=${encodeURIComponent(ptxt)}`;
-
-        window.location.href = url;
-      } catch (err) {
-        console.error("Erro ao redirecionar:", err);
-        alert("Não foi possível iniciar o atendimento.");
+      if (!data.ok) {
+        throw new Error(data.erro || data.error || "Erro ao chamar paciente.");
       }
-      return;
+
+      ac.innerHTML = "✅ Chamado!";
+
+      setTimeout(() => {
+        ac.innerHTML = textoOriginal;
+        ac.disabled = false;
+      }, 1800);
+
+    } catch (err) {
+      console.error("Erro ao chamar na TV:", err);
+      alert(err.message || "Erro ao chamar na TV.");
+      ac.innerHTML = textoOriginal;
+      ac.disabled = false;
     }
 
-    if (acao === "editar") {
-      alert("⚙️ Edição ainda não implementada.");
-      return;
-    }
+    return;
+  }
 
-    if (acao === "falta") {
+  // ============================================================
+  // ATENDER
+  // ============================================================
+  if (acao === "atender") {
+    try {
+      const pid = card.querySelector("[data-pid]")?.dataset.pid || "";
+      const ptxt = card.querySelector("[data-pid] strong")?.textContent.trim() || "";
+
+      if (!pid) {
+        alert("Paciente não identificado para este atendimento.");
+        return;
+      }
+
       try {
         await fetch(API.filaUpdate(id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prioridade: "amarelo", obs: "FALTA" })
+          body: JSON.stringify({ status: STATUS.ATENDENDO })
         });
-        await carregarFila();
-      } catch {
-        alert("Falha ao marcar falta.");
+
+        card.setAttribute("data-status", STATUS.ATENDENDO);
+      } catch (err) {
+        console.warn("Não foi possível marcar como 'atendendo':", err?.message);
       }
-      return;
+
+      const url =
+        `/atendimentos/registrar?fila_id=${encodeURIComponent(id)}` +
+        `&paciente_id=${encodeURIComponent(pid)}` +
+        `&paciente_nome=${encodeURIComponent(ptxt)}`;
+
+      window.location.href = url;
+    } catch (err) {
+      console.error("Erro ao redirecionar:", err);
+      alert("Não foi possível iniciar o atendimento.");
     }
 
-    if (acao === "remover") {
-      if (!confirm("Remover este item da fila?")) return;
-      try {
-        await fetch(API.filaDelete(id), { method: "DELETE" });
-        await carregarFila();
-      } catch {
-        alert("Falha ao remover.");
-      }
+    return;
+  }
+
+  // ============================================================
+  // EDITAR
+  // ============================================================
+  if (acao === "editar") {
+    alert("⚙️ Edição ainda não implementada.");
+    return;
+  }
+
+  // ============================================================
+  // MARCAR FALTA
+  // ============================================================
+  if (acao === "falta") {
+    try {
+      await fetch(API.filaUpdate(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prioridade: "amarelo",
+          obs: "FALTA"
+        })
+      });
+
+      await carregarFila();
+    } catch (err) {
+      console.error("Erro ao marcar falta:", err);
+      alert("Falha ao marcar falta.");
     }
-  });
+
+    return;
+  }
+
+  // ============================================================
+  // REMOVER
+  // ============================================================
+  if (acao === "remover") {
+    if (!confirm("Remover este item da fila?")) return;
+
+    try {
+      await fetch(API.filaDelete(id), {
+        method: "DELETE"
+      });
+
+      await carregarFila();
+    } catch (err) {
+      console.error("Erro ao remover:", err);
+      alert("Falha ao remover.");
+    }
+
+    return;
+  }
+});
 
   // ============================================================
   // Adicionar manualmente

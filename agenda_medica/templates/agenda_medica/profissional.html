@@ -1,0 +1,241 @@
+{% extends "layout.html" %}
+
+{% block title %}Agenda Médica - Profissional{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('agenda_medica.static', filename='css/agenda_medica.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="am-page am-prof-page">
+
+  <header class="am-hero">
+    <div>
+      <span class="am-kicker">Profissional</span>
+      <h1>Solicitar Agenda Médica</h1>
+      <p>
+        Selecione um paciente cadastrado, escolha uma especialidade liberada pela coordenação
+        e solicite a vaga.
+      </p>
+    </div>
+
+    <div class="am-hero-card">
+      <strong id="amHoje">Hoje</strong>
+      <span>Solicitações para coordenação</span>
+    </div>
+  </header>
+
+  <section class="am-panel">
+    <div class="am-panel-head">
+      <div>
+        <h2>Nova solicitação</h2>
+        <p>Paciente vem do cadastro; especialidade e data vêm das agendas liberadas.</p>
+      </div>
+    </div>
+
+    <form id="formSolicitacaoAgenda" class="am-form">
+
+      <div class="am-field am-field-wide am-autocomplete-wrap">
+        <label for="pacienteBusca">Paciente cadastrado</label>
+        <input
+          type="text"
+          id="pacienteBusca"
+          placeholder="Digite ao menos 3 letras do paciente..."
+          autocomplete="off"
+          required
+        >
+
+        <input type="hidden" id="pacienteId">
+        <input type="hidden" id="pacienteNome">
+        <input type="hidden" id="pacienteCpf">
+        <input type="hidden" id="pacienteCns">
+        <input type="hidden" id="pacienteNascimento">
+
+        <div class="am-suggestions" id="pacienteSugestoes"></div>
+      </div>
+
+      <div class="am-field am-field-wide">
+        <label for="selectCbo">CBO / Especialidade liberada</label>
+        <select id="selectCbo" required>
+          <option value="">Selecione uma especialidade...</option>
+        </select>
+      </div>
+
+      <div class="am-field">
+        <label for="selectData">Data liberada</label>
+        <select id="selectData" required>
+          <option value="">Selecione uma data...</option>
+        </select>
+      </div>
+
+      <div class="am-field">
+        <label for="vagasInfo">Vagas disponíveis</label>
+        <input type="text" id="vagasInfo" readonly value="-">
+      </div>
+
+      <div class="am-field am-field-wide">
+        <label for="observacaoSolicitacao">Observação</label>
+        <textarea
+          id="observacaoSolicitacao"
+          rows="3"
+          placeholder="Ex: motivo da solicitação, prioridade, observação clínica..."
+        ></textarea>
+      </div>
+
+      <div class="am-actions">
+        <button type="button" class="am-btn am-btn-light" id="btnLimparSolicitacao">
+          Limpar
+        </button>
+
+        <button type="submit" class="am-btn am-btn-primary" id="btnSolicitar">
+          Solicitar
+        </button>
+      </div>
+
+    </form>
+  </section>
+
+  <details class="am-panel am-collapse" id="boxFiltros">
+    <summary class="am-collapse-summary">
+      <div>
+        <h2>Filtros avançados</h2>
+        <p>Filtre agendas por paciente, CBO, data e situação das marcações.</p>
+      </div>
+      <span class="am-chip">Abrir filtros</span>
+    </summary>
+
+    <form id="formFiltrosProfissional" class="am-form am-form-collapse">
+
+      <div class="am-field am-field-wide">
+        <label for="filtroPaciente">Paciente</label>
+        <input
+          type="text"
+          id="filtroPaciente"
+          placeholder="Nome, CPF ou CNS..."
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="am-field am-field-wide">
+        <label for="filtroCbo">CBO / descrição</label>
+        <input
+          type="text"
+          id="filtroCbo"
+          placeholder="Ex: fisioterapia, psicologia, 223605..."
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="am-field">
+        <label for="filtroData">Data</label>
+        <select id="filtroData">
+          <option value="">Todas as datas liberadas</option>
+        </select>
+      </div>
+
+      <div class="am-field">
+        <label for="filtroStatus">Situação</label>
+        <select id="filtroStatus">
+          <option value="">Todas</option>
+          <option value="PENDENTE">Pendentes</option>
+          <option value="ACEITO">Aprovadas</option>
+          <option value="RECUSADO">Recusadas</option>
+          <option value="CANCELADO">Canceladas</option>
+        </select>
+      </div>
+
+      <div class="am-actions">
+        <button type="button" class="am-btn am-btn-light" id="btnLimparFiltros">
+          Limpar filtros
+        </button>
+
+        <button type="submit" class="am-btn am-btn-primary">
+          Aplicar filtros
+        </button>
+      </div>
+
+    </form>
+  </details>
+
+  <section class="am-section">
+    <div class="am-section-title">
+      <div>
+        <h2>Agendas liberadas</h2>
+        <p>Visualize a situação das solicitações e acompanhe as vagas disponíveis.</p>
+      </div>
+
+      <span class="am-chip" id="countAgendas">0 registros</span>
+    </div>
+
+    <div class="am-grid" id="gridAgendasLiberadas"></div>
+
+    <div class="am-pagination">
+      <button class="am-btn am-btn-light" id="prevAgendas" type="button">
+        Anterior
+      </button>
+      <span id="pageAgendas">Página 1</span>
+      <button class="am-btn am-btn-light" id="nextAgendas" type="button">
+        Próxima
+      </button>
+    </div>
+  </section>
+
+</section>
+
+<dialog class="am-modal" id="modalVisualizarAgenda">
+  <div class="am-modal-box">
+
+    <header class="am-modal-head">
+      <div>
+        <span class="am-kicker">Visualizar agenda</span>
+        <h2 id="modalAgendaTitulo">Agenda médica</h2>
+        <p id="modalAgendaSubtitulo"></p>
+      </div>
+
+      <button type="button" class="am-icon-btn" id="btnFecharModalAgenda">×</button>
+    </header>
+
+    <div class="am-modal-body">
+
+      <div class="am-status-board">
+        <div class="am-status-card">
+          <strong id="totalAprovados">0</strong>
+          <span>Aprovados</span>
+        </div>
+
+        <div class="am-status-card">
+          <strong id="totalPendentes">0</strong>
+          <span>Aguardando</span>
+        </div>
+
+        <div class="am-status-card">
+          <strong id="totalRecusados">0</strong>
+          <span>Recusados</span>
+        </div>
+      </div>
+
+      <div class="am-list-block">
+        <h3>Aprovados</h3>
+        <div id="listaAprovados" class="am-list-stack"></div>
+      </div>
+
+      <div class="am-list-block">
+        <h3>Aguardando designação</h3>
+        <div id="listaPendentes" class="am-list-stack"></div>
+      </div>
+
+      <div class="am-list-block">
+        <h3>Recusados</h3>
+        <div id="listaRecusados" class="am-list-stack"></div>
+      </div>
+
+    </div>
+  </div>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('agenda_medica.static', filename='js/profissional.js') }}"></script>
+{% endblock %}

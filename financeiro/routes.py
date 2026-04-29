@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime, date
 from typing import Any
 
@@ -15,18 +14,71 @@ from . import financeiro_bp
 # HELPERS BÁSICOS
 # ============================================================
 
-def _conn() -> sqlite3.Connection:
+def _is_postgres_conn(conn) -> bool:
+    mod = conn.__class__.__module__.lower()
+    return "psycopg" in mod or "psycopg2" in mod or "pgdb" in mod
+
+
+def _conn():
     conn = conectar_db()
-    conn.row_factory = sqlite3.Row
+
+    if _is_postgres_conn(conn):
+        try:
+            from psycopg.rows import dict_row
+            conn.row_factory = dict_row
+        except Exception:
+            pass
+    else:
+        try:
+            import sqlite3
+            conn.row_factory = sqlite3.Row
+        except Exception:
+            pass
+
     return conn
 
 
-def _dict_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
-    return dict(row) if row else None
+def _adapt_sql(sql: str, conn) -> str:
+    if _is_postgres_conn(conn):
+        return sql.replace("?", "%s")
+    return sql
+
+
+def _execute(conn, sql: str, params: tuple | list | None = None):
+    if params is None:
+        params = ()
+    return conn.execute(_adapt_sql(sql, conn), params)
+
+
+def _executemany(conn, sql: str, seq_of_params):
+    return conn.executemany(_adapt_sql(sql, conn), seq_of_params)
+
+
+def _serialize_value(v):
+    if isinstance(v, (datetime, date)):
+        return v.isoformat(sep=" ")
+    return v
+
+
+def _dict_row(row) -> dict[str, Any] | None:
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return {k: _serialize_value(v) for k, v in row.items()}
+
+    try:
+        return {k: _serialize_value(v) for k, v in dict(row).items()}
+    except Exception:
+        return None
 
 
 def _rows_to_dict(rows) -> list[dict[str, Any]]:
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows or []:
+        item = _dict_row(r)
+        if item is not None:
+            out.append(item)
+    return out
 
 
 def _now_iso() -> str:
@@ -92,14 +144,49 @@ def _fail(message: str, status: int = 400, **kwargs):
     return jsonify(payload), status
 
 
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str):
-    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+def _list_columns(conn, table: str) -> set[str]:
+    if _is_postgres_conn(conn):
+        cur = _execute(conn, """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = ?
+            ORDER BY ordinal_position
+        """, (table,))
+        rows = cur.fetchall() or []
+        return {str(r["column_name"]) if isinstance(r, dict) else str(r[0]) for r in rows}
+
+    rows = _execute(conn, f"PRAGMA table_info({table})").fetchall() or []
+    cols = set()
+    for r in rows:
+        try:
+            cols.add(str(r["name"]))
+        except Exception:
+            cols.add(str(r[1]))
+    return cols
+
+
+def _ensure_column(conn, table: str, column: str, ddl: str):
+    cols = _list_columns(conn, table)
     if column not in cols:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        if _is_postgres_conn(conn):
+            _execute(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
+        else:
+            _execute(conn, f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
-def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute("""
+def _table_exists(conn, table: str) -> bool:
+    if _is_postgres_conn(conn):
+        row = _execute(conn, """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ?
+            LIMIT 1
+        """, (table,)).fetchone()
+        return bool(row)
+
+    row = _execute(conn, """
         SELECT name
         FROM sqlite_master
         WHERE type = 'table' AND name = ?
@@ -115,80 +202,156 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 def ensure_financeiro_schema():
     conn = _conn()
     try:
-        # ------------------------------
-        # COMBOS
-        # ------------------------------
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS financeiro_combos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL,
-                descricao TEXT,
-                sessoes INTEGER NOT NULL DEFAULT 0,
-                preco REAL NOT NULL DEFAULT 0,
-                ativo INTEGER NOT NULL DEFAULT 1,
-                criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
-                atualizado_em TEXT
-            )
-        """)
+        if _is_postgres_conn(conn):
+            # ------------------------------
+            # COMBOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_combos (
+                    id SERIAL PRIMARY KEY,
+                    nome TEXT NOT NULL,
+                    descricao TEXT,
+                    sessoes INTEGER NOT NULL DEFAULT 0,
+                    preco NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    ativo INTEGER NOT NULL DEFAULT 1,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TIMESTAMP
+                )
+            """)
 
-        # ------------------------------
-        # PACIENTE x COMBOS/PLANOS
-        # ------------------------------
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS financeiro_paciente_planos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER,
-                paciente_nome TEXT NOT NULL,
-                paciente_cpf TEXT,
-                paciente_cns TEXT,
-                tipo TEXT NOT NULL,
-                combo_id INTEGER,
-                combo_nome TEXT,
-                nome_plano TEXT,
-                descricao TEXT,
-                sessoes_contratadas INTEGER NOT NULL DEFAULT 0,
-                sessoes_usadas INTEGER NOT NULL DEFAULT 0,
-                valor_total REAL NOT NULL DEFAULT 0,
-                recorrente INTEGER NOT NULL DEFAULT 0,
-                renovacao_automatica INTEGER NOT NULL DEFAULT 0,
-                frequencia TEXT,
-                forma_pagamento TEXT,
-                observacoes TEXT,
-                data_inicio TEXT,
-                data_fim TEXT,
-                status TEXT NOT NULL DEFAULT 'ativo',
-                criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
-                atualizado_em TEXT
-            )
-        """)
+            # ------------------------------
+            # PACIENTE x COMBOS/PLANOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_paciente_planos (
+                    id SERIAL PRIMARY KEY,
+                    paciente_id INTEGER,
+                    paciente_nome TEXT NOT NULL,
+                    paciente_cpf TEXT,
+                    paciente_cns TEXT,
+                    tipo TEXT NOT NULL,
+                    combo_id INTEGER,
+                    combo_nome TEXT,
+                    nome_plano TEXT,
+                    descricao TEXT,
+                    sessoes_contratadas INTEGER NOT NULL DEFAULT 0,
+                    sessoes_usadas INTEGER NOT NULL DEFAULT 0,
+                    valor_total NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    recorrente INTEGER NOT NULL DEFAULT 0,
+                    renovacao_automatica INTEGER NOT NULL DEFAULT 0,
+                    frequencia TEXT,
+                    forma_pagamento TEXT,
+                    observacoes TEXT,
+                    data_inicio TEXT,
+                    data_fim TEXT,
+                    status TEXT NOT NULL DEFAULT 'ativo',
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TIMESTAMP
+                )
+            """)
 
-        # ------------------------------
-        # LIVRO CAIXA / LANÇAMENTOS
-        # ------------------------------
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS financeiro_lancamentos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER,
-                plano_id INTEGER,
-                origem TEXT DEFAULT 'manual',
-                referencia_tipo TEXT,
-                referencia_id INTEGER,
-                tipo TEXT NOT NULL,
-                categoria TEXT,
-                descricao TEXT NOT NULL,
-                valor REAL NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'pendente',
-                forma_pagamento TEXT,
-                parcela_numero INTEGER,
-                parcelas_total INTEGER,
-                vencimento TEXT,
-                data_pagamento TEXT,
-                competencia TEXT,
-                observacoes TEXT,
-                criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
-                atualizado_em TEXT
-            )
-        """)
+            # ------------------------------
+            # LIVRO CAIXA / LANÇAMENTOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_lancamentos (
+                    id SERIAL PRIMARY KEY,
+                    paciente_id INTEGER,
+                    plano_id INTEGER,
+                    origem TEXT DEFAULT 'manual',
+                    referencia_tipo TEXT,
+                    referencia_id INTEGER,
+                    tipo TEXT NOT NULL,
+                    categoria TEXT,
+                    descricao TEXT NOT NULL,
+                    valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pendente',
+                    forma_pagamento TEXT,
+                    parcela_numero INTEGER,
+                    parcelas_total INTEGER,
+                    vencimento TEXT,
+                    data_pagamento TEXT,
+                    competencia TEXT,
+                    observacoes TEXT,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TIMESTAMP
+                )
+            """)
+        else:
+            # ------------------------------
+            # COMBOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_combos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL,
+                    descricao TEXT,
+                    sessoes INTEGER NOT NULL DEFAULT 0,
+                    preco REAL NOT NULL DEFAULT 0,
+                    ativo INTEGER NOT NULL DEFAULT 1,
+                    criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TEXT
+                )
+            """)
+
+            # ------------------------------
+            # PACIENTE x COMBOS/PLANOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_paciente_planos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    paciente_id INTEGER,
+                    paciente_nome TEXT NOT NULL,
+                    paciente_cpf TEXT,
+                    paciente_cns TEXT,
+                    tipo TEXT NOT NULL,
+                    combo_id INTEGER,
+                    combo_nome TEXT,
+                    nome_plano TEXT,
+                    descricao TEXT,
+                    sessoes_contratadas INTEGER NOT NULL DEFAULT 0,
+                    sessoes_usadas INTEGER NOT NULL DEFAULT 0,
+                    valor_total REAL NOT NULL DEFAULT 0,
+                    recorrente INTEGER NOT NULL DEFAULT 0,
+                    renovacao_automatica INTEGER NOT NULL DEFAULT 0,
+                    frequencia TEXT,
+                    forma_pagamento TEXT,
+                    observacoes TEXT,
+                    data_inicio TEXT,
+                    data_fim TEXT,
+                    status TEXT NOT NULL DEFAULT 'ativo',
+                    criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TEXT
+                )
+            """)
+
+            # ------------------------------
+            # LIVRO CAIXA / LANÇAMENTOS
+            # ------------------------------
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS financeiro_lancamentos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    paciente_id INTEGER,
+                    plano_id INTEGER,
+                    origem TEXT DEFAULT 'manual',
+                    referencia_tipo TEXT,
+                    referencia_id INTEGER,
+                    tipo TEXT NOT NULL,
+                    categoria TEXT,
+                    descricao TEXT NOT NULL,
+                    valor REAL NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'pendente',
+                    forma_pagamento TEXT,
+                    parcela_numero INTEGER,
+                    parcelas_total INTEGER,
+                    vencimento TEXT,
+                    data_pagamento TEXT,
+                    competencia TEXT,
+                    observacoes TEXT,
+                    criado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TEXT
+                )
+            """)
 
         _ensure_column(conn, "financeiro_combos", "descricao", "TEXT")
         _ensure_column(conn, "financeiro_combos", "ativo", "INTEGER NOT NULL DEFAULT 1")
@@ -212,19 +375,19 @@ def ensure_financeiro_schema():
         if _table_exists(conn, "atendimentos"):
             _ensure_column(conn, "atendimentos", "combo_plano_id", "INTEGER")
             _ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 1")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_atend_combo_plano_id ON atendimentos(combo_plano_id)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_atend_paciente_id ON atendimentos(paciente_id)")
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_atend_combo_plano_id ON atendimentos(combo_plano_id)")
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_atend_paciente_id ON atendimentos(paciente_id)")
 
         # Índices
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_combo_nome ON financeiro_combos(nome)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_pp_paciente_id ON financeiro_paciente_planos(paciente_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_pp_status ON financeiro_paciente_planos(status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_tipo ON financeiro_lancamentos(tipo)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_status ON financeiro_lancamentos(status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_venc ON financeiro_lancamentos(vencimento)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_data_pag ON financeiro_lancamentos(data_pagamento)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_paciente_id ON financeiro_lancamentos(paciente_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_fin_lanc_plano_id ON financeiro_lancamentos(plano_id)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_combo_nome ON financeiro_combos(nome)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_pp_paciente_id ON financeiro_paciente_planos(paciente_id)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_pp_status ON financeiro_paciente_planos(status)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_tipo ON financeiro_lancamentos(tipo)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_status ON financeiro_lancamentos(status)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_venc ON financeiro_lancamentos(vencimento)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_data_pag ON financeiro_lancamentos(data_pagamento)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_paciente_id ON financeiro_lancamentos(paciente_id)")
+        _execute(conn, "CREATE INDEX IF NOT EXISTS idx_fin_lanc_plano_id ON financeiro_lancamentos(plano_id)")
 
         conn.commit()
     finally:
@@ -238,8 +401,8 @@ ensure_financeiro_schema()
 # HELPERS DE NEGÓCIO
 # ============================================================
 
-def _buscar_paciente_por_id(conn: sqlite3.Connection, paciente_id: int):
-    return conn.execute("""
+def _buscar_paciente_por_id(conn, paciente_id: int):
+    return _execute(conn, """
         SELECT
             id,
             COALESCE(nome, '') AS nome,
@@ -269,7 +432,7 @@ def _safe_label_nome_plano(tipo: str, combo_nome: str | None, nome_plano: str | 
 
 
 def _gerar_lancamentos_do_plano(
-    conn: sqlite3.Connection,
+    conn,
     plano_id: int,
     paciente_id: int | None,
     valor_total: float,
@@ -281,7 +444,7 @@ def _gerar_lancamentos_do_plano(
     competencia = _competencia_from_date(vencimento_base or _today_iso())
 
     if not parcelas:
-        conn.execute("""
+        _execute(conn, """
             INSERT INTO financeiro_lancamentos (
                 paciente_id, plano_id, origem, referencia_tipo, referencia_id,
                 tipo, categoria, descricao, valor, status,
@@ -311,7 +474,7 @@ def _gerar_lancamentos_do_plano(
         forma = parcela.get("forma_pagamento") or forma_pagamento
         comp = _competencia_from_date(vencimento)
 
-        conn.execute("""
+        _execute(conn, """
             INSERT INTO financeiro_lancamentos (
                 paciente_id, plano_id, origem, referencia_tipo, referencia_id,
                 tipo, categoria, descricao, valor, status,
@@ -336,71 +499,30 @@ def _gerar_lancamentos_do_plano(
         ))
 
 
-def _contar_atendimentos_vinculados(conn: sqlite3.Connection, plano_id: int) -> int:
-    """
-    Conta quantos atendimentos realmente consomem sessão deste combo/plano.
-    Fonte da verdade = tabela atendimentos.
-    """
+def _contar_atendimentos_vinculados(conn, plano_id: int) -> int:
     if not _table_exists(conn, "atendimentos"):
         return 0
 
-    row = conn.execute("""
+    row = _execute(conn, """
         SELECT COUNT(*) AS total
         FROM atendimentos
         WHERE combo_plano_id = ?
           AND COALESCE(contabiliza_sessao, 1) = 1
     """, (plano_id,)).fetchone()
 
+    row = _dict_row(row)
     return _to_int(row["total"] if row else 0, 0)
 
 
-def _recalcular_saldo_sessoes(conn: sqlite3.Connection, plano_id: int):
-    """
-    Recalcula sessões usadas e restantes com base nos atendimentos vinculados.
-    """
-    row = conn.execute("""
+def _recalcular_saldo_sessoes(conn, plano_id: int):
+    row = _execute(conn, """
         SELECT id, sessoes_contratadas, status
         FROM financeiro_paciente_planos
         WHERE id = ?
         LIMIT 1
     """, (plano_id,)).fetchone()
 
-    if not row:
-        return
-
-    contratadas = _to_int(row["sessoes_contratadas"], 0)
-    usadas = _contar_atendimentos_vinculados(conn, plano_id)
-
-    restantes = max(0, contratadas - usadas)
-
-    novo_status = row["status"] or "ativo"
-    if contratadas > 0 and restantes <= 0:
-        novo_status = "encerrado"
-    elif novo_status == "encerrado" and restantes > 0:
-        novo_status = "ativo"
-
-    conn.execute("""
-        UPDATE financeiro_paciente_planos
-        SET
-            sessoes_usadas = ?,
-            atualizado_em = ?,
-            status = ?
-        WHERE id = ?
-    """, (
-        usadas,
-        _now_iso(),
-        novo_status,
-        plano_id
-    ))
-
-def _recalcular_saldo_sessoes(conn: sqlite3.Connection, plano_id: int):
-    row = conn.execute("""
-        SELECT id, sessoes_contratadas, status
-        FROM financeiro_paciente_planos
-        WHERE id = ?
-        LIMIT 1
-    """, (plano_id,)).fetchone()
-
+    row = _dict_row(row)
     if not row:
         return
 
@@ -416,7 +538,7 @@ def _recalcular_saldo_sessoes(conn: sqlite3.Connection, plano_id: int):
     elif novo_status == "encerrado" and usadas < contratadas:
         novo_status = "ativo"
 
-    conn.execute("""
+    _execute(conn, """
         UPDATE financeiro_paciente_planos
         SET sessoes_usadas = ?, status = ?, atualizado_em = ?
         WHERE id = ?
@@ -447,15 +569,12 @@ def _faixa_consumo(contratadas: int, usadas: int) -> dict[str, Any]:
         "percentual_usado": percentual,
     }
 
-def _buscar_datas_agendamento_do_paciente(conn: sqlite3.Connection, paciente_nome: str) -> dict[str, Any]:
-    if not paciente_nome or not _table_exists(conn, "agendamentos"):
-        return {
-            "datas_resumo": "",
-            "dia_semana": "",
-            "indeterminado": False,
-        }
 
-    rows = conn.execute("""
+def _buscar_datas_agendamento_do_paciente(conn, paciente_nome: str) -> dict[str, Any]:
+    if not paciente_nome or not _table_exists(conn, "agendamentos"):
+        return {"datas_resumo": "", "dia_semana": "", "indeterminado": False}
+
+    rows = _execute(conn, """
         SELECT
             COALESCE(inicio, '') AS inicio,
             COALESCE(fim, '') AS fim,
@@ -468,19 +587,17 @@ def _buscar_datas_agendamento_do_paciente(conn: sqlite3.Connection, paciente_nom
         ORDER BY inicio
     """, (paciente_nome,)).fetchall()
 
+    rows = _rows_to_dict(rows)
+
     if not rows:
-        return {
-            "datas_resumo": "",
-            "dia_semana": "",
-            "indeterminado": False,
-        }
+        return {"datas_resumo": "", "dia_semana": "", "indeterminado": False}
 
     dias = []
     datas = []
 
     for r in rows:
-        dia = (r["dia"] or "").strip()
-        inicio = (r["inicio"] or "").strip()
+        dia = (r.get("dia") or "").strip()
+        inicio = (r.get("inicio") or "").strip()
 
         if dia and dia not in dias:
             dias.append(dia)
@@ -504,24 +621,16 @@ def _buscar_datas_agendamento_do_paciente(conn: sqlite3.Connection, paciente_nom
     }
 
 
-def _montar_resumo_datas(item: sqlite3.Row | dict[str, Any], agenda_info: dict[str, Any]) -> dict[str, Any]:
-    data_inicio = (item["data_inicio"] or "").strip() if item["data_inicio"] is not None else ""
-    data_fim = (item["data_fim"] or "").strip() if item["data_fim"] is not None else ""
-    frequencia = (item["frequencia"] or "").strip() if item["frequencia"] is not None else ""
+def _montar_resumo_datas(item: dict[str, Any], agenda_info: dict[str, Any]) -> dict[str, Any]:
+    data_inicio = (item.get("data_inicio") or "").strip()
+    data_fim = (item.get("data_fim") or "").strip()
+    frequencia = (item.get("frequencia") or "").strip()
 
     if data_inicio and data_fim:
-        return {
-            "datas_resumo": f"{data_inicio} até {data_fim}",
-            "dia_semana": "",
-            "indeterminado": False,
-        }
+        return {"datas_resumo": f"{data_inicio} até {data_fim}", "dia_semana": "", "indeterminado": False}
 
     if data_inicio and not data_fim:
-        return {
-            "datas_resumo": f"Início: {data_inicio}",
-            "dia_semana": "",
-            "indeterminado": False,
-        }
+        return {"datas_resumo": f"Início: {data_inicio}", "dia_semana": "", "indeterminado": False}
 
     if agenda_info.get("datas_resumo"):
         return {
@@ -538,20 +647,12 @@ def _montar_resumo_datas(item: sqlite3.Row | dict[str, Any], agenda_info: dict[s
         }
 
     if frequencia:
-        return {
-            "datas_resumo": "",
-            "dia_semana": frequencia,
-            "indeterminado": True,
-        }
+        return {"datas_resumo": "", "dia_semana": frequencia, "indeterminado": True}
 
-    return {
-        "datas_resumo": "",
-        "dia_semana": "",
-        "indeterminado": False,
-    }
+    return {"datas_resumo": "", "dia_semana": "", "indeterminado": False}
 
 
-def _vinculo_ativo_existente(conn: sqlite3.Connection, paciente_id: int, ignore_id: int | None = None):
+def _vinculo_ativo_existente(conn, paciente_id: int, ignore_id: int | None = None):
     sql = """
         SELECT *
         FROM financeiro_paciente_planos
@@ -565,15 +666,13 @@ def _vinculo_ativo_existente(conn: sqlite3.Connection, paciente_id: int, ignore_
         params.append(ignore_id)
 
     sql += " ORDER BY id DESC LIMIT 1"
-    return conn.execute(sql, params).fetchone()
+    return _execute(conn, sql, params).fetchone()
 
 
-def _enriquecer_plano_item(conn: sqlite3.Connection, item: dict[str, Any]) -> dict[str, Any]:
+def _enriquecer_plano_item(conn, item: dict[str, Any]) -> dict[str, Any]:
     plano_id = _to_int(item.get("id"), 0)
     contratadas = _to_int(item.get("sessoes_contratadas"), 0)
 
-    # ATENÇÃO:
-    # usadas vem SEMPRE da tabela atendimentos
     usadas_calc = _contar_atendimentos_vinculados(conn, plano_id)
 
     item["sessoes_usadas"] = usadas_calc
@@ -591,6 +690,7 @@ def _enriquecer_plano_item(conn: sqlite3.Connection, item: dict[str, Any]) -> di
     item["indeterminado"] = resumo["indeterminado"]
 
     return item
+
 
 # ============================================================
 # PÁGINAS
@@ -641,18 +741,19 @@ def api_buscar_pacientes():
 
         if q:
             q_digits = _normalize_digits(q)
-            sql += """
+            like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            sql += f"""
                 WHERE
-                    COALESCE(nome, '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(cns, ''), '.', ''), '-', ''), ' ', '') LIKE ?
+                    COALESCE(nome, '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(cns, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
             """
             params.extend([f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"])
 
         sql += " ORDER BY COALESCE(nome, '') LIMIT ?"
         params.append(limit)
 
-        rows = conn.execute(sql, params).fetchall()
+        rows = _execute(conn, sql, params).fetchall()
         return _ok(items=_rows_to_dict(rows))
     except Exception as e:
         return _fail(f"Erro ao buscar pacientes: {e}", 500)
@@ -697,17 +798,18 @@ def api_pacientes_sem_vinculo():
 
         if q:
             q_digits = _normalize_digits(q)
-            sql += """
+            like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            sql += f"""
                 AND (
-                    COALESCE(p.nome, '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(p.cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(p.cns, ''), '.', ''), '-', ''), ' ', '') LIKE ?
+                    COALESCE(p.nome, '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(p.cpf, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(p.cns, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
                 )
             """
             params.extend([f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"])
 
         sql += " ORDER BY COALESCE(p.nome, '')"
-        rows = conn.execute(sql, params).fetchall()
+        rows = _execute(conn, sql, params).fetchall()
 
         return _ok(items=_rows_to_dict(rows))
     except Exception as e:
@@ -736,7 +838,8 @@ def api_listar_combos():
         params: list[Any] = []
 
         if q:
-            sql += " AND (nome LIKE ? OR COALESCE(descricao, '') LIKE ?)"
+            like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            sql += f" AND (nome {like_op} ? OR COALESCE(descricao, '') {like_op} ?)"
             params.extend([f"%{q}%", f"%{q}%"])
 
         if ativo in ("0", "1"):
@@ -745,7 +848,7 @@ def api_listar_combos():
 
         sql += " ORDER BY ativo DESC, nome ASC"
 
-        rows = conn.execute(sql, params).fetchall()
+        rows = _execute(conn, sql, params).fetchall()
         return _ok(items=_rows_to_dict(rows))
     except Exception as e:
         return _fail(f"Erro ao listar combos: {e}", 500)
@@ -772,16 +875,24 @@ def api_criar_combo():
 
     conn = _conn()
     try:
-        cur = conn.execute("""
+        cur = _execute(conn, """
+            INSERT INTO financeiro_combos (
+                nome, descricao, sessoes, preco, ativo, criado_em, atualizado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+        """ if _is_postgres_conn(conn) else """
             INSERT INTO financeiro_combos (
                 nome, descricao, sessoes, preco, ativo, criado_em, atualizado_em
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (nome, descricao, sessoes, preco, ativo, _now_iso(), _now_iso()))
+
+        combo_id = cur.fetchone()["id"] if _is_postgres_conn(conn) else cur.lastrowid
         conn.commit()
 
-        row = conn.execute("SELECT * FROM financeiro_combos WHERE id = ?", (cur.lastrowid,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_combos WHERE id = ?", (combo_id,)).fetchone()
         return _ok(item=_dict_row(row), mensagem="Combo cadastrado com sucesso.")
     except Exception as e:
+        conn.rollback()
         return _fail(f"Erro ao cadastrar combo: {e}", 500)
     finally:
         conn.close()
@@ -806,20 +917,21 @@ def api_editar_combo(combo_id: int):
 
     conn = _conn()
     try:
-        exists = conn.execute("SELECT id FROM financeiro_combos WHERE id = ?", (combo_id,)).fetchone()
+        exists = _execute(conn, "SELECT id FROM financeiro_combos WHERE id = ?", (combo_id,)).fetchone()
         if not exists:
             return _fail("Combo não encontrado.", 404)
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_combos
             SET nome = ?, descricao = ?, sessoes = ?, preco = ?, ativo = ?, atualizado_em = ?
             WHERE id = ?
         """, (nome, descricao, sessoes, preco, ativo, _now_iso(), combo_id))
         conn.commit()
 
-        row = conn.execute("SELECT * FROM financeiro_combos WHERE id = ?", (combo_id,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_combos WHERE id = ?", (combo_id,)).fetchone()
         return _ok(item=_dict_row(row), mensagem="Combo atualizado com sucesso.")
     except Exception as e:
+        conn.rollback()
         return _fail(f"Erro ao atualizar combo: {e}", 500)
     finally:
         conn.close()
@@ -829,19 +941,21 @@ def api_editar_combo(combo_id: int):
 def api_excluir_combo(combo_id: int):
     conn = _conn()
     try:
-        uso = conn.execute("""
+        uso = _execute(conn, """
             SELECT COUNT(*) AS total
             FROM financeiro_paciente_planos
             WHERE combo_id = ?
         """, (combo_id,)).fetchone()
+        uso = _dict_row(uso)
 
         if uso and int(uso["total"]) > 0:
             return _fail("Este combo já está vinculado a paciente(s). Edite ou inative em vez de excluir.", 409)
 
-        conn.execute("DELETE FROM financeiro_combos WHERE id = ?", (combo_id,))
+        _execute(conn, "DELETE FROM financeiro_combos WHERE id = ?", (combo_id,))
         conn.commit()
         return _ok(mensagem="Combo excluído com sucesso.")
     except Exception as e:
+        conn.rollback()
         return _fail(f"Erro ao excluir combo: {e}", 500)
     finally:
         conn.close()
@@ -870,13 +984,14 @@ def api_listar_pacientes_planos():
 
         if q:
             q_digits = _normalize_digits(q)
-            sql += """
+            like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            sql += f"""
                 AND (
-                    COALESCE(pp.paciente_nome, '') LIKE ?
-                    OR COALESCE(pp.combo_nome, '') LIKE ?
-                    OR COALESCE(pp.nome_plano, '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(pp.paciente_cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ?
-                    OR REPLACE(REPLACE(REPLACE(COALESCE(pp.paciente_cns, ''), '.', ''), '-', ''), ' ', '') LIKE ?
+                    COALESCE(pp.paciente_nome, '') {like_op} ?
+                    OR COALESCE(pp.combo_nome, '') {like_op} ?
+                    OR COALESCE(pp.nome_plano, '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(pp.paciente_cpf, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
+                    OR REPLACE(REPLACE(REPLACE(COALESCE(pp.paciente_cns, ''), '.', ''), '-', ''), ' ', '') {like_op} ?
                 )
             """
             params.extend([f"%{q}%", f"%{q}%", f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"])
@@ -895,11 +1010,11 @@ def api_listar_pacientes_planos():
 
         sql += " ORDER BY pp.criado_em DESC, pp.id DESC"
 
-        rows = conn.execute(sql, params).fetchall()
+        rows = _execute(conn, sql, params).fetchall()
 
         items: list[dict[str, Any]] = []
-        for row in rows:
-            item = _enriquecer_plano_item(conn, dict(row))
+        for row in _rows_to_dict(rows):
+            item = _enriquecer_plano_item(conn, row)
 
             if perto_de_acabar and not item.get("perto_de_acabar"):
                 continue
@@ -917,19 +1032,20 @@ def api_listar_pacientes_planos():
 def api_obter_paciente_plano(plano_id: int):
     conn = _conn()
     try:
-        row = conn.execute("""
+        row = _execute(conn, """
             SELECT pp.*
             FROM financeiro_paciente_planos pp
             WHERE pp.id = ?
             LIMIT 1
         """, (plano_id,)).fetchone()
 
+        row = _dict_row(row)
         if not row:
             return _fail("Registro não encontrado.", 404)
 
-        item = _enriquecer_plano_item(conn, dict(row))
+        item = _enriquecer_plano_item(conn, row)
 
-        lancs = conn.execute("""
+        lancs = _execute(conn, """
             SELECT *
             FROM financeiro_lancamentos
             WHERE plano_id = ?
@@ -980,6 +1096,7 @@ def api_criar_paciente_plano():
     conn = _conn()
     try:
         paciente = _buscar_paciente_por_id(conn, paciente_id)
+        paciente = _dict_row(paciente)
         if not paciente:
             return _fail("Paciente não encontrado.", 404)
 
@@ -1001,9 +1118,10 @@ def api_criar_paciente_plano():
             if not combo_id:
                 return _fail("Informe o combo a ser vinculado.")
 
-            combo = conn.execute("""
+            combo = _execute(conn, """
                 SELECT * FROM financeiro_combos WHERE id = ? LIMIT 1
             """, (combo_id,)).fetchone()
+            combo = _dict_row(combo)
 
             if not combo:
                 return _fail("Combo não encontrado.", 404)
@@ -1018,7 +1136,18 @@ def api_criar_paciente_plano():
         if tipo == "plano" and not nome_plano:
             nome_plano = "Plano do paciente"
 
-        cur = conn.execute("""
+        cur = _execute(conn, """
+            INSERT INTO financeiro_paciente_planos (
+                paciente_id, paciente_nome, paciente_cpf, paciente_cns,
+                tipo, combo_id, combo_nome, nome_plano, descricao,
+                sessoes_contratadas, sessoes_usadas, valor_total,
+                recorrente, renovacao_automatica, frequencia,
+                forma_pagamento, observacoes,
+                data_inicio, data_fim, status,
+                criado_em, atualizado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+        """ if _is_postgres_conn(conn) else """
             INSERT INTO financeiro_paciente_planos (
                 paciente_id, paciente_nome, paciente_cpf, paciente_cns,
                 tipo, combo_id, combo_nome, nome_plano, descricao,
@@ -1037,7 +1166,8 @@ def api_criar_paciente_plano():
             data_inicio, data_fim, status,
             _now_iso(), _now_iso()
         ))
-        plano_id = cur.lastrowid
+
+        plano_id = cur.fetchone()["id"] if _is_postgres_conn(conn) else cur.lastrowid
 
         nome_ref = _safe_label_nome_plano(tipo, combo_nome, nome_plano)
         desc_fin = f"{'Combo' if tipo == 'combo' else 'Plano'} · {nome_ref} · {paciente_nome}"
@@ -1057,15 +1187,15 @@ def api_criar_paciente_plano():
         _recalcular_saldo_sessoes(conn, plano_id)
         conn.commit()
 
-        row = conn.execute("""
+        row = _execute(conn, """
             SELECT pp.*
             FROM financeiro_paciente_planos pp
             WHERE pp.id = ?
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(row))
+        item = _enriquecer_plano_item(conn, _dict_row(row))
 
-        lancs = conn.execute("""
+        lancs = _execute(conn, """
             SELECT *
             FROM financeiro_lancamentos
             WHERE plano_id = ?
@@ -1090,9 +1220,10 @@ def api_editar_paciente_plano(plano_id: int):
 
     conn = _conn()
     try:
-        antigo = conn.execute("""
+        antigo = _execute(conn, """
             SELECT * FROM financeiro_paciente_planos WHERE id = ? LIMIT 1
         """, (plano_id,)).fetchone()
+        antigo = _dict_row(antigo)
 
         if not antigo:
             return _fail("Registro não encontrado.", 404)
@@ -1130,9 +1261,11 @@ def api_editar_paciente_plano(plano_id: int):
         if tipo == "combo":
             if not combo_id:
                 return _fail("Informe o combo.")
-            combo = conn.execute("""
+            combo = _execute(conn, """
                 SELECT * FROM financeiro_combos WHERE id = ? LIMIT 1
             """, (combo_id,)).fetchone()
+            combo = _dict_row(combo)
+
             if not combo:
                 return _fail("Combo não encontrado.", 404)
             combo_nome = combo["nome"]
@@ -1140,7 +1273,7 @@ def api_editar_paciente_plano(plano_id: int):
         if tipo == "plano" and not nome_plano:
             nome_plano = "Plano do paciente"
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_paciente_planos
             SET
                 tipo = ?,
@@ -1186,12 +1319,18 @@ def api_editar_paciente_plano(plano_id: int):
         nome_ref = _safe_label_nome_plano(tipo, combo_nome, nome_plano)
         descricao_base = f"{'Combo' if tipo == 'combo' else 'Plano'} · {nome_ref} · {paciente_nome}"
 
-        conn.execute("""
+        concat_parcela = (
+            "? || ' · Parcela ' || COALESCE(parcela_numero, 1)::text || '/' || COALESCE(parcelas_total, 1)::text"
+            if _is_postgres_conn(conn)
+            else "? || ' · Parcela ' || COALESCE(parcela_numero, 1) || '/' || COALESCE(parcelas_total, 1)"
+        )
+
+        _execute(conn, f"""
             UPDATE financeiro_lancamentos
             SET
                 descricao = CASE
                     WHEN referencia_tipo = 'parcela' AND COALESCE(parcelas_total, 1) > 1
-                    THEN ? || ' · Parcela ' || COALESCE(parcela_numero, 1) || '/' || COALESCE(parcelas_total, 1)
+                    THEN {concat_parcela}
                     ELSE ?
                 END,
                 forma_pagamento = COALESCE(NULLIF(?, ''), forma_pagamento),
@@ -1208,14 +1347,14 @@ def api_editar_paciente_plano(plano_id: int):
 
         conn.commit()
 
-        row = conn.execute("""
+        row = _execute(conn, """
             SELECT pp.*
             FROM financeiro_paciente_planos pp
             WHERE pp.id = ?
             LIMIT 1
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(row))
+        item = _enriquecer_plano_item(conn, _dict_row(row))
         return _ok(item=item, mensagem="Registro atualizado com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1228,7 +1367,7 @@ def api_editar_paciente_plano(plano_id: int):
 def api_desvincular_atendimentos(plano_id: int):
     conn = _conn()
     try:
-        exists = conn.execute("""
+        exists = _execute(conn, """
             SELECT id FROM financeiro_paciente_planos WHERE id = ?
         """, (plano_id,)).fetchone()
 
@@ -1238,7 +1377,7 @@ def api_desvincular_atendimentos(plano_id: int):
         if not _table_exists(conn, "atendimentos"):
             return _fail("Tabela de atendimentos não encontrada no banco.", 404)
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE atendimentos
             SET combo_plano_id = NULL,
                 contabiliza_sessao = 0
@@ -1248,13 +1387,13 @@ def api_desvincular_atendimentos(plano_id: int):
         _recalcular_saldo_sessoes(conn, plano_id)
         conn.commit()
 
-        row = conn.execute("""
+        row = _execute(conn, """
             SELECT *
             FROM financeiro_paciente_planos
             WHERE id = ?
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(row))
+        item = _enriquecer_plano_item(conn, _dict_row(row))
         return _ok(item=item, mensagem="Atendimentos desvinculados com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1267,16 +1406,17 @@ def api_desvincular_atendimentos(plano_id: int):
 def api_excluir_paciente_plano(plano_id: int):
     conn = _conn()
     try:
-        exists = conn.execute("SELECT id FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
+        exists = _execute(conn, "SELECT id FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
         if not exists:
             return _fail("Registro não encontrado.", 404)
 
         if _table_exists(conn, "atendimentos"):
-            vinculados = conn.execute("""
+            vinculados = _execute(conn, """
                 SELECT COUNT(*) AS total
                 FROM atendimentos
                 WHERE combo_plano_id = ?
             """, (plano_id,)).fetchone()
+            vinculados = _dict_row(vinculados)
 
             if vinculados and _to_int(vinculados["total"], 0) > 0:
                 return _fail(
@@ -1284,8 +1424,8 @@ def api_excluir_paciente_plano(plano_id: int):
                     409
                 )
 
-        conn.execute("DELETE FROM financeiro_lancamentos WHERE plano_id = ?", (plano_id,))
-        conn.execute("DELETE FROM financeiro_paciente_planos WHERE id = ?", (plano_id,))
+        _execute(conn, "DELETE FROM financeiro_lancamentos WHERE plano_id = ?", (plano_id,))
+        _execute(conn, "DELETE FROM financeiro_paciente_planos WHERE id = ?", (plano_id,))
         conn.commit()
 
         return _ok(mensagem="Plano/combo removido com sucesso.")
@@ -1307,12 +1447,13 @@ def api_vincular_atendimentos(plano_id: int):
 
     conn = _conn()
     try:
-        plano = conn.execute("""
+        plano = _execute(conn, """
             SELECT *
             FROM financeiro_paciente_planos
             WHERE id = ?
             LIMIT 1
         """, (plano_id,)).fetchone()
+        plano = _dict_row(plano)
 
         if not plano:
             return _fail("Registro não encontrado.", 404)
@@ -1340,18 +1481,18 @@ def api_vincular_atendimentos(plano_id: int):
         if somente_sem_vinculo:
             sql += " AND combo_plano_id IS NULL"
 
-        cur = conn.execute(sql, params)
+        cur = _execute(conn, sql, params)
 
         _recalcular_saldo_sessoes(conn, plano_id)
         conn.commit()
 
-        row = conn.execute("""
+        row = _execute(conn, """
             SELECT *
             FROM financeiro_paciente_planos
             WHERE id = ?
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(row))
+        item = _enriquecer_plano_item(conn, _dict_row(row))
         return _ok(
             item=item,
             vinculados=cur.rowcount,
@@ -1388,7 +1529,8 @@ def api_listar_lancamentos():
         params: list[Any] = []
 
         if q:
-            sql += " AND (descricao LIKE ? OR COALESCE(observacoes, '') LIKE ?)"
+            like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            sql += f" AND (descricao {like_op} ? OR COALESCE(observacoes, '') {like_op} ?)"
             params.extend([f"%{q}%", f"%{q}%"])
 
         if tipo:
@@ -1417,7 +1559,7 @@ def api_listar_lancamentos():
 
         sql += " ORDER BY COALESCE(data_pagamento, vencimento, criado_em) DESC, id DESC"
 
-        rows = conn.execute(sql, params).fetchall()
+        rows = _execute(conn, sql, params).fetchall()
         return _ok(items=_rows_to_dict(rows))
     except Exception as e:
         return _fail(f"Erro ao listar lançamentos: {e}", 500)
@@ -1450,7 +1592,17 @@ def api_criar_lancamento():
 
     conn = _conn()
     try:
-        cur = conn.execute("""
+        cur = _execute(conn, """
+            INSERT INTO financeiro_lancamentos (
+                paciente_id, plano_id,
+                origem, referencia_tipo, referencia_id,
+                tipo, categoria, descricao, valor,
+                status, forma_pagamento,
+                vencimento, data_pagamento, competencia,
+                observacoes, criado_em, atualizado_em
+            ) VALUES (?, NULL, 'manual', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+        """ if _is_postgres_conn(conn) else """
             INSERT INTO financeiro_lancamentos (
                 paciente_id, plano_id,
                 origem, referencia_tipo, referencia_id,
@@ -1475,11 +1627,14 @@ def api_criar_lancamento():
             _now_iso(),
             _now_iso()
         ))
+
+        lanc_id = cur.fetchone()["id"] if _is_postgres_conn(conn) else cur.lastrowid
         conn.commit()
 
-        row = conn.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (cur.lastrowid,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
         return _ok(item=_dict_row(row), mensagem="Lançamento cadastrado com sucesso.")
     except Exception as e:
+        conn.rollback()
         return _fail(f"Erro ao cadastrar lançamento: {e}", 500)
     finally:
         conn.close()
@@ -1491,7 +1646,8 @@ def api_editar_lancamento(lanc_id: int):
 
     conn = _conn()
     try:
-        antigo = conn.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        antigo = _execute(conn, "SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        antigo = _dict_row(antigo)
         if not antigo:
             return _fail("Lançamento não encontrado.", 404)
 
@@ -1513,7 +1669,7 @@ def api_editar_lancamento(lanc_id: int):
         if valor <= 0:
             return _fail("Informe um valor válido.")
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_lancamentos
             SET
                 tipo = ?,
@@ -1544,7 +1700,7 @@ def api_editar_lancamento(lanc_id: int):
         ))
         conn.commit()
 
-        row = conn.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
         return _ok(item=_dict_row(row), mensagem="Lançamento atualizado com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1557,11 +1713,11 @@ def api_editar_lancamento(lanc_id: int):
 def api_excluir_lancamento(lanc_id: int):
     conn = _conn()
     try:
-        exists = conn.execute("SELECT id FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        exists = _execute(conn, "SELECT id FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
         if not exists:
             return _fail("Lançamento não encontrado.", 404)
 
-        conn.execute("DELETE FROM financeiro_lancamentos WHERE id = ?", (lanc_id,))
+        _execute(conn, "DELETE FROM financeiro_lancamentos WHERE id = ?", (lanc_id,))
         conn.commit()
         return _ok(mensagem="Lançamento removido com sucesso.")
     except Exception as e:
@@ -1585,7 +1741,8 @@ def api_baixar_lancamento(lanc_id: int):
 
     conn = _conn()
     try:
-        row = conn.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        row = _dict_row(row)
         if not row:
             return _fail("Lançamento não encontrado.", 404)
 
@@ -1593,7 +1750,7 @@ def api_baixar_lancamento(lanc_id: int):
         valor_pago_num = _to_float(valor_pago, valor_original)
         status = "pago" if valor_pago_num >= valor_original else "parcial"
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_lancamentos
             SET
                 status = ?,
@@ -1604,7 +1761,7 @@ def api_baixar_lancamento(lanc_id: int):
         """, (status, data_pagamento, forma_pagamento, _now_iso(), lanc_id))
         conn.commit()
 
-        novo = conn.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
+        novo = _execute(conn, "SELECT * FROM financeiro_lancamentos WHERE id = ?", (lanc_id,)).fetchone()
         return _ok(item=_dict_row(novo), mensagem="Lançamento baixado com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1624,7 +1781,8 @@ def api_consumir_sessao(plano_id: int):
 
     conn = _conn()
     try:
-        row = conn.execute("SELECT * FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
+        row = _dict_row(row)
         if not row:
             return _fail("Plano não encontrado.", 404)
 
@@ -1635,14 +1793,14 @@ def api_consumir_sessao(plano_id: int):
         if contratadas > 0 and novas_usadas > contratadas:
             return _fail("Não há sessões suficientes restantes para este consumo.", 409)
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_paciente_planos
             SET sessoes_usadas = ?, atualizado_em = ?
             WHERE id = ?
         """, (novas_usadas, _now_iso(), plano_id))
 
         if contratadas > 0 and novas_usadas >= contratadas:
-            conn.execute("""
+            _execute(conn, """
                 UPDATE financeiro_paciente_planos
                 SET status = 'encerrado', atualizado_em = ?
                 WHERE id = ?
@@ -1650,13 +1808,13 @@ def api_consumir_sessao(plano_id: int):
 
         conn.commit()
 
-        atualizado = conn.execute("""
+        atualizado = _execute(conn, """
             SELECT *
             FROM financeiro_paciente_planos
             WHERE id = ?
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(atualizado))
+        item = _enriquecer_plano_item(conn, _dict_row(atualizado))
         return _ok(item=item, mensagem="Sessão consumida com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1672,7 +1830,8 @@ def api_estornar_sessao(plano_id: int):
 
     conn = _conn()
     try:
-        row = conn.execute("SELECT * FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
+        row = _execute(conn, "SELECT * FROM financeiro_paciente_planos WHERE id = ?", (plano_id,)).fetchone()
+        row = _dict_row(row)
         if not row:
             return _fail("Plano não encontrado.", 404)
 
@@ -1682,20 +1841,20 @@ def api_estornar_sessao(plano_id: int):
         if status == "encerrado":
             status = "ativo"
 
-        conn.execute("""
+        _execute(conn, """
             UPDATE financeiro_paciente_planos
             SET sessoes_usadas = ?, status = ?, atualizado_em = ?
             WHERE id = ?
         """, (usadas, status, _now_iso(), plano_id))
         conn.commit()
 
-        atualizado = conn.execute("""
+        atualizado = _execute(conn, """
             SELECT *
             FROM financeiro_paciente_planos
             WHERE id = ?
         """, (plano_id,)).fetchone()
 
-        item = _enriquecer_plano_item(conn, dict(atualizado))
+        item = _enriquecer_plano_item(conn, _dict_row(atualizado))
         return _ok(item=item, mensagem="Sessão estornada com sucesso.")
     except Exception as e:
         conn.rollback()
@@ -1733,7 +1892,7 @@ def api_resumo_financeiro():
 
         where_sql = " AND ".join(where)
 
-        resumo = conn.execute(f"""
+        resumo = _execute(conn, f"""
             SELECT
                 SUM(CASE WHEN tipo = 'entrada' AND status = 'pago' THEN valor ELSE 0 END) AS entradas_pagas,
                 SUM(CASE WHEN tipo = 'saida'   AND status = 'pago' THEN valor ELSE 0 END) AS saidas_pagas,
@@ -1744,34 +1903,37 @@ def api_resumo_financeiro():
             FROM financeiro_lancamentos
             WHERE {where_sql}
         """, params).fetchone()
+        resumo = _dict_row(resumo) or {}
 
-        combos_ativos = conn.execute("""
+        combos_ativos = _execute(conn, """
             SELECT COUNT(*) AS total
             FROM financeiro_paciente_planos
             WHERE tipo = 'combo' AND status = 'ativo'
         """).fetchone()
+        combos_ativos = _dict_row(combos_ativos) or {}
 
-        planos_ativos = conn.execute("""
+        planos_ativos = _execute(conn, """
             SELECT COUNT(*) AS total
             FROM financeiro_paciente_planos
             WHERE tipo = 'plano' AND status = 'ativo'
         """).fetchone()
+        planos_ativos = _dict_row(planos_ativos) or {}
 
-        saldo_pago = _to_float(resumo["entradas_pagas"], 0) - _to_float(resumo["saidas_pagas"], 0)
-        saldo_projetado = _to_float(resumo["entradas_total"], 0) - _to_float(resumo["saidas_total"], 0)
+        saldo_pago = _to_float(resumo.get("entradas_pagas"), 0) - _to_float(resumo.get("saidas_pagas"), 0)
+        saldo_projetado = _to_float(resumo.get("entradas_total"), 0) - _to_float(resumo.get("saidas_total"), 0)
 
         return _ok(
             resumo={
-                "entradas_pagas": _to_float(resumo["entradas_pagas"], 0),
-                "saidas_pagas": _to_float(resumo["saidas_pagas"], 0),
-                "entradas_pendentes": _to_float(resumo["entradas_pendentes"], 0),
-                "saidas_pendentes": _to_float(resumo["saidas_pendentes"], 0),
-                "entradas_total": _to_float(resumo["entradas_total"], 0),
-                "saidas_total": _to_float(resumo["saidas_total"], 0),
+                "entradas_pagas": _to_float(resumo.get("entradas_pagas"), 0),
+                "saidas_pagas": _to_float(resumo.get("saidas_pagas"), 0),
+                "entradas_pendentes": _to_float(resumo.get("entradas_pendentes"), 0),
+                "saidas_pendentes": _to_float(resumo.get("saidas_pendentes"), 0),
+                "entradas_total": _to_float(resumo.get("entradas_total"), 0),
+                "saidas_total": _to_float(resumo.get("saidas_total"), 0),
                 "saldo_pago": saldo_pago,
                 "saldo_projetado": saldo_projetado,
-                "combos_ativos": _to_int(combos_ativos["total"], 0),
-                "planos_ativos": _to_int(planos_ativos["total"], 0),
+                "combos_ativos": _to_int(combos_ativos.get("total"), 0),
+                "planos_ativos": _to_int(planos_ativos.get("total"), 0),
             }
         )
     except Exception as e:
@@ -1805,7 +1967,7 @@ def api_fechamento_financeiro():
 
         where_sql = " AND ".join(where)
 
-        por_categoria = conn.execute(f"""
+        por_categoria = _execute(conn, f"""
             SELECT
                 COALESCE(categoria, 'sem_categoria') AS categoria,
                 tipo,
@@ -1818,14 +1980,20 @@ def api_fechamento_financeiro():
             ORDER BY categoria, tipo, status
         """, params).fetchall()
 
-        por_dia = conn.execute(f"""
+        substr_expr = (
+            "SUBSTRING(COALESCE(data_pagamento, vencimento, criado_em::text) FROM 1 FOR 10)"
+            if _is_postgres_conn(conn)
+            else "SUBSTR(COALESCE(data_pagamento, vencimento, criado_em), 1, 10)"
+        )
+
+        por_dia = _execute(conn, f"""
             SELECT
-                SUBSTR(COALESCE(data_pagamento, vencimento, criado_em), 1, 10) AS dia,
+                {substr_expr} AS dia,
                 SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END) AS entradas,
                 SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END) AS saidas
             FROM financeiro_lancamentos
             WHERE {where_sql}
-            GROUP BY SUBSTR(COALESCE(data_pagamento, vencimento, criado_em), 1, 10)
+            GROUP BY {substr_expr}
             ORDER BY dia ASC
         """, params).fetchall()
 

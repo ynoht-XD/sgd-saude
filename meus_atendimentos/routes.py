@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import sqlite3
+import re
 from datetime import date, datetime
 from typing import Any, List, Optional
 
@@ -11,128 +11,61 @@ from db import conectar_db
 
 
 # ============================================================
-# SCHEMA · ATENDIMENTOS (CRÍTICO NO RENDER)
+# HELPERS · POSTGRES
 # ============================================================
+
+def _only_digits(v: str | None) -> str:
+    return re.sub(r"\D+", "", v or "")
+
 
 def has_table(conn, table_name: str) -> bool:
     cur = conn.cursor()
-    cur.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-        (table_name,),
-    )
-    return cur.fetchone() is not None
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.tables
+             WHERE table_schema = 'public'
+               AND table_name = %s
+        )
+    """, (table_name,))
+    return bool(cur.fetchone()[0])
+
+
+def has_column(conn, table_name: str, column_name: str) -> bool:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = %s
+               AND column_name = %s
+        )
+    """, (table_name, column_name))
+    return bool(cur.fetchone()[0])
 
 
 def _table_columns(conn, table: str) -> set[str]:
     cur = conn.cursor()
-    cur.execute(f"PRAGMA table_info({table})")
-    return {r[1] for r in cur.fetchall()}
+    cur.execute("""
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = %s
+    """, (table,))
+    return {r[0] for r in cur.fetchall() or []}
 
 
-def ensure_column(conn: sqlite3.Connection, table: str, col: str, ddl_type: str):
-    """
-    Adiciona coluna se não existir. Idempotente.
-    """
+def ensure_column(conn, table: str, col: str, ddl_type: str):
     if not has_table(conn, table):
         return
-    cols = _table_columns(conn, table)
-    if col in cols:
+
+    if has_column(conn, table, col):
         return
+
     cur = conn.cursor()
     cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_type}")
     conn.commit()
-
-
-def ensure_atendimentos_schema(conn: sqlite3.Connection):
-    """
-    Garante tabelas mínimas para o módulo 'Meus atendimentos' não quebrar no Render.
-    Se tu já tiver schema mais completo em outro lugar, isso aqui não atrapalha:
-    - CREATE IF NOT EXISTS
-    - ALTER TABLE só adiciona o que faltar
-    """
-    cur = conn.cursor()
-
-    # Tabela principal (mínimo pra listagem funcionar)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS atendimentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-            -- profissional (quem atendeu)
-            profissional_id INTEGER,
-            usuario_id INTEGER,
-
-            -- paciente
-            paciente_id INTEGER,
-            cidadao_id INTEGER,
-            paciente_nome TEXT,
-            nome_paciente TEXT,
-            paciente TEXT,
-            nome TEXT,
-
-            -- data
-            data_atendimento TEXT,
-            data TEXT,
-            dt_atendimento TEXT,
-            criado_em TEXT,
-            created_at TEXT,
-
-            -- conteúdo
-            evolucao TEXT,
-            evolucao_texto TEXT,
-
-            -- extras úteis pra filtros (se existir)
-            cidade TEXT,
-            municipio TEXT,
-            cid TEXT,
-            cid_codigo TEXT
-        )
-    """)
-
-    # Procedimentos (opcional, mas tua query já tenta juntar)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atendimento_id INTEGER NOT NULL,
-            procedimento TEXT,
-            procedimento_nome TEXT,
-            descricao TEXT,
-            FOREIGN KEY(atendimento_id) REFERENCES atendimentos(id)
-        )
-    """)
-
-    # índices (não dói e ajuda)
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_ap_atend ON atendimento_procedimentos (atendimento_id)")
-
-    conn.commit()
-
-    # Se tua base veio de outro ambiente com colunas faltando, garante o mínimo:
-    ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
-    ensure_column(conn, "atendimentos", "usuario_id", "INTEGER")
-    ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
-    ensure_column(conn, "atendimentos", "cidadao_id", "INTEGER")
-    ensure_column(conn, "atendimentos", "data_atendimento", "TEXT")
-    ensure_column(conn, "atendimentos", "criado_em", "TEXT")
-    ensure_column(conn, "atendimentos", "evolucao", "TEXT")
-    ensure_column(conn, "atendimentos", "cidade", "TEXT")
-    ensure_column(conn, "atendimentos", "municipio", "TEXT")
-    ensure_column(conn, "atendimentos", "cid", "TEXT")
-
-
-# ============================================================
-# HELPERS DE INTROSPECÇÃO
-# ============================================================
-
-def has_column(conn, table_name: str, column_name: str) -> bool:
-    cur = conn.cursor()
-    try:
-        cur.execute(f"PRAGMA table_info({table_name})")
-        cols = [r[1] for r in cur.fetchall()]
-        return column_name in cols
-    except Exception:
-        return False
 
 
 def _first_existing(cols: set[str], opts: list[str]) -> str | None:
@@ -152,17 +85,17 @@ def _month_start_iso(d: date | None = None) -> str:
 
 
 def _norm_date_iso(s: str) -> Optional[str]:
-    """Aceita YYYY-MM-DD ou DD/MM/YYYY e retorna YYYY-MM-DD."""
     if not s:
         return None
-    s = s.strip()
+
+    s = str(s).strip()
     if not s:
         return None
 
     try:
-        if len(s) == 10 and s[4] == "-" and s[7] == "-":
-            datetime.strptime(s, "%Y-%m-%d")
-            return s
+        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+            datetime.strptime(s[:10], "%Y-%m-%d")
+            return s[:10]
     except Exception:
         pass
 
@@ -181,19 +114,129 @@ def _int_or_none(s: str) -> Optional[int]:
         if s is None:
             return None
         s = str(s).strip()
-        if s == "":
+        if not s:
             return None
         return int(s)
     except Exception:
         return None
 
 
+def _row_to_dict(cur, row) -> dict:
+    cols = [d[0] for d in cur.description]
+    return {cols[i]: row[i] for i in range(len(cols))}
+
+
+def _date_expr(col_sql: str) -> str:
+    return f"""
+    (
+      CASE
+        WHEN {col_sql} IS NULL THEN NULL
+        WHEN {col_sql}::text ~ '^\\d{{4}}-\\d{{2}}-\\d{{2}}' THEN ({col_sql})::date
+        WHEN {col_sql}::text ~ '^\\d{{2}}/\\d{{2}}/\\d{{4}}' THEN TO_DATE(SUBSTRING({col_sql}::text FROM 1 FOR 10), 'DD/MM/YYYY')
+        ELSE NULL
+      END
+    )
+    """
+
+
+def _idade_expr(nasc_sql: str) -> str:
+    return f"""
+    (
+      CASE
+        WHEN {_date_expr(nasc_sql)} IS NULL THEN NULL
+        ELSE DATE_PART('year', AGE(CURRENT_DATE, {_date_expr(nasc_sql)}))::int
+      END
+    )
+    """
+
+
 # ============================================================
-# LOGADO -> PROFISSIONAL (usuarios.id)
+# SCHEMA · POSTGRES
+# ============================================================
+
+def ensure_atendimentos_schema(conn):
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS atendimentos (
+            id SERIAL PRIMARY KEY,
+
+            profissional_id INTEGER,
+            usuario_id INTEGER,
+
+            paciente_id INTEGER,
+            cidadao_id INTEGER,
+            paciente_nome TEXT,
+            nome_paciente TEXT,
+            paciente TEXT,
+            nome TEXT,
+
+            data_atendimento DATE,
+            data TEXT,
+            dt_atendimento TEXT,
+            criado_em TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            evolucao TEXT,
+            evolucao_texto TEXT,
+
+            cidade TEXT,
+            municipio TEXT,
+            cid TEXT,
+            cid_codigo TEXT,
+
+            status TEXT,
+            justificativa TEXT,
+            cbo_profissional TEXT,
+            nome_profissional TEXT,
+            cns_profissional TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
+            id SERIAL PRIMARY KEY,
+            atendimento_id INTEGER NOT NULL REFERENCES atendimentos(id) ON DELETE CASCADE,
+            procedimento TEXT,
+            procedimento_nome TEXT,
+            descricao TEXT,
+            codigo_sigtap TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.commit()
+
+    # Migração leve para bancos que já tinham a tabela.
+    ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "usuario_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "cidadao_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "data_atendimento", "DATE")
+    ensure_column(conn, "atendimentos", "created_at", "TIMESTAMP")
+    ensure_column(conn, "atendimentos", "criado_em", "TIMESTAMP")
+    ensure_column(conn, "atendimentos", "evolucao", "TEXT")
+    ensure_column(conn, "atendimentos", "cidade", "TEXT")
+    ensure_column(conn, "atendimentos", "municipio", "TEXT")
+    ensure_column(conn, "atendimentos", "cid", "TEXT")
+    ensure_column(conn, "atendimentos", "status", "TEXT")
+    ensure_column(conn, "atendimentos", "justificativa", "TEXT")
+
+    ensure_column(conn, "atendimento_procedimentos", "codigo_sigtap", "TEXT")
+
+    cur = conn.cursor()
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ap_atend ON atendimento_procedimentos (atendimento_id)")
+
+    conn.commit()
+
+# ============================================================
+# LOGADO -> PROFISSIONAL
 # ============================================================
 
 def _resolve_logged_profissional_id(conn) -> int | None:
-    # 1) tenta id direto na session
     for key in ("usuario_id", "user_id", "id"):
         val = session.get(key)
         if val is not None:
@@ -202,7 +245,13 @@ def _resolve_logged_profissional_id(conn) -> int | None:
             except (TypeError, ValueError):
                 pass
 
-    login_like = session.get("usuario_logado") or session.get("login") or session.get("username")
+    login_like = (
+        session.get("usuario_logado")
+        or session.get("login")
+        or session.get("username")
+        or session.get("email")
+    )
+
     if not login_like:
         return None
 
@@ -210,27 +259,28 @@ def _resolve_logged_profissional_id(conn) -> int | None:
         return None
 
     cols = _table_columns(conn, "usuarios")
-
-    parts = []
-    if "login" in cols: parts.append("login")
-    if "nome" in cols:  parts.append("nome")
-    if "email" in cols: parts.append("email")
+    parts = [c for c in ("login", "nome", "email") if c in cols]
 
     if not parts:
         return None
 
-    expr = "COALESCE(" + ", ".join(parts + ["''"]) + ")"
-
     cur = conn.cursor()
+
+    conds = [
+        f"TRIM(LOWER(COALESCE({c}::text, ''))) = TRIM(LOWER(%s))"
+        for c in parts
+    ]
+
     cur.execute(
         f"""
         SELECT id
           FROM usuarios
-         WHERE TRIM(LOWER({expr})) = TRIM(LOWER(?))
+         WHERE {" OR ".join(conds)}
          LIMIT 1
         """,
-        (login_like,),
+        [login_like] * len(conds),
     )
+
     row = cur.fetchone()
     return int(row[0]) if row else None
 
@@ -242,11 +292,11 @@ def _build_url_with_page(page: int) -> str:
 
 
 # ============================================================
-# QUERY PRINCIPAL (PAGINADA + COUNT)
+# QUERY PRINCIPAL
 # ============================================================
 
 def _query_meus_atendimentos_paginado(
-    conn: sqlite3.Connection,
+    conn,
     profissional_uid: int,
     q_nome: str = "",
     data_ini: Optional[str] = None,
@@ -257,14 +307,7 @@ def _query_meus_atendimentos_paginado(
     cid: str = "",
     page: int = 1,
     per_page: int = 20,
-) -> tuple[int, list[sqlite3.Row]]:
-    """
-    Retorna: (total_count, rows_paginated)
-    """
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-
-    # ✅ garante que exista (no Render pode vir vazio)
+) -> tuple[int, list[dict]]:
     ensure_atendimentos_schema(conn)
 
     a_cols = _table_columns(conn, "atendimentos")
@@ -274,35 +317,23 @@ def _query_meus_atendimentos_paginado(
     col_pac_nome = _first_existing(a_cols, ["nome", "paciente", "paciente_nome", "nome_paciente"])
     col_data = _first_existing(a_cols, ["data_atendimento", "data", "dt_atendimento", "criado_em", "created_at"])
     col_evol = _first_existing(a_cols, ["evolucao", "evolução", "evolucao_texto", "evolucao_md", "evolucao_html"])
-
-    if not col_prof:
-        raise RuntimeError("Tabela atendimentos sem coluna profissional_id/usuario_id/user_id.")
-    if not col_data:
-        raise RuntimeError("Tabela atendimentos sem coluna de data (data_atendimento/data/etc).")
-
-    paciente_expr = f"TRIM(COALESCE(a.{col_pac_nome}, ''))" if col_pac_nome else "''"
-    data_expr = f"date(a.{col_data})"
-    evol_expr = f"COALESCE(a.{col_evol}, '')" if col_evol else "''"
-
     col_a_cidade = _first_existing(a_cols, ["cidade", "municipio", "município", "cidade_nome"])
     col_a_cid = _first_existing(a_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
 
-    cidade_expr = f"TRIM(LOWER(COALESCE(a.{col_a_cidade},'')))" if col_a_cidade else "''"
-    cid_expr = f"TRIM(UPPER(COALESCE(a.{col_a_cid},'')))" if col_a_cid else "''"
+    if not col_prof:
+        raise RuntimeError("Tabela atendimentos sem coluna profissional_id/usuario_id/user_id.")
 
-    join_proc = ""
-    proc_expr = "''"
-    use_group = False
-    if has_table(conn, "atendimento_procedimentos"):
-        ap_cols = _table_columns(conn, "atendimento_procedimentos")
-        col_ap_atend = _first_existing(ap_cols, ["atendimento_id"])
-        col_ap_proc = _first_existing(ap_cols, ["procedimento", "procedimento_nome", "descricao"])
-        if col_ap_atend and col_ap_proc:
-            join_proc = " LEFT JOIN atendimento_procedimentos ap ON ap.atendimento_id = a.id "
-            proc_expr = f"COALESCE(GROUP_CONCAT(TRIM(COALESCE(ap.{col_ap_proc},'')), ' • '), '')"
-            use_group = True
+    if not col_data:
+        raise RuntimeError("Tabela atendimentos sem coluna de data.")
 
-    join_pac = ""
+    paciente_expr = f"TRIM(COALESCE(a.{col_pac_nome}::text, ''))" if col_pac_nome else "''"
+    data_expr = _date_expr(f"a.{col_data}")
+    evol_expr = f"COALESCE(a.{col_evol}::text, '')" if col_evol else "''"
+
+    cidade_expr = f"TRIM(LOWER(COALESCE(a.{col_a_cidade}::text, '')))" if col_a_cidade else "''"
+    cid_expr = f"TRIM(UPPER(COALESCE(a.{col_a_cid}::text, '')))" if col_a_cid else "''"
+
+    joins = []
     idade_expr = "NULL"
 
     if col_pac_id and has_table(conn, "pacientes"):
@@ -310,96 +341,111 @@ def _query_meus_atendimentos_paginado(
         col_p_id = _first_existing(p_cols, ["id", "cidadao_id"])
         col_p_nasc = _first_existing(p_cols, ["nascimento", "data_nascimento", "dt_nascimento"])
         col_p_nome = _first_existing(p_cols, ["nome", "nome_completo"])
-
         col_p_cidade = _first_existing(p_cols, ["municipio", "município", "cidade", "cidade_nome"])
         col_p_cid = _first_existing(p_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
 
         if col_p_id:
-            join_pac = f" LEFT JOIN pacientes p ON p.{col_p_id} = a.{col_pac_id} "
+            joins.append(f"LEFT JOIN pacientes p ON p.{col_p_id} = a.{col_pac_id}")
 
         if col_p_id and col_p_nasc:
-            idade_expr = f"CAST((julianday('now') - julianday(p.{col_p_nasc})) / 365.25 AS INT)"
+            idade_expr = _idade_expr(f"p.{col_p_nasc}")
 
         if col_p_nome and col_pac_nome:
-            paciente_expr = f"TRIM(COALESCE(NULLIF(a.{col_pac_nome},''), p.{col_p_nome}, ''))"
+            paciente_expr = f"TRIM(COALESCE(NULLIF(a.{col_pac_nome}::text, ''), p.{col_p_nome}::text, ''))"
         elif col_p_nome and not col_pac_nome:
-            paciente_expr = f"TRIM(COALESCE(p.{col_p_nome}, ''))"
+            paciente_expr = f"TRIM(COALESCE(p.{col_p_nome}::text, ''))"
 
-        if (not col_a_cidade) and col_p_cidade:
-            cidade_expr = f"TRIM(LOWER(COALESCE(p.{col_p_cidade},'')))"
-        if (not col_a_cid) and col_p_cid:
-            cid_expr = f"TRIM(UPPER(COALESCE(p.{col_p_cid},'')))"
+        if not col_a_cidade and col_p_cidade:
+            cidade_expr = f"TRIM(LOWER(COALESCE(p.{col_p_cidade}::text, '')))"
 
-    where: List[str] = [f"a.{col_prof} = ?"]
+        if not col_a_cid and col_p_cid:
+            cid_expr = f"TRIM(UPPER(COALESCE(p.{col_p_cid}::text, '')))"
+
+    proc_expr = "''"
+    if has_table(conn, "atendimento_procedimentos"):
+        ap_cols = _table_columns(conn, "atendimento_procedimentos")
+        col_ap_atend = _first_existing(ap_cols, ["atendimento_id"])
+        col_ap_proc = _first_existing(ap_cols, ["procedimento", "procedimento_nome", "descricao"])
+
+        if col_ap_atend and col_ap_proc:
+            joins.append("LEFT JOIN atendimento_procedimentos ap ON ap.atendimento_id = a.id")
+            proc_expr = f"COALESCE(STRING_AGG(DISTINCT NULLIF(TRIM(ap.{col_ap_proc}::text), ''), ' • '), '')"
+
+    where: List[str] = [f"a.{col_prof} = %s"]
     params: List[Any] = [int(profissional_uid)]
 
     if q_nome:
-        where.append(f"{paciente_expr} LIKE ?")
+        where.append(f"{paciente_expr} ILIKE %s")
         params.append(f"%{q_nome}%")
 
     if data_ini:
-        where.append(f"{data_expr} >= ?")
+        where.append(f"{data_expr} >= %s::date")
         params.append(data_ini)
 
     if data_fim:
-        where.append(f"{data_expr} <= ?")
+        where.append(f"{data_expr} <= %s::date")
         params.append(data_fim)
 
     if idade_expr != "NULL":
         if idade_min is not None:
-            where.append(f"({idade_expr}) >= ?")
+            where.append(f"({idade_expr}) >= %s")
             params.append(idade_min)
         if idade_max is not None:
-            where.append(f"({idade_expr}) <= ?")
+            where.append(f"({idade_expr}) <= %s")
             params.append(idade_max)
 
     if cidade and cidade_expr != "''":
-        where.append(f"{cidade_expr} LIKE ?")
+        where.append(f"{cidade_expr} ILIKE %s")
         params.append(f"%{cidade.strip().lower()}%")
 
     if cid and cid_expr != "''":
-        where.append(f"{cid_expr} LIKE ?")
+        where.append(f"{cid_expr} ILIKE %s")
         params.append(f"%{cid.strip().upper()}%")
 
     where_sql = " AND ".join(where)
+    join_sql = "\n".join(joins)
 
     count_sql = f"""
         SELECT COUNT(DISTINCT a.id) AS total
           FROM atendimentos a
-          {join_pac}
-          {join_proc}
+          {join_sql}
          WHERE {where_sql}
     """
+
+    cur = conn.cursor()
     cur.execute(count_sql, params)
-    total = int(cur.fetchone()["total"] or 0)
+    total = int(cur.fetchone()[0] or 0)
 
     page = max(1, int(page or 1))
     per_page = max(1, min(200, int(per_page or 20)))
     offset = (page - 1) * per_page
 
-    group_by = "GROUP BY a.id" if use_group else ""
-
     list_sql = f"""
         SELECT
-            a.id                               AS id,
-            {paciente_expr}                    AS paciente,
-            {proc_expr}                        AS procedimento,
-            {data_expr}                        AS data,
-            {evol_expr}                        AS evolucao,
-            substr({evol_expr}, 1, 260)        AS evolucao_preview,
-            {idade_expr}                       AS idade
+            a.id AS id,
+            {paciente_expr} AS paciente,
+            {proc_expr} AS procedimento,
+            COALESCE({data_expr}::text, '') AS data,
+            {evol_expr} AS evolucao,
+            SUBSTRING({evol_expr} FROM 1 FOR 260) AS evolucao_preview,
+            {idade_expr} AS idade
         FROM atendimentos a
-        {join_pac}
-        {join_proc}
+        {join_sql}
         WHERE {where_sql}
-        {group_by}
-        ORDER BY {data_expr} DESC, a.id DESC
-        LIMIT ? OFFSET ?
+        GROUP BY
+            a.id,
+            {paciente_expr},
+            {data_expr},
+            {evol_expr},
+            {idade_expr}
+        ORDER BY {data_expr} DESC NULLS LAST, a.id DESC
+        LIMIT %s OFFSET %s
     """
-    cur.execute(list_sql, params + [per_page, offset])
-    rows = cur.fetchall()
 
-    return total, rows
+    cur.execute(list_sql, params + [per_page, offset])
+    rows = cur.fetchall() or []
+
+    return total, [_row_to_dict(cur, r) for r in rows]
 
 
 # ============================================================
@@ -410,11 +456,12 @@ def _query_meus_atendimentos_paginado(
 @meus_atendimentos_bp.route("/", methods=["GET"])
 def index():
     conn = conectar_db()
+
     try:
-        # ✅ garante schema no Render
         ensure_atendimentos_schema(conn)
 
         profissional_uid = _resolve_logged_profissional_id(conn)
+
         if not profissional_uid:
             return (
                 "<h2>403</h2><p>Não foi possível identificar o profissional logado. Faça login novamente.</p>",
@@ -453,6 +500,7 @@ def index():
         )
 
         pages = max(1, (total + per_page - 1) // per_page)
+
         if page > pages:
             page = pages
 
@@ -488,6 +536,7 @@ def index():
             500,
             {"Content-Type": "text/html; charset=utf-8"},
         )
+
     finally:
         try:
             conn.close()
@@ -498,10 +547,12 @@ def index():
 @meus_atendimentos_bp.route("/api/list", methods=["GET"])
 def api_list():
     conn = conectar_db()
+
     try:
         ensure_atendimentos_schema(conn)
 
         profissional_uid = _resolve_logged_profissional_id(conn)
+
         if not profissional_uid:
             return jsonify({"ok": False, "error": "not_logged_profissional"}), 401
 
@@ -540,13 +591,13 @@ def api_list():
         items = []
         for r in rows:
             items.append({
-                "id": r["id"],
-                "paciente": r["paciente"],
-                "procedimento": r["procedimento"],
-                "data": r["data"],
-                "idade": r["idade"],
-                "evolucao_preview": r["evolucao_preview"],
-                "evolucao": r["evolucao"],
+                "id": r.get("id"),
+                "paciente": r.get("paciente") or "",
+                "procedimento": r.get("procedimento") or "",
+                "data": r.get("data") or "",
+                "idade": r.get("idade"),
+                "evolucao_preview": r.get("evolucao_preview") or "",
+                "evolucao": r.get("evolucao") or "",
             })
 
         return jsonify({
@@ -555,11 +606,12 @@ def api_list():
             "page": page,
             "per_page": per_page,
             "pages": pages,
-            "items": items
+            "items": items,
         })
 
     except RuntimeError as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
     finally:
         try:
             conn.close()

@@ -18,36 +18,105 @@ from openpyxl import Workbook
 
 
 # ============================================================
-# HELPERS · INTROSPECÇÃO SQLITE
+# HELPERS · POSTGRES
 # ============================================================
 
+def _safe_str(v) -> str:
+    return ("" if v is None else str(v)).strip()
+
+
+def _only_digits(v: str | None) -> str:
+    return re.sub(r"\D+", "", v or "")
+
+
+def _valid_ident(name: str) -> bool:
+    return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name or ""))
+
+
+def _row_get(row, idx: int, default=None):
+    if row is None:
+        return default
+    try:
+        return row[idx]
+    except Exception:
+        return default
+
+
 def has_table(conn, table_name: str) -> bool:
+    if not _valid_ident(table_name):
+        return False
+
     cur = conn.cursor()
     cur.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+        """
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.tables
+             WHERE table_schema = 'public'
+               AND table_name = %s
+        )
+        """,
         (table_name,),
     )
-    return cur.fetchone() is not None
+    return bool(_row_get(cur.fetchone(), 0, False))
 
 
 def has_column(conn, table_name: str, column_name: str) -> bool:
-    cur = conn.cursor()
-    try:
-        cur.execute(f"PRAGMA table_info({table_name})")
-        cols = [r[1] for r in cur.fetchall()]
-        return column_name in cols
-    except Exception:
+    if not _valid_ident(table_name) or not _valid_ident(column_name):
         return False
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = %s
+               AND column_name = %s
+        )
+        """,
+        (table_name, column_name),
+    )
+    return bool(_row_get(cur.fetchone(), 0, False))
 
 
 def _table_columns(conn, table: str) -> set[str]:
+    if not _valid_ident(table):
+        return set()
+
     cur = conn.cursor()
-    cur.execute(f"PRAGMA table_info({table})")
-    return {r[1] for r in cur.fetchall()}
+    cur.execute(
+        """
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = %s
+        """,
+        (table,),
+    )
+    return {r[0] for r in cur.fetchall() or []}
+
+
+def _first_existing(cols: set[str], names: list[str]) -> str | None:
+    for n in names:
+        if n in cols:
+            return n
+    return None
+
+
+def _date_order_expr(col_sql: str) -> str:
+    return f"""
+    CASE
+      WHEN {col_sql}::text ~ '^\\d{{4}}-\\d{{2}}-\\d{{2}}' THEN ({col_sql})::date
+      WHEN {col_sql}::text ~ '^\\d{{2}}/\\d{{2}}/\\d{{4}}' THEN TO_DATE(SUBSTRING({col_sql}::text FROM 1 FOR 10), 'DD/MM/YYYY')
+      ELSE NULL
+    END
+    """
 
 
 # ============================================================
-# AUTH · RESOLVE USUÁRIO LOGADO
+# AUTH
 # ============================================================
 
 def _resolve_logged_usuario_id(conn) -> int | None:
@@ -59,30 +128,41 @@ def _resolve_logged_usuario_id(conn) -> int | None:
             except (TypeError, ValueError):
                 pass
 
-    login_like = session.get("usuario_logado") or session.get("login") or session.get("username")
+    login_like = (
+        session.get("usuario_logado")
+        or session.get("login")
+        or session.get("username")
+        or session.get("email")
+    )
+
     if login_like and has_table(conn, "usuarios"):
-        cur = conn.cursor()
-        try:
+        cols = _table_columns(conn, "usuarios")
+        search_cols = [c for c in ("login", "nome", "email") if c in cols]
+
+        if search_cols:
+            cur = conn.cursor()
+            conds = [
+                f"TRIM(LOWER(COALESCE({c}::text, ''))) = TRIM(LOWER(%s))"
+                for c in search_cols
+            ]
             cur.execute(
-                """
+                f"""
                 SELECT id
                   FROM usuarios
-                 WHERE TRIM(LOWER(COALESCE(login, nome, email, ''))) = TRIM(LOWER(?))
+                 WHERE {" OR ".join(conds)}
                  LIMIT 1
                 """,
-                (login_like,),
+                [login_like] * len(search_cols),
             )
             r = cur.fetchone()
             if r:
                 return int(r[0])
-        except Exception:
-            pass
 
     return None
 
 
 # ============================================================
-# FUNÇÃO SUGERIDA POR CBO (porque usuarios NÃO tem funcao)
+# CBO → FUNÇÃO
 # ============================================================
 
 _CBO_TO_FUNCAO = {
@@ -95,15 +175,16 @@ _CBO_TO_FUNCAO = {
     "223710": "Nutricionista",
 }
 
+
 def _funcao_from_cbo(cbo: str) -> str:
-    c = (cbo or "").strip()
+    c = _only_digits(cbo)
     if not c:
         return ""
     return _CBO_TO_FUNCAO.get(c, "")
 
 
 # ============================================================
-# SCHEMA · PTS (pai) + participantes (filhos)
+# SCHEMA · POSTGRES
 # ============================================================
 
 def ensure_pts_schema(conn):
@@ -111,9 +192,9 @@ def ensure_pts_schema(conn):
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             paciente_id INTEGER NOT NULL,
-            data_pts TEXT NOT NULL,                 -- YYYY-MM-DD
+            data_pts DATE NOT NULL,
 
             objetivo_geral TEXT,
             avaliacao TEXT,
@@ -121,8 +202,8 @@ def ensure_pts_schema(conn):
             observacoes TEXT,
 
             created_by INTEGER,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
@@ -133,25 +214,18 @@ def ensure_pts_schema(conn):
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pts_participantes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pts_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            pts_id INTEGER NOT NULL REFERENCES pts(id) ON DELETE CASCADE,
             usuario_id INTEGER NOT NULL,
             nome TEXT,
             cbo TEXT,
-            funcao TEXT,               -- ✅ fonte da “função” no PTS
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (pts_id) REFERENCES pts(id) ON DELETE CASCADE
+            funcao TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # migração leve (se tabela antiga não tiver funcao)
-    try:
-        cur.execute("PRAGMA table_info(pts_participantes)")
-        cols = {r[1] for r in cur.fetchall()}
-        if "funcao" not in cols:
-            cur.execute("ALTER TABLE pts_participantes ADD COLUMN funcao TEXT")
-    except Exception:
-        pass
+    if not has_column(conn, "pts_participantes", "funcao"):
+        cur.execute("ALTER TABLE pts_participantes ADD COLUMN funcao TEXT")
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_pts_part_pts
@@ -180,26 +254,27 @@ def _fetch_paciente_full(conn, paciente_id: str | int):
 
     cols = _table_columns(conn, "pacientes")
 
-    def pick(col: str, fallback_sql: str = "''"):
-        return col if col in cols else f"{fallback_sql} AS {col}"
+    def expr(col: str):
+        return f"COALESCE({col}::text, '') AS {col}" if col in cols else f"'' AS {col}"
 
     sel = [
         "id",
-        pick("nome"),
-        pick("nascimento"),
-        pick("cpf"),
-        pick("cns"),
-        pick("prontuario"),
-        pick("mod"),
-        pick("status"),
-        pick("cid"),
-        pick("telefone"),
-        pick("sexo"),
+        expr("nome"),
+        expr("nascimento"),
+        expr("cpf"),
+        expr("cns"),
+        expr("prontuario"),
+        expr("mod"),
+        expr("status"),
+        expr("cid"),
+        expr("telefone"),
+        expr("sexo"),
     ]
 
     cur = conn.cursor()
-    cur.execute(f"SELECT {', '.join(sel)} FROM pacientes WHERE id = ? LIMIT 1", (pid,))
+    cur.execute(f"SELECT {', '.join(sel)} FROM pacientes WHERE id = %s LIMIT 1", (int(pid),))
     r = cur.fetchone()
+
     if not r:
         return None
 
@@ -220,17 +295,25 @@ def _fetch_paciente_full(conn, paciente_id: str | int):
 
 def _fetch_pts_by_id(conn, pts_id: int) -> dict | None:
     ensure_pts_schema(conn)
+
     cur = conn.cursor()
     cur.execute("""
         SELECT
-            id, paciente_id, data_pts,
-            COALESCE(objetivo_geral,''), COALESCE(avaliacao,''),
-            COALESCE(plano,''), COALESCE(observacoes,''),
-            COALESCE(created_by, NULL), COALESCE(created_at,''), COALESCE(updated_at,'')
+            id,
+            paciente_id,
+            COALESCE(data_pts::text, '') AS data_pts,
+            COALESCE(objetivo_geral, ''),
+            COALESCE(avaliacao, ''),
+            COALESCE(plano, ''),
+            COALESCE(observacoes, ''),
+            created_by,
+            COALESCE(created_at::text, ''),
+            COALESCE(updated_at::text, '')
         FROM pts
-        WHERE id = ?
+        WHERE id = %s
         LIMIT 1
     """, (int(pts_id),))
+
     r = cur.fetchone()
     if not r:
         return None
@@ -254,18 +337,21 @@ def _fetch_pts_by_id(conn, pts_id: int) -> dict | None:
 
 def _fetch_participantes(conn, pts_id: int) -> list[dict]:
     ensure_pts_schema(conn)
+
     cur = conn.cursor()
     cur.execute("""
         SELECT
             usuario_id,
-            COALESCE(nome,'')   AS nome,
-            COALESCE(cbo,'')    AS cbo,
-            COALESCE(funcao,'') AS funcao
+            COALESCE(nome, '') AS nome,
+            COALESCE(cbo, '') AS cbo,
+            COALESCE(funcao, '') AS funcao
         FROM pts_participantes
-        WHERE pts_id = ?
-        ORDER BY nome COLLATE NOCASE
+        WHERE pts_id = %s
+        ORDER BY nome ASC
     """, (int(pts_id),))
-    rows = cur.fetchall()
+
+    rows = cur.fetchall() or []
+
     return [
         {
             "usuario_id": int(r[0]),
@@ -278,7 +364,7 @@ def _fetch_participantes(conn, pts_id: int) -> list[dict]:
 
 
 # ============================================================
-# LISTAGEM · filtros + paginação (20 por página)
+# LISTAGEM
 # ============================================================
 
 def _safe_page(v, default=1) -> int:
@@ -290,7 +376,7 @@ def _safe_page(v, default=1) -> int:
 
 
 def _like(s: str) -> str:
-    return f"%{(s or '').strip().lower()}%"
+    return f"%{(s or '').strip()}%"
 
 
 def _build_pts_where_and_params(q_paciente: str, q_prof: str, q_cbo: str, competencia: str):
@@ -298,12 +384,12 @@ def _build_pts_where_and_params(q_paciente: str, q_prof: str, q_cbo: str, compet
     params = []
 
     if q_paciente.strip():
-        where.append("LOWER(COALESCE(p.nome,'')) LIKE ?")
+        where.append("p.nome ILIKE %s")
         params.append(_like(q_paciente))
 
     comp = competencia.strip()
     if comp:
-        where.append("substr(COALESCE(t.data_pts,''), 1, 7) = ?")
+        where.append("TO_CHAR(t.data_pts, 'YYYY-MM') = %s")
         params.append(comp)
 
     if q_prof.strip():
@@ -312,7 +398,7 @@ def _build_pts_where_and_params(q_paciente: str, q_prof: str, q_cbo: str, compet
                 SELECT 1
                   FROM pts_participantes pp
                  WHERE pp.pts_id = t.id
-                   AND LOWER(COALESCE(pp.nome,'')) LIKE ?
+                   AND pp.nome ILIKE %s
             )
         """)
         params.append(_like(q_prof))
@@ -323,7 +409,7 @@ def _build_pts_where_and_params(q_paciente: str, q_prof: str, q_cbo: str, compet
                 SELECT 1
                   FROM pts_participantes pp2
                  WHERE pp2.pts_id = t.id
-                   AND LOWER(COALESCE(pp2.cbo,'')) LIKE ?
+                   AND pp2.cbo ILIKE %s
             )
         """)
         params.append(_like(q_cbo))
@@ -333,7 +419,7 @@ def _build_pts_where_and_params(q_paciente: str, q_prof: str, q_cbo: str, compet
 
 
 # ============================================================
-# PÁGINAS · RENDER
+# PÁGINAS
 # ============================================================
 
 @pts_bp.get("/")
@@ -346,38 +432,26 @@ def pts_page():
     )
 
 
-# ✅ NOVO: salva via POST normal do form (sem fetch)
-
 @pts_bp.post("/")
 def pts_page_post():
-    """
-    Recebe o submit do form (pts.html), salva no SQLite e
-    redireciona para /pts/visualizar/<pts_id>.
-    """
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
         paciente_id = (request.form.get("paciente_id") or "").strip()
         if not paciente_id:
-            flash("Selecione um paciente na lista (preciso do ID).", "error")
+            flash("Selecione um paciente na lista.", "error")
             return redirect(url_for("pts.pts_page"))
 
-        # Campos do PTS (você pode mapear melhor depois)
         objetivo_geral = (request.form.get("objetivo_geral") or "").strip()
-        avaliacao      = (
-            (request.form.get("diagnostico_funcional") or "").strip()
-        )
-        plano          = (
-            (request.form.get("encaminhamentos") or "").strip()
-        )
-        observacoes    = (
-            (request.form.get("outras_observacoes") or "").strip()
-        )
+        avaliacao = (request.form.get("diagnostico_funcional") or "").strip()
+        plano = (request.form.get("encaminhamentos") or "").strip()
+        observacoes = (request.form.get("outras_observacoes") or "").strip()
 
-        # Participantes (modo chips): "1,2,3"
         participantes_ids = (request.form.get("participantes_ids") or "").strip()
         ids = []
+
         if participantes_ids:
             for x in participantes_ids.split(","):
                 x = x.strip()
@@ -385,7 +459,7 @@ def pts_page_post():
                     ids.append(int(x))
 
         created_by = _resolve_logged_usuario_id(conn)
-        now = datetime.now().isoformat()
+        now = datetime.now()
 
         cur = conn.cursor()
         cur.execute("""
@@ -393,7 +467,9 @@ def pts_page_post():
                 paciente_id, data_pts,
                 objetivo_geral, avaliacao, plano, observacoes,
                 created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """, (
             int(paciente_id),
             date.today().isoformat(),
@@ -405,34 +481,10 @@ def pts_page_post():
             now,
             now,
         ))
-        pts_id = int(cur.lastrowid)
 
-        # grava participantes (puxa de usuarios)
-        if ids and has_table(conn, "usuarios"):
-            has_nome = has_column(conn, "usuarios", "nome")
-            has_cbo  = has_column(conn, "usuarios", "cbo")
+        pts_id = int(cur.fetchone()[0])
 
-            for uid in ids:
-                cur.execute(f"""
-                    SELECT
-                      {("COALESCE(nome,'')" if has_nome else "''")} AS nome,
-                      {("COALESCE(cbo,'')"  if has_cbo  else "''")} AS cbo
-                    FROM usuarios
-                    WHERE id = ?
-                    LIMIT 1
-                """, (uid,))
-                ur = cur.fetchone()
-                if not ur:
-                    continue
-
-                nome_u = (ur[0] or "").strip()
-                cbo_u  = (ur[1] or "").strip()
-                func_u = _funcao_from_cbo(cbo_u)
-
-                cur.execute("""
-                    INSERT INTO pts_participantes (pts_id, usuario_id, nome, cbo, funcao, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (pts_id, uid, nome_u, cbo_u, func_u, now))
+        _insert_pts_participantes(conn, pts_id, ids, now)
 
         conn.commit()
 
@@ -444,6 +496,7 @@ def pts_page_post():
             conn.rollback()
         except Exception:
             pass
+
         flash(f"Erro ao salvar PTS: {e}", "error")
         return redirect(url_for("pts.pts_page"))
 
@@ -457,48 +510,55 @@ def pts_page_post():
 @pts_bp.get("/visualizar")
 def pts_visualizar():
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
-        q_paciente  = (request.args.get("paciente") or "").strip()
-        q_prof      = (request.args.get("prof") or "").strip()
-        q_cbo       = (request.args.get("cbo") or "").strip()
+        q_paciente = (request.args.get("paciente") or "").strip()
+        q_prof = (request.args.get("prof") or "").strip()
+        q_cbo = (request.args.get("cbo") or "").strip()
         competencia = (request.args.get("competencia") or "").strip()
-        page        = _safe_page(request.args.get("page"), 1)
+        page = _safe_page(request.args.get("page"), 1)
 
         per_page = 20
         offset = (page - 1) * per_page
 
         where_sql, params = _build_pts_where_and_params(q_paciente, q_prof, q_cbo, competencia)
+
         cur = conn.cursor()
 
-        sql_count = f"""
+        cur.execute(
+            f"""
             SELECT COUNT(1)
               FROM pts t
               LEFT JOIN pacientes p ON p.id = t.paciente_id
               {where_sql}
-        """
-        cur.execute(sql_count, params)
+            """,
+            params,
+        )
+
         total = int(cur.fetchone()[0] or 0)
 
-        sql_list = f"""
+        cur.execute(
+            f"""
             SELECT
                 t.id,
                 t.paciente_id,
-                COALESCE(t.data_pts,'') AS data_pts,
-                substr(COALESCE(t.data_pts,''), 1, 7) AS competencia,
-                COALESCE(p.nome,'') AS paciente_nome,
-                COALESCE(p.prontuario,'') AS prontuario,
-                COALESCE(p.cid,'') AS cid,
+                COALESCE(t.data_pts::text, '') AS data_pts,
+                TO_CHAR(t.data_pts, 'YYYY-MM') AS competencia,
+                COALESCE(p.nome, '') AS paciente_nome,
+                COALESCE(p.prontuario, '') AS prontuario,
+                COALESCE(p.cid, '') AS cid,
                 (
-                  SELECT group_concat(
-                           TRIM(COALESCE(pp.nome,'')) ||
+                  SELECT STRING_AGG(
+                           TRIM(COALESCE(pp.nome, '')) ||
                            CASE
-                             WHEN COALESCE(pp.funcao,'')<>'' THEN ' · '||pp.funcao
-                             WHEN COALESCE(pp.cbo,'')<>'' THEN ' (CBO '||pp.cbo||')'
+                             WHEN COALESCE(pp.funcao, '') <> '' THEN ' · ' || pp.funcao
+                             WHEN COALESCE(pp.cbo, '') <> '' THEN ' (CBO ' || pp.cbo || ')'
                              ELSE ''
                            END,
                            ' · '
+                           ORDER BY pp.nome
                          )
                     FROM pts_participantes pp
                    WHERE pp.pts_id = t.id
@@ -506,29 +566,30 @@ def pts_visualizar():
               FROM pts t
               LEFT JOIN pacientes p ON p.id = t.paciente_id
               {where_sql}
-             ORDER BY
-                CASE
-                  WHEN t.data_pts GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' THEN t.data_pts
-                  ELSE '0000-00-00'
-                END DESC,
-                t.id DESC
-             LIMIT ? OFFSET ?
-        """
-        cur.execute(sql_list, params + [per_page, offset])
-        rows = cur.fetchall()
+             ORDER BY t.data_pts DESC NULLS LAST, t.id DESC
+             LIMIT %s OFFSET %s
+            """,
+            params + [per_page, offset],
+        )
 
-        itens = [dict(
-            id=r[0],
-            paciente_id=r[1],
-            data_pts=r[2],
-            competencia=r[3],
-            paciente_nome=r[4],
-            prontuario=r[5],
-            cid=r[6],
-            equipe=r[7] or "",
-        ) for r in rows]
+        rows = cur.fetchall() or []
+
+        itens = [
+            dict(
+                id=r[0],
+                paciente_id=r[1],
+                data_pts=r[2],
+                competencia=r[3],
+                paciente_nome=r[4],
+                prontuario=r[5],
+                cid=r[6],
+                equipe=r[7] or "",
+            )
+            for r in rows
+        ]
 
         pages = max(1, (total + per_page - 1) // per_page)
+
         pager = dict(
             page=page,
             per_page=per_page,
@@ -540,7 +601,12 @@ def pts_visualizar():
             next_page=page + 1,
         )
 
-        filtros = dict(paciente=q_paciente, prof=q_prof, cbo=q_cbo, competencia=competencia)
+        filtros = dict(
+            paciente=q_paciente,
+            prof=q_prof,
+            cbo=q_cbo,
+            competencia=competencia,
+        )
 
         return render_template(
             "pts_visualizar.html",
@@ -554,6 +620,7 @@ def pts_visualizar():
             equipe=[],
             paciente_id="",
         )
+
     finally:
         try:
             conn.close()
@@ -564,6 +631,7 @@ def pts_visualizar():
 @pts_bp.get("/visualizar/<int:pts_id>")
 def pts_visualizar_item(pts_id: int):
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
@@ -583,16 +651,20 @@ def pts_visualizar_item(pts_id: int):
             modo="detalhe",
             paciente=paciente,
             pts=pts_view,
-            equipe=[{
-                "nome": p.get("nome",""),
-                "cbo": p.get("cbo",""),
-                "funcao": p.get("funcao",""),
-            } for p in participantes],
+            equipe=[
+                {
+                    "nome": p.get("nome", ""),
+                    "cbo": p.get("cbo", ""),
+                    "funcao": p.get("funcao", ""),
+                }
+                for p in participantes
+            ],
             itens=[],
             filtros=None,
             pager=None,
             paciente_id=str(pts["paciente_id"]),
         )
+
     finally:
         try:
             conn.close()
@@ -601,101 +673,87 @@ def pts_visualizar_item(pts_id: int):
 
 
 # ============================================================
-# API · PROFISSIONAIS (autocomplete + catálogo)
+# API · PROFISSIONAIS
 # ============================================================
 
 @pts_bp.get("/api/profissionais")
 def api_pts_profissionais():
-    """
-    - q=texto (3+ chars) filtra
-    - all=1 retorna catálogo (até 500)
-    Retorna: id, nome, cbo, funcao, label
-    """
     q = (request.args.get("q") or "").strip()
     all_mode = (request.args.get("all") or "").strip() == "1"
 
-    # ✅ a partir do 3º caractere
     if not all_mode and len(q) < 3:
         return jsonify(ok=True, items=[])
 
     conn = conectar_db()
-    cur = conn.cursor()
 
     try:
         if not has_table(conn, "usuarios") or not has_column(conn, "usuarios", "nome"):
             return jsonify(ok=True, items=[])
 
-        has_cbo    = has_column(conn, "usuarios", "cbo")
+        has_cbo = has_column(conn, "usuarios", "cbo")
         has_active = has_column(conn, "usuarios", "is_active")
-        has_role   = has_column(conn, "usuarios", "role")
+        has_role = has_column(conn, "usuarios", "role")
 
-        conds = []
+        cbo_expr = "TRIM(COALESCE(cbo::text, '')) AS cbo" if has_cbo else "'' AS cbo"
+
+        conds = ["TRIM(COALESCE(nome, '')) <> ''"]
         params = []
 
-        if all_mode:
-            conds.append("TRIM(COALESCE(nome,'')) <> ''")
-        else:
-            conds.append("LOWER(TRIM(COALESCE(nome,''))) LIKE ?")
-            params.append(f"%{q.lower()}%")
+        if not all_mode:
+            conds.append("(nome ILIKE %s OR COALESCE(cbo::text, '') ILIKE %s)")
+            params.extend([f"%{q}%", f"%{_only_digits(q)}%"])
 
-        # ✅ role pode estar diferente no teu BD (ADMIN/RECEPCAO etc).
-        # Então: se tiver role, filtra somente se você quiser MESMO.
-        # Recomendo: permitir todos ativos e com nome, e depois você restringe.
-        # Se quiser restringir, use IN ('PROFISSIONAL','PROFISSIONAIS').
-        # (Vou deixar seguro: aceita PROFESSIONAL/PROFISSIONAIS, mas se não houver nenhum, ainda retorna pelos ativos.)
         role_filter = False
         if has_role:
-            # tenta filtrar, mas sem matar tudo
             role_filter = True
-            conds.append("UPPER(COALESCE(role,'')) IN ('PROFISSIONAL','PROFISSIONAIS')")
+            conds.append("UPPER(COALESCE(role, '')) IN ('PROFISSIONAL', 'PROFISSIONAIS')")
 
         if has_active:
-            conds.append("(is_active = 1 OR is_active IS NULL)")
+            conds.append("(is_active IS TRUE OR is_active IS NULL)")
 
         sql = f"""
-            SELECT
-                id,
-                TRIM(COALESCE(nome,'')) AS nome,
-                {("TRIM(COALESCE(cbo,'')) AS cbo" if has_cbo else "'' AS cbo")}
-            FROM usuarios
-            WHERE {" AND ".join(conds)}
-            ORDER BY nome COLLATE NOCASE
-            LIMIT {500 if all_mode else 50}
+            SELECT id, TRIM(COALESCE(nome, '')) AS nome, {cbo_expr}
+              FROM usuarios
+             WHERE {" AND ".join(conds)}
+             ORDER BY nome ASC
+             LIMIT {500 if all_mode else 50}
         """
+
+        cur = conn.cursor()
         cur.execute(sql, params)
-        rows = cur.fetchall()
+        rows = cur.fetchall() or []
 
-        # ✅ fallback automático: se role_filter matou tudo, tenta sem role
         if role_filter and not rows:
-            conds2 = []
+            conds2 = ["TRIM(COALESCE(nome, '')) <> ''"]
             params2 = []
-            if all_mode:
-                conds2.append("TRIM(COALESCE(nome,'')) <> ''")
-            else:
-                conds2.append("LOWER(TRIM(COALESCE(nome,''))) LIKE ?")
-                params2.append(f"%{q.lower()}%")
-            if has_active:
-                conds2.append("(is_active = 1 OR is_active IS NULL)")
 
-            sql2 = f"""
-                SELECT
-                    id,
-                    TRIM(COALESCE(nome,'')) AS nome,
-                    {("TRIM(COALESCE(cbo,'')) AS cbo" if has_cbo else "'' AS cbo")}
-                FROM usuarios
-                WHERE {" AND ".join(conds2)}
-                ORDER BY nome COLLATE NOCASE
-                LIMIT {500 if all_mode else 50}
-            """
-            cur.execute(sql2, params2)
-            rows = cur.fetchall()
+            if not all_mode:
+                conds2.append("(nome ILIKE %s OR COALESCE(cbo::text, '') ILIKE %s)")
+                params2.extend([f"%{q}%", f"%{_only_digits(q)}%"])
+
+            if has_active:
+                conds2.append("(is_active IS TRUE OR is_active IS NULL)")
+
+            cur.execute(
+                f"""
+                SELECT id, TRIM(COALESCE(nome, '')) AS nome, {cbo_expr}
+                  FROM usuarios
+                 WHERE {" AND ".join(conds2)}
+                 ORDER BY nome ASC
+                 LIMIT {500 if all_mode else 50}
+                """,
+                params2,
+            )
+            rows = cur.fetchall() or []
 
         items = []
+
         for uid, nome, cbo in rows:
             nome = (nome or "").strip()
+            cbo = (cbo or "").strip()
             if not nome:
                 continue
-            cbo = (cbo or "").strip()
+
             funcao = _funcao_from_cbo(cbo)
 
             extra = []
@@ -703,6 +761,7 @@ def api_pts_profissionais():
                 extra.append(funcao)
             if cbo:
                 extra.append(f"CBO {cbo}")
+
             label = f"{nome} · " + " · ".join(extra) if extra else nome
 
             items.append({
@@ -723,16 +782,18 @@ def api_pts_profissionais():
 
 
 # ============================================================
-# API · DADOS (paciente + último PTS + equipe)
+# API · DADOS
 # ============================================================
 
 @pts_bp.get("/api/dados")
 def api_pts_dados():
     paciente_id = (request.args.get("paciente_id") or "").strip()
+
     if not paciente_id:
         return jsonify(ok=False, error="paciente_id é obrigatório."), 400
 
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
@@ -742,19 +803,19 @@ def api_pts_dados():
 
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, data_pts,
-                   COALESCE(objetivo_geral,''), COALESCE(avaliacao,''),
-                   COALESCE(plano,''), COALESCE(observacoes,'')
+            SELECT
+                id,
+                COALESCE(data_pts::text, '') AS data_pts,
+                COALESCE(objetivo_geral, ''),
+                COALESCE(avaliacao, ''),
+                COALESCE(plano, ''),
+                COALESCE(observacoes, '')
               FROM pts
-             WHERE paciente_id = ?
-             ORDER BY
-               CASE
-                 WHEN data_pts GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' THEN data_pts
-                 ELSE '0000-00-00'
-               END DESC,
-               id DESC
+             WHERE paciente_id = %s
+             ORDER BY data_pts DESC NULLS LAST, id DESC
              LIMIT 1
-        """, (str(paciente_id),))
+        """, (int(paciente_id),))
+
         r = cur.fetchone()
 
         pts = None
@@ -786,8 +847,56 @@ def api_pts_dados():
 
 
 # ============================================================
-# API · SALVAR (novo PTS + participantes) — JSON
+# API · SALVAR
 # ============================================================
+
+def _insert_pts_participantes(conn, pts_id: int, ids: list[int], now=None):
+    if not ids or not has_table(conn, "usuarios"):
+        return
+
+    now = now or datetime.now()
+
+    has_nome = has_column(conn, "usuarios", "nome")
+    has_cbo = has_column(conn, "usuarios", "cbo")
+
+    nome_expr = "COALESCE(nome, '')" if has_nome else "''"
+    cbo_expr = "COALESCE(cbo, '')" if has_cbo else "''"
+
+    cur = conn.cursor()
+
+    for uid in ids:
+        cur.execute(
+            f"""
+            SELECT {nome_expr} AS nome, {cbo_expr} AS cbo
+              FROM usuarios
+             WHERE id = %s
+             LIMIT 1
+            """,
+            (int(uid),),
+        )
+
+        ur = cur.fetchone()
+        if not ur:
+            continue
+
+        nome_u = (ur[0] or "").strip()
+        cbo_u = (ur[1] or "").strip()
+        funcao_u = _funcao_from_cbo(cbo_u)
+
+        cur.execute("""
+            INSERT INTO pts_participantes (
+                pts_id, usuario_id, nome, cbo, funcao, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            pts_id,
+            int(uid),
+            nome_u,
+            cbo_u,
+            funcao_u,
+            now,
+        ))
+
 
 @pts_bp.post("/api/salvar")
 def api_pts_salvar():
@@ -800,11 +909,13 @@ def api_pts_salvar():
         return jsonify(ok=False, error="paciente_id é obrigatório."), 400
 
     participantes = data.get("participantes") or []
+
     if isinstance(participantes, str):
         participantes = [p.strip() for p in participantes.split(",") if p.strip()]
 
     norm_ids: list[int] = []
     seen = set()
+
     for x in participantes:
         try:
             i = int(x)
@@ -815,6 +926,7 @@ def api_pts_salvar():
             pass
 
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
@@ -823,52 +935,32 @@ def api_pts_salvar():
             return jsonify(ok=False, error="Paciente não encontrado."), 404
 
         created_by = _resolve_logged_usuario_id(conn)
-        now = datetime.now().isoformat()
+        now = datetime.now()
 
         cur = conn.cursor()
-
         cur.execute("""
             INSERT INTO pts (
                 paciente_id, data_pts,
                 objetivo_geral, avaliacao, plano, observacoes,
                 created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """, (
-            int(paciente_id), data_pts,
-            (data.get("objetivo_geral") or ""),
-            (data.get("avaliacao") or ""),
-            (data.get("plano") or ""),
-            (data.get("observacoes") or ""),
+            int(paciente_id),
+            data_pts,
+            data.get("objetivo_geral") or "",
+            data.get("avaliacao") or "",
+            data.get("plano") or "",
+            data.get("observacoes") or "",
             int(created_by) if created_by else None,
-            now, now
+            now,
+            now,
         ))
-        pts_id = int(cur.lastrowid)
 
-        if norm_ids and has_table(conn, "usuarios"):
-            has_nome = has_column(conn, "usuarios", "nome")
-            has_cbo = has_column(conn, "usuarios", "cbo")
+        pts_id = int(cur.fetchone()[0])
 
-            for uid in norm_ids:
-                cur.execute(f"""
-                    SELECT
-                      {("COALESCE(nome,'')" if has_nome else "''")} AS nome,
-                      {("COALESCE(cbo,'')"  if has_cbo  else "''")} AS cbo
-                    FROM usuarios
-                    WHERE id = ?
-                    LIMIT 1
-                """, (int(uid),))
-                ur = cur.fetchone()
-                if not ur:
-                    continue
-
-                nome_u = (ur[0] or "").strip()
-                cbo_u = (ur[1] or "").strip()
-                funcao_u = _funcao_from_cbo(cbo_u)
-
-                cur.execute("""
-                    INSERT INTO pts_participantes (pts_id, usuario_id, nome, cbo, funcao, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (pts_id, int(uid), nome_u, cbo_u, funcao_u, now))
+        _insert_pts_participantes(conn, pts_id, norm_ids, now)
 
         conn.commit()
         return jsonify(ok=True, pts_id=pts_id)
@@ -878,6 +970,7 @@ def api_pts_salvar():
             conn.rollback()
         except Exception:
             pass
+
         return jsonify(ok=False, error=str(e)), 500
 
     finally:
@@ -894,6 +987,7 @@ def api_pts_salvar():
 @pts_bp.get("/export/excel/<int:pts_id>")
 def export_pts_excel(pts_id: int):
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
@@ -927,6 +1021,7 @@ def export_pts_excel(pts_id: int):
 
         ws.append(["Participantes"])
         ws.append(["Nome", "CBO", "Função"])
+
         for p in participantes:
             ws.append([p.get("nome", ""), p.get("cbo", ""), p.get("funcao", "")])
 
@@ -941,6 +1036,7 @@ def export_pts_excel(pts_id: int):
             as_attachment=True,
             download_name=filename,
         )
+
     finally:
         try:
             conn.close()
@@ -964,6 +1060,7 @@ def export_pts_pdf(pts_id: int):
         )
 
     conn = conectar_db()
+
     try:
         ensure_pts_schema(conn)
 
@@ -983,27 +1080,31 @@ def export_pts_pdf(pts_id: int):
             c.drawString(40, y, text)
 
         y = h - 50
+
         line(y, f"PTS #{pts_id}", 16, True); y -= 22
-        line(y, f"Data: {pts.get('data_pts','')}", 11); y -= 14
-        line(y, f"Competência: {pts.get('competencia','')}", 11); y -= 18
+        line(y, f"Data: {pts.get('data_pts', '')}", 11); y -= 14
+        line(y, f"Competência: {pts.get('competencia', '')}", 11); y -= 18
 
         line(y, "Paciente", 13, True); y -= 18
+
         if paciente:
-            line(y, f"Nome: {paciente.get('nome','')}", 11); y -= 14
-            line(y, f"Prontuário: {paciente.get('prontuario','')}", 11); y -= 14
-            line(y, f"CPF: {paciente.get('cpf','')}", 11); y -= 14
-            line(y, f"CID: {paciente.get('cid','')}", 11); y -= 18
+            line(y, f"Nome: {paciente.get('nome', '')}", 11); y -= 14
+            line(y, f"Prontuário: {paciente.get('prontuario', '')}", 11); y -= 14
+            line(y, f"CPF: {paciente.get('cpf', '')}", 11); y -= 14
+            line(y, f"CID: {paciente.get('cid', '')}", 11); y -= 18
         else:
             line(y, "Paciente não encontrado", 11); y -= 18
 
         line(y, "Participantes", 13, True); y -= 18
+
         if participantes:
             for p in participantes[:30]:
-                nome = p.get("nome","")
-                cbo = p.get("cbo","")
-                func = p.get("funcao","")
+                nome = p.get("nome", "")
+                cbo = p.get("cbo", "")
+                func = p.get("funcao", "")
                 extra = f" · {func}" if func else (f" · CBO {cbo}" if cbo else "")
                 line(y, f"- {nome}{extra}", 11); y -= 14
+
                 if y < 60:
                     c.showPage()
                     y = h - 50
@@ -1015,6 +1116,7 @@ def export_pts_pdf(pts_id: int):
 
         bio.seek(0)
         filename = f"PTS_{pts_id}.pdf"
+
         return send_file(
             bio,
             mimetype="application/pdf",

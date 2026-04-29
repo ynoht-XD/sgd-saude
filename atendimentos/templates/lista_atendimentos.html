@@ -17,24 +17,25 @@
     {% endif %}
   {% endwith %}
 
-  <!-- HERO -->
   <header class="att-page-head">
     <div class="title-area">
       <span class="att-kicker">SGD · Atendimento</span>
       <h2>Lista de Atendimentos</h2>
       <p class="muted">
         Organize a fila de forma rápida, acompanhe o profissional responsável
-        e visualize facilmente quando o paciente possui combo e quantas sessões ainda restam.
+        e chame o paciente diretamente na tela da recepção.
       </p>
     </div>
 
     <div class="actions">
+      <a href="{{ url_for('atendimentos.chama_na_tela_tv') }}" target="_blank" class="btn ghost">
+        Abrir TV
+      </a>
       <button type="button" class="btn ghost" id="btnImprimir">Imprimir</button>
       <button type="button" class="btn danger ghost" id="btnLimparFila">Limpar fila</button>
     </div>
   </header>
 
-  <!-- BLOCO 1: ADICIONAR -->
   <section class="card att-card" aria-labelledby="titulo-add">
     <div class="card-head">
       <div>
@@ -47,7 +48,6 @@
 
     <form id="formAdd" autocomplete="off">
       <div class="att-grid">
-        <!-- Paciente -->
         <div class="field">
           <label for="pacienteInput">Paciente</label>
           <input list="listaPacientes" id="pacienteInput" placeholder="Buscar por nome ou CPF" class="input-rounded">
@@ -59,7 +59,6 @@
           <input type="hidden" id="pacienteId">
         </div>
 
-        <!-- Profissional -->
         <div class="field">
           <label for="profInput">Profissional</label>
           <input list="listaProfissionais" id="profInput" placeholder="Buscar por nome do profissional" class="input-rounded">
@@ -71,7 +70,6 @@
           <input type="hidden" id="profissionalId">
         </div>
 
-        <!-- Tipo -->
         <div class="field">
           <label for="tipoAtendimento">Tipo</label>
           <select id="tipoAtendimento">
@@ -81,7 +79,6 @@
           </select>
         </div>
 
-        <!-- Prioridade -->
         <div class="field">
           <label>Prioridade</label>
           <div class="prio-group" id="prioGroup" role="group" aria-label="Prioridade">
@@ -96,7 +93,6 @@
           </div>
         </div>
 
-        <!-- Observações -->
         <div class="field span-2">
           <label for="obs">Observações</label>
           <textarea id="obs" placeholder="Opcional: breve observação"></textarea>
@@ -109,7 +105,6 @@
     </form>
   </section>
 
-  <!-- BLOCO 2: FILA EM CARDS -->
   <section class="card att-card" aria-labelledby="titulo-fila">
     <div class="card-head between">
       <div>
@@ -249,6 +244,19 @@
             </div>
 
             <footer class="fila-card-actions">
+              <button
+                type="button"
+                class="btn chamar-tv"
+                data-acao="chamar-tv"
+                data-paciente-id="{{ item.paciente_id }}"
+                data-paciente-nome="{{ item.paciente_nome }}"
+                data-profissional-nome="{{ item.profissional_nome }}"
+                data-setor="Recepção"
+                aria-label="Chamar {{ item.paciente_nome }} na TV"
+              >
+                📢 Chamar na TV
+              </button>
+
               <button type="button" class="btn atender" data-acao="atender" aria-label="Atender">
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                   <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
@@ -272,45 +280,11 @@
                 </button>
 
                 <div class="menu-pop" hidden>
-                  <button class="menu-item" data-acao="atender">
-                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
-                    </svg>
-                    Atender
-                  </button>
-
-                  <button class="menu-item" data-acao="editar">
-                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                      <path d="M3 17.25V21h3.75l11-11.04-3.75-3.75L3 17.25ZM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82Z" fill="currentColor"/>
-                    </svg>
-                    Editar…
-                  </button>
-
-                  <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener">
-                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                      <path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-7-6Z"
-                            stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                      <polyline points="13 3 13 9 19 9"
-                                stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    Gerar declaração
-                  </a>
-
-                  <button class="menu-item" data-acao="falta">
-                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
-                      <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                    Marcar falta
-                  </button>
-
-                  <button class="menu-item danger" data-acao="remover">
-                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                      <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
-                            stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    Remover
-                  </button>
+                  <button class="menu-item" data-acao="atender">Atender</button>
+                  <button class="menu-item" data-acao="editar">Editar…</button>
+                  <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener">Gerar declaração</a>
+                  <button class="menu-item" data-acao="falta">Marcar falta</button>
+                  <button class="menu-item danger" data-acao="remover">Remover</button>
                 </div>
               </div>
             </footer>

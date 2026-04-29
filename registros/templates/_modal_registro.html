@@ -2,7 +2,6 @@
 <dialog id="modal-registro" aria-labelledby="mr_titulo">
   <form method="dialog" class="mr-dialog">
 
-    <!-- HEADER -->
     <header class="mr-head">
       <div class="mr-head-left">
         <h3 id="mr_titulo">Detalhes do atendimento</h3>
@@ -12,6 +11,7 @@
           <span class="mr-badge" id="mr_badge_data">📅 —</span>
           <span class="mr-badge" id="mr_badge_status">✅ —</span>
           <span class="mr-badge" id="mr_badge_cbo">🧩 —</span>
+          <span class="mr-badge mr-badge-secret" id="mr_badge_oculta">🔒 Sem evolução oculta</span>
         </div>
       </div>
 
@@ -20,23 +20,25 @@
       </button>
     </header>
 
-    <!-- BODY -->
     <section class="mr-body">
-
-      <!-- Abas -->
       <nav class="mr-tabs" aria-label="Seções do registro">
         <button type="button" class="mr-tab is-active" data-tab="atendimento">
           <span class="mr-ico">🩺</span> Atendimento
         </button>
+
         <button type="button" class="mr-tab" data-tab="paciente">
           <span class="mr-ico">👤</span> Paciente
+        </button>
+
+        <button type="button" class="mr-tab" data-tab="oculta">
+          <span class="mr-ico">🔒</span> Evolução oculta
         </button>
       </nav>
 
       <div class="mr-panels">
 
         <!-- ABA ATENDIMENTO -->
-        <div class="mr-panel is-active" data-panel="atendimento" aria-label="Detalhes do atendimento">
+        <div class="mr-panel is-active" data-panel="atendimento">
           <div class="mr-grid-atend">
 
             <div class="mr-cards">
@@ -44,10 +46,12 @@
                 <div class="mr-k">Profissional</div>
                 <div class="mr-v" id="mr_profissional">—</div>
               </div>
+
               <div class="mr-card">
                 <div class="mr-k">CNS do profissional</div>
                 <div class="mr-v" id="mr_prof_cns">—</div>
               </div>
+
               <div class="mr-card">
                 <div class="mr-k">CBO</div>
                 <div class="mr-v" id="mr_prof_cbo">—</div>
@@ -59,6 +63,7 @@
                 <div class="mr-k">Procedimento</div>
                 <div class="mr-v" id="mr_procedimento">—</div>
               </div>
+
               <div class="mr-card">
                 <div class="mr-k">Código SIGTAP</div>
                 <div class="mr-v" id="mr_sigtap">—</div>
@@ -70,6 +75,7 @@
                 <div class="mr-k">CID do paciente</div>
                 <div class="mr-v" id="mr_cid">—</div>
               </div>
+
               <div class="mr-card">
                 <div class="mr-k">Data do atendimento</div>
                 <div class="mr-v" id="mr_data">—</div>
@@ -81,18 +87,18 @@
                 <div class="mr-k">Status</div>
                 <div class="mr-v" id="mr_status">—</div>
               </div>
+
               <div class="mr-card">
                 <div class="mr-k">Justificativa / motivo</div>
                 <div class="mr-v" id="mr_status_just">—</div>
               </div>
             </div>
 
-            <!-- Evolução -->
             <section class="mr-evo">
               <header class="mr-evo-head">
                 <div>
                   <div class="mr-k">Evolução / Prontuário</div>
-                  <div class="mr-evo-hint">Texto do atendimento (rolagem interna)</div>
+                  <div class="mr-evo-hint">Texto do atendimento</div>
                 </div>
 
                 <button type="button" class="mr-mini" id="mr_btn_copiar_evo" title="Copiar evolução">
@@ -107,7 +113,7 @@
         </div>
 
         <!-- ABA PACIENTE -->
-        <div class="mr-panel" data-panel="paciente" aria-label="Dados pessoais do paciente">
+        <div class="mr-panel" data-panel="paciente">
           <div class="mr-pac-grid">
             <div class="mr-card">
               <div class="mr-k">Nome completo</div>
@@ -166,12 +172,53 @@
           </div>
         </div>
 
+        <!-- ABA EVOLUÇÃO OCULTA -->
+        <div class="mr-panel" data-panel="oculta">
+          <section class="mr-secret">
+            <div class="mr-secret-hero">
+              <div>
+                <strong id="mr_oculta_titulo">Situação da evolução oculta</strong>
+                <p id="mr_oculta_sub">—</p>
+              </div>
+
+              <span class="mr-secret-pill" id="mr_oculta_situacao">—</span>
+            </div>
+
+            <div class="mr-secret-grid">
+              <div class="mr-card">
+                <div class="mr-k">Total de evoluções ocultas</div>
+                <div class="mr-v" id="mr_oculta_total">0</div>
+              </div>
+
+              <div class="mr-card">
+                <div class="mr-k">Visíveis para você</div>
+                <div class="mr-v" id="mr_oculta_visivel">0</div>
+              </div>
+            </div>
+
+            <section class="mr-evo mr-evo-secret" id="mr_oculta_box">
+              <header class="mr-evo-head">
+                <div>
+                  <div class="mr-k">Conteúdo liberado</div>
+                  <div class="mr-evo-hint">Aparece apenas se você for o autor ou tiver CBO autorizado</div>
+                </div>
+
+                <button type="button" class="mr-mini" id="mr_btn_copiar_oculta" title="Copiar evolução oculta">
+                  📎 Copiar
+                </button>
+              </header>
+
+              <div class="mr-evolucao mr-evolucao-secret" id="mr_evolucao_oculta">—</div>
+            </section>
+          </section>
+        </div>
+
       </div>
     </section>
 
-    <!-- FOOTER -->
     <footer class="mr-actions">
       <button class="mr-btn" value="close">Fechar</button>
     </footer>
+
   </form>
 </dialog>

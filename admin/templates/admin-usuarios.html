@@ -1,10 +1,101 @@
-{# templates/admin-usuarios.html #}
 {% extends 'layout.html' %}
 
 {% block extra_css %}
   {{ super() }}
   <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/admin.css') }}">
   <link rel="stylesheet" href="{{ url_for('admin.static', filename='css/usuarios.css') }}">
+
+  <style>
+    .usuarios-cards {
+      display: none;
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .usuario-card {
+      background: #fff;
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+    }
+
+    .usuario-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .usuario-card-head h3 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.2;
+      color: #0f172a;
+    }
+
+    .usuario-card-sub {
+      margin-top: 4px;
+      font-size: .9rem;
+      color: #64748b;
+      word-break: break-word;
+    }
+
+    .usuario-card-body {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .usuario-meta {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, .12);
+    }
+
+    .usuario-meta-label {
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .usuario-meta-value {
+      font-size: .95rem;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .usuario-card-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .usuario-card-actions .btn,
+    .usuario-card-actions form {
+      flex: 1 1 auto;
+    }
+
+    .usuario-card-actions form .btn {
+      width: 100%;
+    }
+
+    @media (max-width: 880px) {
+      .usuarios-table-wrap {
+        display: none;
+      }
+
+      .usuarios-cards {
+        display: grid;
+      }
+    }
+  </style>
 {% endblock %}
 
 {% block content %}
@@ -30,7 +121,6 @@
       </div>
     </div>
 
-    <!-- Filtros -->
     <form id="filtrosUsuarios" class="usuarios-filters" method="get" action="{{ url_for('admin.usuarios_listar') }}">
       <input type="text" id="f_busca" name="q" placeholder="Buscar por nome, CPF, e-mail..." value="{{ request.args.get('q','') }}">
       <select id="f_nivel" name="nivel">
@@ -47,7 +137,7 @@
       <button class="btn">Filtrar</button>
     </form>
 
-    <!-- Tabela -->
+    <!-- Desktop -->
     <div class="usuarios-table-wrap">
       <table class="usuarios-table" id="tUsuarios">
         <thead>
@@ -56,6 +146,7 @@
             <th>CPF</th>
             <th>E-mail</th>
             <th>Nível</th>
+            <th>CBO</th>
             <th>Status</th>
             <th style="width:200px">Ações</th>
           </tr>
@@ -67,6 +158,7 @@
             <td>{{ u.cpf }}</td>
             <td>{{ u.email or '—' }}</td>
             <td>{{ u.role or '—' }}</td>
+            <td>{{ u.cbo_label or '—' }}</td>
             <td>
               {% if u.is_active %}
                 <span class="badge success">Ativo</span>
@@ -85,10 +177,61 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="muted center">Nenhum usuário cadastrado.</td></tr>
+          <tr><td colspan="7" class="muted center">Nenhum usuário cadastrado.</td></tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile -->
+    <div class="usuarios-cards">
+      {% for u in usuarios|default([]) %}
+        <article class="usuario-card" data-id="{{ u.id }}">
+          <div class="usuario-card-head">
+            <div>
+              <h3>{{ u.nome }}</h3>
+              <div class="usuario-card-sub">{{ u.email or 'Sem e-mail' }}</div>
+            </div>
+
+            <div>
+              {% if u.is_active %}
+                <span class="badge success">Ativo</span>
+              {% else %}
+                <span class="badge">Inativo</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="usuario-card-body">
+            <div class="usuario-meta">
+              <span class="usuario-meta-label">CPF</span>
+              <span class="usuario-meta-value">{{ u.cpf or '—' }}</span>
+            </div>
+
+            <div class="usuario-meta">
+              <span class="usuario-meta-label">Nível</span>
+              <span class="usuario-meta-value">{{ u.role or '—' }}</span>
+            </div>
+
+            <div class="usuario-meta">
+              <span class="usuario-meta-label">CBO</span>
+              <span class="usuario-meta-value">{{ u.cbo_label or '—' }}</span>
+            </div>
+          </div>
+
+          <div class="usuario-card-actions">
+            <button type="button" class="btn xs" data-action="edit">Editar</button>
+            <button type="button" class="btn xs" data-action="password">Senha</button>
+            <form method="post"
+                  action="{{ url_for('admin.usuarios_remover', uid=u.id) }}"
+                  onsubmit="return confirm('Remover o usuário {{ u.nome }}? Esta ação não pode ser desfeita.');">
+              <button type="submit" class="btn xs danger">Remover</button>
+            </form>
+          </div>
+        </article>
+      {% else %}
+        <div class="muted center">Nenhum usuário cadastrado.</div>
+      {% endfor %}
     </div>
   </div>
 
@@ -164,14 +307,23 @@
               {% endfor %}
             </select>
           </div>
-          <div class="field">
+          <div class="field cbo-field">
             <label>CBO</label>
-            <select name="cbo" id="u_cbo">
-              <option value="">—</option>
-              {% for c in cbos_catalogo|default([]) %}
-                <option value="{{ c.codigo }}">{{ c.codigo }} — {{ c.descricao }}</option>
-              {% endfor %}
-            </select>
+
+            <!-- valor real que vai para o backend -->
+            <input type="hidden" name="cbo" id="u_cbo" value="">
+
+            <!-- campo visível para busca -->
+            <input
+              type="text"
+              id="u_cbo_busca"
+              placeholder="Digite código ou descrição do CBO"
+              autocomplete="off"
+            >
+
+            <div id="u_cbo_sugestoes" class="autocomplete-list" hidden></div>
+
+            <small class="muted" id="u_cbo_hint">Digite pelo menos 2 caracteres.</small>
           </div>
         </div>
 
@@ -238,7 +390,6 @@
           </div>
         </fieldset>
 
-        <!-- Senhas (visível APENAS para "Novo usuário") -->
         <div id="u_senhas_group" class="grid two">
           <div class="field">
             <label>Senha *</label>
@@ -257,7 +408,6 @@
             </div>
           </div>
         </div>
-
       </section>
 
       <footer class="modal-footer">
