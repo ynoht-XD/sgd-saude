@@ -46,7 +46,26 @@ FORM_ROUTES = {
 # HELPERS · POSTGRES
 # ============================================================
 
+def _val(row, key: str, index: int = 0, default=None):
+    if not row:
+        return default
+
+    if isinstance(row, dict):
+        return row.get(key, default)
+
+    try:
+        return row[index]
+    except Exception:
+        return default
+
+
 def _row_to_dict(cur, row):
+    if not row:
+        return {}
+
+    if isinstance(row, dict):
+        return dict(row)
+
     cols = [d[0] for d in cur.description]
     return {cols[i]: row[i] for i in range(len(cols))}
 
@@ -65,92 +84,134 @@ def _only_digits(v):
 
 def has_table(conn, table_name: str) -> bool:
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.tables
-             WHERE table_schema = 'public'
-               AND table_name = %s
+    try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.tables
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+            ) AS existe
+            """,
+            (table_name,),
         )
-        """,
-        (table_name,),
-    )
-    return bool(cur.fetchone()[0])
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def has_column(conn, table_name: str, column_name: str) -> bool:
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name = %s
-               AND column_name = %s
+    try:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+                   AND column_name = %s
+            ) AS existe
+            """,
+            (table_name, column_name),
         )
-        """,
-        (table_name, column_name),
-    )
-    return bool(cur.fetchone()[0])
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def table_columns(conn, table_name: str) -> set[str]:
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT column_name
-          FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = %s
-        """,
-        (table_name,),
-    )
-    return {r[0] for r in cur.fetchall() or []}
+    try:
+        cur.execute(
+            """
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = %s
+            """,
+            (table_name,),
+        )
+        rows = cur.fetchall() or []
+        return {
+            _val(r, "column_name", 0)
+            for r in rows
+            if _val(r, "column_name", 0)
+        }
+    finally:
+        cur.close()
+
+
+def ensure_column(conn, table_name: str, column_name: str, ddl_type: str):
+    if has_column(conn, table_name, column_name):
+        return
+
+    cur = conn.cursor()
+    try:
+        cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl_type}")
+        conn.commit()
+    finally:
+        cur.close()
 
 
 def ensure_avaliacoes_schema(conn):
     cur = conn.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS avaliacoes (
-            id SERIAL PRIMARY KEY,
-            tipo TEXT NOT NULL,
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS avaliacoes (
+                id SERIAL PRIMARY KEY,
+                tipo TEXT NOT NULL,
 
-            paciente_id INTEGER,
-            paciente_nome TEXT,
-            paciente_prontuario TEXT,
-            paciente_cpf TEXT,
+                paciente_id INTEGER,
+                paciente_nome TEXT,
+                paciente_prontuario TEXT,
+                paciente_cpf TEXT,
 
-            usuario_id INTEGER,
-            usuario_nome TEXT,
-            usuario_cbo TEXT,
+                usuario_id INTEGER,
+                usuario_nome TEXT,
+                usuario_cbo TEXT,
 
-            dados_json TEXT NOT NULL,
-            criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+                dados_json TEXT NOT NULL,
+                criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    if not has_column(conn, "avaliacoes", "paciente_id"):
-        cur.execute("ALTER TABLE avaliacoes ADD COLUMN paciente_id INTEGER")
+        conn.commit()
+    finally:
+        cur.close()
 
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_avaliacoes_tipo
-        ON avaliacoes (tipo)
-    """)
+    ensure_column(conn, "avaliacoes", "paciente_id", "INTEGER")
+    ensure_column(conn, "avaliacoes", "paciente_nome", "TEXT")
+    ensure_column(conn, "avaliacoes", "paciente_prontuario", "TEXT")
+    ensure_column(conn, "avaliacoes", "paciente_cpf", "TEXT")
+    ensure_column(conn, "avaliacoes", "usuario_id", "INTEGER")
+    ensure_column(conn, "avaliacoes", "usuario_nome", "TEXT")
+    ensure_column(conn, "avaliacoes", "usuario_cbo", "TEXT")
+    ensure_column(conn, "avaliacoes", "dados_json", "TEXT")
+    ensure_column(conn, "avaliacoes", "criado_em", "TIMESTAMP")
 
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_avaliacoes_criado
-        ON avaliacoes (criado_em)
-    """)
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_avaliacoes_tipo
+            ON avaliacoes (tipo)
+        """)
 
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_avaliacoes_paciente
-        ON avaliacoes (paciente_id)
-    """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_avaliacoes_criado
+            ON avaliacoes (criado_em)
+        """)
 
-    conn.commit()
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_avaliacoes_paciente
+            ON avaliacoes (paciente_id)
+        """)
+
+        conn.commit()
+    finally:
+        cur.close()
 
 
 def resolver_usuario_logado(conn):
@@ -169,22 +230,26 @@ def resolver_usuario_logado(conn):
         cbo_expr = "COALESCE(cbo, '')" if "cbo" in cols else "''"
 
         cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT id, {nome_expr} AS nome, {cbo_expr} AS cbo
-              FROM usuarios
-             WHERE id = %s
-             LIMIT 1
-            """,
-            (int(uid),),
-        )
-        r = cur.fetchone()
-        if r:
-            return {
-                "id": r[0],
-                "nome": r[1] or nome or "",
-                "cbo": r[2] or cbo or "",
-            }
+        try:
+            cur.execute(
+                f"""
+                SELECT id, {nome_expr} AS nome, {cbo_expr} AS cbo
+                  FROM usuarios
+                 WHERE id = %s
+                 LIMIT 1
+                """,
+                (int(uid),),
+            )
+            r = cur.fetchone()
+
+            if r:
+                return {
+                    "id": _val(r, "id", 0),
+                    "nome": _val(r, "nome", 1, "") or nome or "",
+                    "cbo": _val(r, "cbo", 2, "") or cbo or "",
+                }
+        finally:
+            cur.close()
 
     return {
         "id": int(uid) if str(uid or "").isdigit() else None,
@@ -266,25 +331,28 @@ def api_buscar_pacientes():
         cpf_expr = "COALESCE(cpf, '')" if "cpf" in cols else "''"
 
         cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT
-                id,
-                COALESCE(nome, '') AS nome,
-                {pront_expr} AS prontuario,
-                {cpf_expr} AS cpf
-            FROM pacientes
-            WHERE
-                nome ILIKE %s
-                OR REGEXP_REPLACE(COALESCE(cpf::text, ''), '\\D', '', 'g') ILIKE %s
-                OR COALESCE(prontuario::text, '') ILIKE %s
-            ORDER BY nome
-            LIMIT 20
-            """,
-            (f"%{q}%", f"%{_only_digits(q)}%", f"%{q}%"),
-        )
+        try:
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    COALESCE(nome, '') AS nome,
+                    {pront_expr} AS prontuario,
+                    {cpf_expr} AS cpf
+                FROM pacientes
+                WHERE
+                    nome ILIKE %s
+                    OR REGEXP_REPLACE(COALESCE(cpf::text, ''), '\\D', '', 'g') ILIKE %s
+                    OR COALESCE(prontuario::text, '') ILIKE %s
+                ORDER BY nome
+                LIMIT 20
+                """,
+                (f"%{q}%", f"%{_only_digits(q)}%", f"%{q}%"),
+            )
 
-        rows = _rows_to_dicts(cur, cur.fetchall())
+            rows = _rows_to_dicts(cur, cur.fetchall())
+        finally:
+            cur.close()
 
         return jsonify({
             "items": [
@@ -353,8 +421,11 @@ def lista():
         sql += " ORDER BY id DESC "
 
         cur = conn.cursor()
-        cur.execute(sql, params)
-        avaliacoes = _rows_to_dicts(cur, cur.fetchall())
+        try:
+            cur.execute(sql, params)
+            avaliacoes = _rows_to_dicts(cur, cur.fetchall())
+        finally:
+            cur.close()
 
         return render_template(
             "avaliacoes.html",
@@ -383,8 +454,11 @@ def visualizar(id):
         ensure_avaliacoes_schema(conn)
 
         cur = conn.cursor()
-        cur.execute("SELECT * FROM avaliacoes WHERE id = %s", (id,))
-        row = cur.fetchone()
+        try:
+            cur.execute("SELECT * FROM avaliacoes WHERE id = %s", (id,))
+            row = cur.fetchone()
+        finally:
+            cur.close()
 
         if not row:
             flash("Avaliação não encontrada.", "warning")
@@ -417,8 +491,11 @@ def exportar_pdf(id):
         ensure_avaliacoes_schema(conn)
 
         cur = conn.cursor()
-        cur.execute("SELECT * FROM avaliacoes WHERE id = %s", (id,))
-        row = cur.fetchone()
+        try:
+            cur.execute("SELECT * FROM avaliacoes WHERE id = %s", (id,))
+            row = cur.fetchone()
+        finally:
+            cur.close()
 
         if not row:
             flash("Avaliação não encontrada.", "warning")
@@ -541,39 +618,42 @@ def nova():
             dados.pop(k, None)
 
         cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO avaliacoes (
-                tipo,
-                paciente_id,
-                paciente_nome,
-                paciente_prontuario,
-                paciente_cpf,
-                usuario_id,
-                usuario_nome,
-                usuario_cbo,
-                dados_json,
-                criado_em
+        try:
+            cur.execute(
+                """
+                INSERT INTO avaliacoes (
+                    tipo,
+                    paciente_id,
+                    paciente_nome,
+                    paciente_prontuario,
+                    paciente_cpf,
+                    usuario_id,
+                    usuario_nome,
+                    usuario_cbo,
+                    dados_json,
+                    criado_em
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    tipo,
+                    int(request.form.get("paciente_id")) if str(request.form.get("paciente_id") or "").isdigit() else None,
+                    paciente_nome,
+                    (request.form.get("paciente_prontuario") or "").strip(),
+                    (request.form.get("paciente_cpf") or "").strip(),
+                    usuario_id,
+                    usuario.get("nome") or "",
+                    usuario.get("cbo") or "",
+                    json.dumps(dados, ensure_ascii=False),
+                    datetime.now(),
+                ),
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-            """,
-            (
-                tipo,
-                int(request.form.get("paciente_id")) if str(request.form.get("paciente_id") or "").isdigit() else None,
-                paciente_nome,
-                (request.form.get("paciente_prontuario") or "").strip(),
-                (request.form.get("paciente_cpf") or "").strip(),
-                usuario_id,
-                usuario.get("nome") or "",
-                usuario.get("cbo") or "",
-                json.dumps(dados, ensure_ascii=False),
-                datetime.now(),
-            ),
-        )
 
-        avaliacao_id = cur.fetchone()[0]
-        conn.commit()
+            avaliacao_id = _val(cur.fetchone(), "id", 0)
+            conn.commit()
+        finally:
+            cur.close()
 
         flash("Avaliação registrada com sucesso ✅", "success")
         return redirect(url_for("avaliacoes.visualizar", id=avaliacao_id))
