@@ -18,42 +18,69 @@ def _only_digits(v: str | None) -> str:
     return re.sub(r"\D+", "", v or "")
 
 
+def _val(row, key: str, index: int = 0, default=None):
+    if not row:
+        return default
+
+    if isinstance(row, dict):
+        return row.get(key, default)
+
+    try:
+        return row[index]
+    except Exception:
+        return default
+
+
 def has_table(conn, table_name: str) -> bool:
     cur = conn.cursor()
-    cur.execute("""
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.tables
-             WHERE table_schema = 'public'
-               AND table_name = %s
-        )
-    """, (table_name,))
-    return bool(cur.fetchone()[0])
+    try:
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.tables
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+            ) AS existe
+        """, (table_name,))
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def has_column(conn, table_name: str, column_name: str) -> bool:
     cur = conn.cursor()
-    cur.execute("""
-        SELECT EXISTS (
-            SELECT 1
-              FROM information_schema.columns
-             WHERE table_schema = 'public'
-               AND table_name = %s
-               AND column_name = %s
-        )
-    """, (table_name, column_name))
-    return bool(cur.fetchone()[0])
+    try:
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1
+                  FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = %s
+                   AND column_name = %s
+            ) AS existe
+        """, (table_name, column_name))
+        return bool(_val(cur.fetchone(), "existe", 0, False))
+    finally:
+        cur.close()
 
 
 def _table_columns(conn, table: str) -> set[str]:
     cur = conn.cursor()
-    cur.execute("""
-        SELECT column_name
-          FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = %s
-    """, (table,))
-    return {r[0] for r in cur.fetchall() or []}
+    try:
+        cur.execute("""
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = %s
+        """, (table,))
+        rows = cur.fetchall() or []
+        return {
+            _val(r, "column_name", 0)
+            for r in rows
+            if _val(r, "column_name", 0)
+        }
+    finally:
+        cur.close()
 
 
 def ensure_column(conn, table: str, col: str, ddl_type: str):
@@ -64,8 +91,11 @@ def ensure_column(conn, table: str, col: str, ddl_type: str):
         return
 
     cur = conn.cursor()
-    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_type}")
-    conn.commit()
+    try:
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl_type}")
+        conn.commit()
+    finally:
+        cur.close()
 
 
 def _first_existing(cols: set[str], opts: list[str]) -> str | None:
@@ -122,6 +152,12 @@ def _int_or_none(s: str) -> Optional[int]:
 
 
 def _row_to_dict(cur, row) -> dict:
+    if not row:
+        return {}
+
+    if isinstance(row, dict):
+        return dict(row)
+
     cols = [d[0] for d in cur.description]
     return {cols[i]: row[i] for i in range(len(cols))}
 
@@ -157,57 +193,60 @@ def _idade_expr(nasc_sql: str) -> str:
 def ensure_atendimentos_schema(conn):
     cur = conn.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS atendimentos (
-            id SERIAL PRIMARY KEY,
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS atendimentos (
+                id SERIAL PRIMARY KEY,
 
-            profissional_id INTEGER,
-            usuario_id INTEGER,
+                profissional_id INTEGER,
+                usuario_id INTEGER,
 
-            paciente_id INTEGER,
-            cidadao_id INTEGER,
-            paciente_nome TEXT,
-            nome_paciente TEXT,
-            paciente TEXT,
-            nome TEXT,
+                paciente_id INTEGER,
+                cidadao_id INTEGER,
+                paciente_nome TEXT,
+                nome_paciente TEXT,
+                paciente TEXT,
+                nome TEXT,
 
-            data_atendimento DATE,
-            data TEXT,
-            dt_atendimento TEXT,
-            criado_em TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                data_atendimento DATE,
+                data TEXT,
+                dt_atendimento TEXT,
+                criado_em TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-            evolucao TEXT,
-            evolucao_texto TEXT,
+                evolucao TEXT,
+                evolucao_texto TEXT,
 
-            cidade TEXT,
-            municipio TEXT,
-            cid TEXT,
-            cid_codigo TEXT,
+                cidade TEXT,
+                municipio TEXT,
+                cid TEXT,
+                cid_codigo TEXT,
 
-            status TEXT,
-            justificativa TEXT,
-            cbo_profissional TEXT,
-            nome_profissional TEXT,
-            cns_profissional TEXT
-        )
-    """)
+                status TEXT,
+                justificativa TEXT,
+                cbo_profissional TEXT,
+                nome_profissional TEXT,
+                cns_profissional TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
-            id SERIAL PRIMARY KEY,
-            atendimento_id INTEGER NOT NULL REFERENCES atendimentos(id) ON DELETE CASCADE,
-            procedimento TEXT,
-            procedimento_nome TEXT,
-            descricao TEXT,
-            codigo_sigtap TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
+                id SERIAL PRIMARY KEY,
+                atendimento_id INTEGER NOT NULL REFERENCES atendimentos(id) ON DELETE CASCADE,
+                procedimento TEXT,
+                procedimento_nome TEXT,
+                descricao TEXT,
+                codigo_sigtap TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
-    conn.commit()
+        conn.commit()
 
-    # Migração leve para bancos que já tinham a tabela.
+    finally:
+        cur.close()
+
     ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
     ensure_column(conn, "atendimentos", "usuario_id", "INTEGER")
     ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
@@ -225,19 +264,23 @@ def ensure_atendimentos_schema(conn):
     ensure_column(conn, "atendimento_procedimentos", "codigo_sigtap", "TEXT")
 
     cur = conn.cursor()
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_ap_atend ON atendimento_procedimentos (atendimento_id)")
 
-    conn.commit()
+    try:
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ap_atend ON atendimento_procedimentos (atendimento_id)")
+        conn.commit()
+    finally:
+        cur.close()
+
 
 # ============================================================
 # LOGADO -> PROFISSIONAL
 # ============================================================
 
 def _resolve_logged_profissional_id(conn) -> int | None:
-    for key in ("usuario_id", "user_id", "id"):
+    for key in ("profissional_id", "usuario_id", "user_id", "id"):
         val = session.get(key)
         if val is not None:
             try:
@@ -266,23 +309,27 @@ def _resolve_logged_profissional_id(conn) -> int | None:
 
     cur = conn.cursor()
 
-    conds = [
-        f"TRIM(LOWER(COALESCE({c}::text, ''))) = TRIM(LOWER(%s))"
-        for c in parts
-    ]
+    try:
+        conds = [
+            f"TRIM(LOWER(COALESCE({c}::text, ''))) = TRIM(LOWER(%s))"
+            for c in parts
+        ]
 
-    cur.execute(
-        f"""
-        SELECT id
-          FROM usuarios
-         WHERE {" OR ".join(conds)}
-         LIMIT 1
-        """,
-        [login_like] * len(conds),
-    )
+        cur.execute(
+            f"""
+            SELECT id
+              FROM usuarios
+             WHERE {" OR ".join(conds)}
+             LIMIT 1
+            """,
+            [login_like] * len(conds),
+        )
 
-    row = cur.fetchone()
-    return int(row[0]) if row else None
+        row = cur.fetchone()
+        return int(_val(row, "id", 0)) if row else None
+
+    finally:
+        cur.close()
 
 
 def _build_url_with_page(page: int) -> str:
@@ -362,6 +409,7 @@ def _query_meus_atendimentos_paginado(
             cid_expr = f"TRIM(UPPER(COALESCE(p.{col_p_cid}::text, '')))"
 
     proc_expr = "''"
+
     if has_table(conn, "atendimento_procedimentos"):
         ap_cols = _table_columns(conn, "atendimento_procedimentos")
         col_ap_atend = _first_existing(ap_cols, ["atendimento_id"])
@@ -390,6 +438,7 @@ def _query_meus_atendimentos_paginado(
         if idade_min is not None:
             where.append(f"({idade_expr}) >= %s")
             params.append(idade_min)
+
         if idade_max is not None:
             where.append(f"({idade_expr}) <= %s")
             params.append(idade_max)
@@ -413,39 +462,44 @@ def _query_meus_atendimentos_paginado(
     """
 
     cur = conn.cursor()
-    cur.execute(count_sql, params)
-    total = int(cur.fetchone()[0] or 0)
 
-    page = max(1, int(page or 1))
-    per_page = max(1, min(200, int(per_page or 20)))
-    offset = (page - 1) * per_page
+    try:
+        cur.execute(count_sql, params)
+        total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
-    list_sql = f"""
-        SELECT
-            a.id AS id,
-            {paciente_expr} AS paciente,
-            {proc_expr} AS procedimento,
-            COALESCE({data_expr}::text, '') AS data,
-            {evol_expr} AS evolucao,
-            SUBSTRING({evol_expr} FROM 1 FOR 260) AS evolucao_preview,
-            {idade_expr} AS idade
-        FROM atendimentos a
-        {join_sql}
-        WHERE {where_sql}
-        GROUP BY
-            a.id,
-            {paciente_expr},
-            {data_expr},
-            {evol_expr},
-            {idade_expr}
-        ORDER BY {data_expr} DESC NULLS LAST, a.id DESC
-        LIMIT %s OFFSET %s
-    """
+        page = max(1, int(page or 1))
+        per_page = max(1, min(200, int(per_page or 20)))
+        offset = (page - 1) * per_page
 
-    cur.execute(list_sql, params + [per_page, offset])
-    rows = cur.fetchall() or []
+        list_sql = f"""
+            SELECT
+                a.id AS id,
+                {paciente_expr} AS paciente,
+                {proc_expr} AS procedimento,
+                COALESCE({data_expr}::text, '') AS data,
+                {evol_expr} AS evolucao,
+                SUBSTRING({evol_expr} FROM 1 FOR 260) AS evolucao_preview,
+                {idade_expr} AS idade
+            FROM atendimentos a
+            {join_sql}
+            WHERE {where_sql}
+            GROUP BY
+                a.id,
+                {paciente_expr},
+                {data_expr},
+                {evol_expr},
+                {idade_expr}
+            ORDER BY {data_expr} DESC NULLS LAST, a.id DESC
+            LIMIT %s OFFSET %s
+        """
 
-    return total, [_row_to_dict(cur, r) for r in rows]
+        cur.execute(list_sql, params + [per_page, offset])
+        rows = cur.fetchall() or []
+
+        return total, [_row_to_dict(cur, r) for r in rows]
+
+    finally:
+        cur.close()
 
 
 # ============================================================
@@ -589,6 +643,7 @@ def api_list():
         pages = max(1, (total + per_page - 1) // per_page)
 
         items = []
+
         for r in rows:
             items.append({
                 "id": r.get("id"),
