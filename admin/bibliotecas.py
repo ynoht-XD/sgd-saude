@@ -244,7 +244,7 @@ def importar_cid_xlsx(file_storage):
 # IMPORTAÇÃO CEP / IBGE
 # ============================================================
 
-def importar_cep_ibge_txt(file_storage, chunk_size=10000):
+def importar_cep_ibge_txt(file_storage, chunk_size=50000):
     ensure_bibliotecas_postgres()
 
     conn = conectar_db()
@@ -254,18 +254,27 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
     try:
         cur = conn.cursor()
 
-        stream = io.TextIOWrapper(file_storage.stream, encoding="utf-8-sig")
+        # Reimportação limpa
+        cur.execute("TRUNCATE TABLE cep_ibge RESTART IDENTITY;")
+        conn.commit()
+
+        stream = io.TextIOWrapper(file_storage.stream, encoding="utf-8-sig", newline="")
         reader = csv.DictReader(stream, delimiter=";")
 
         lote = []
 
         for row in reader:
-            cep = str(row.get("CEP") or "").strip()
-            ibge = str(row.get("IBGE") or "").strip()
-            municipio = str(row.get("MUNICIPIO") or "").strip()
-            coduf = str(row.get("CODUF") or "").strip()
-            codmunicip = str(row.get("CODMUNIC") or "").strip()
-            criado_em = str(row.get("CRIADO_EM") or "").strip() or None
+            row_norm = {
+                str(k or "").strip().upper(): str(v or "").strip()
+                for k, v in row.items()
+            }
+
+            cep = row_norm.get("CEP", "")
+            ibge = row_norm.get("IBGE", "")
+            municipio = row_norm.get("MUNICIPIO", "")
+            coduf = row_norm.get("CODUF", "")
+            codmunicip = row_norm.get("CODMUNIC", "")
+            criado_em = row_norm.get("CRIADO_EM") or None
 
             if not cep or not ibge or not municipio:
                 ignorados += 1
@@ -280,7 +289,9 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
                     VALUES (%s, %s, %s, %s, %s, COALESCE(%s::timestamp, CURRENT_TIMESTAMP));
                 """, lote)
 
+                conn.commit()
                 processados += len(lote)
+                print("CEP/IBGE lote importado:", processados)
                 lote.clear()
 
         if lote:
@@ -290,16 +301,15 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
                 VALUES (%s, %s, %s, %s, %s, COALESCE(%s::timestamp, CURRENT_TIMESTAMP));
             """, lote)
 
+            conn.commit()
             processados += len(lote)
 
-        conn.commit()
         cur.close()
         print("CEP/IBGE importados:", processados, "ignorados:", ignorados)
         return processados, ignorados
 
     finally:
         conn.close()
-
 
 # ============================================================
 # ROTA CBO
