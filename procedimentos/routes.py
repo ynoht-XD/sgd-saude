@@ -287,7 +287,13 @@ def index():
         """, params)
 
         row = cur.fetchone()
-        total = row[0] if row else 0
+
+        if not row:
+            total = 0
+        elif isinstance(row, dict):
+            total = list(row.values())[0]
+        else:
+            total = row[0]
         total_paginas = max(1, math.ceil(total / por_pagina))
 
         # DADOS
