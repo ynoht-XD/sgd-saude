@@ -59,8 +59,12 @@ def to_int(v):
 
 def get_col(row, *names):
     for name in names:
-        if name in row.index:
-            return row[name]
+        try:
+            val = row.get(name)
+            if val is not None and str(val).strip() != "":
+                return val
+        except Exception:
+            continue
     return ""
 
 
