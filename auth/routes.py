@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import re
 import json
-from datetime import datetime
 from urllib.parse import urlparse, urljoin
 
 from flask import render_template, request, redirect, url_for, flash, session
@@ -46,6 +45,21 @@ def _db():
     return conn
 
 
+def _val(row, key: str, index: int = 0):
+    """
+    Compatibilidade:
+    - psycopg com dict_row retorna dict
+    - psycopg/psycopg2 comum retorna tuple
+    """
+    if not row:
+        return None
+
+    if isinstance(row, dict):
+        return row.get(key)
+
+    return row[index]
+
+
 def _table_exists(conn, table: str) -> bool:
     cur = conn.cursor()
     cur.execute(
@@ -55,13 +69,15 @@ def _table_exists(conn, table: str) -> bool:
             FROM information_schema.tables
             WHERE table_schema = 'public'
               AND table_name = %s
-        );
+        ) AS existe;
         """,
         (table,),
     )
-    ok = bool(cur.fetchone()[0])
+
+    row = cur.fetchone()
     cur.close()
-    return ok
+
+    return bool(_val(row, "existe", 0))
 
 
 def _table_columns(conn, table: str) -> set[str]:
@@ -75,9 +91,19 @@ def _table_columns(conn, table: str) -> set[str]:
         """,
         (table,),
     )
-    cols = {r[0] for r in cur.fetchall()}
+
+    rows = cur.fetchall()
     cur.close()
-    return cols
+
+    cols = set()
+
+    for r in rows:
+        if isinstance(r, dict):
+            cols.add(r.get("column_name"))
+        else:
+            cols.add(r[0])
+
+    return {c for c in cols if c}
 
 
 def _add_col(conn, table: str, col: str, ddl: str):
@@ -116,6 +142,7 @@ def _ensure_schema(conn):
         );
         """
     )
+
     conn.commit()
     cur.close()
 
@@ -193,7 +220,7 @@ def _ensure_clinica_padrao(conn) -> int:
     row = cur.fetchone()
 
     if row:
-        clinica_id = row[0]
+        clinica_id = _val(row, "id", 0)
     else:
         cur.execute(
             """
@@ -203,11 +230,12 @@ def _ensure_clinica_padrao(conn) -> int:
             """,
             ("Clínica Principal", None),
         )
-        clinica_id = cur.fetchone()[0]
+        clinica_id = _val(cur.fetchone(), "id", 0)
 
     conn.commit()
     cur.close()
-    return clinica_id
+
+    return int(clinica_id)
 
 
 # ============================================================
@@ -259,7 +287,7 @@ def _ensure_admin_exists():
         row = cur.fetchone()
 
         if row:
-            usuario_id = row[0]
+            usuario_id = _val(row, "id", 0)
 
             cur.execute(
                 """
@@ -370,11 +398,12 @@ def _ensure_admin_exists():
     except Exception as e:
         if conn:
             conn.rollback()
-        print("❌ ERRO ao seedar MASTER PostgreSQL:", str(e))
+        print("❌ ERRO ao seedar MASTER PostgreSQL:", repr(e))
 
     finally:
         if conn:
             conn.close()
+
 
 # ============================================================
 # HELPERS LOGIN
@@ -404,6 +433,9 @@ def _row_to_dict(cur, row):
     if not row:
         return None
 
+    if isinstance(row, dict):
+        return dict(row)
+
     cols = [desc[0] for desc in cur.description]
     return dict(zip(cols, row))
 
@@ -418,6 +450,8 @@ def _get_usuario_por_cpf(cpf: str):
     try:
         _ensure_schema(conn)
 
+        cpf_digits = re.sub(r"\D", "", cpf or "")
+
         cur = conn.cursor()
         cur.execute(
             """
@@ -427,7 +461,7 @@ def _get_usuario_por_cpf(cpf: str):
                OR regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = %s
             LIMIT 1;
             """,
-            (cpf, cpf),
+            (cpf_digits, cpf_digits),
         )
 
         row = cur.fetchone()
@@ -507,7 +541,6 @@ def _salvar_sessao(u: dict):
     session["is_master"] = usuario["is_master"]
     session["is_superuser"] = usuario["is_superuser"]
 
-    # Compatível com admin/modulos.py novo
     session["usuario"] = usuario
     session["user"] = usuario
     session["auth_user"] = usuario
@@ -575,10 +608,6 @@ def logout():
 
 @auth_bp.route("/seed-master")
 def seed_master_manual():
-    """
-    Rota auxiliar para forçar criação/atualização do Master.
-    Depois podemos remover ou proteger melhor.
-    """
     _ensure_admin_exists()
     flash("Master PostgreSQL verificado/atualizado.", "success")
     return redirect(url_for("auth.login"))
