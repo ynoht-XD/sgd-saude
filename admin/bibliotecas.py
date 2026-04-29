@@ -4,9 +4,7 @@ from __future__ import annotations
 import io
 import csv
 from openpyxl import load_workbook
-from flask import (
-    render_template, request, redirect, url_for, flash
-)
+from flask import render_template, request, redirect, url_for, flash
 
 from . import admin_bp, admin_required
 from db import conectar_db
@@ -16,16 +14,11 @@ from db import conectar_db
 # SCHEMA POSTGRES
 # ============================================================
 
-
-
 def ensure_bibliotecas_postgres():
     conn = conectar_db()
     try:
         cur = conn.cursor()
 
-        # =========================
-        # CBO
-        # =========================
         cur.execute("""
             CREATE TABLE IF NOT EXISTS ocupacoes (
                 id SERIAL PRIMARY KEY,
@@ -34,9 +27,6 @@ def ensure_bibliotecas_postgres():
             );
         """)
 
-        # =========================
-        # CID
-        # =========================
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cid_catalogo (
                 id SERIAL PRIMARY KEY,
@@ -45,9 +35,6 @@ def ensure_bibliotecas_postgres():
             );
         """)
 
-        # =========================
-        # CEP / IBGE
-        # =========================
         cur.execute("""
             CREATE TABLE IF NOT EXISTS cep_ibge (
                 id SERIAL PRIMARY KEY,
@@ -60,12 +47,13 @@ def ensure_bibliotecas_postgres():
             );
         """)
 
-        # INDEXES
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ocupacoes_nome ON ocupacoes(no_ocupacao);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_cid_nome ON cid_catalogo(no_cid);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_cep ON cep_ibge(cep);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_cep_ibge_municipio ON cep_ibge(municipio);")
 
         conn.commit()
+        cur.close()
     finally:
         conn.close()
 
@@ -74,6 +62,19 @@ def ensure_bibliotecas_postgres():
 # HELPERS
 # ============================================================
 
+def _val(row, key: str, index: int = 0, default=None):
+    if not row:
+        return default
+
+    if isinstance(row, dict):
+        return row.get(key, default)
+
+    try:
+        return row[index]
+    except Exception:
+        return default
+
+
 def _header_map(headers):
     mapa = {}
     for idx, h in enumerate(headers):
@@ -81,6 +82,26 @@ def _header_map(headers):
         if chave:
             mapa[chave] = idx
     return mapa
+
+
+def _normalizar_codigo_cbo(valor) -> str:
+    codigo = str(valor or "").strip()
+
+    if codigo.endswith(".0"):
+        codigo = codigo[:-2]
+
+    codigo = "".join(ch for ch in codigo if ch.isdigit())
+
+    if not codigo:
+        return ""
+
+    return codigo.zfill(6)
+
+
+def _normalizar_codigo_cid(valor) -> str:
+    codigo = str(valor or "").strip().upper()
+    codigo = codigo.replace(".", "").replace("-", "").strip()
+    return codigo
 
 
 # ============================================================
@@ -97,12 +118,12 @@ def importar_cbo_xlsx(file_storage):
     headers = next(rows, None)
 
     if not headers:
-        raise ValueError("Arquivo vazio")
+        raise ValueError("Arquivo vazio.")
 
     hmap = _header_map(headers)
 
     if "co_ocupacao" not in hmap or "no_ocupacao" not in hmap:
-        raise ValueError("Colunas obrigatórias: co_ocupacao, no_ocupacao")
+        raise ValueError("Colunas obrigatórias: co_ocupacao, no_ocupacao.")
 
     conn = conectar_db()
     try:
@@ -112,15 +133,8 @@ def importar_cbo_xlsx(file_storage):
         ignorados = 0
 
         for row in rows:
-            codigo_raw = row[hmap["co_ocupacao"]]
+            codigo = _normalizar_codigo_cbo(row[hmap["co_ocupacao"]])
             nome = str(row[hmap["no_ocupacao"]] or "").strip()
-
-            codigo = str(codigo_raw or "").strip()
-
-            if codigo.endswith(".0"):
-                codigo = codigo[:-2]
-
-            codigo = "".join(ch for ch in codigo if ch.isdigit()).zfill(6)
 
             if not codigo or not nome:
                 ignorados += 1
@@ -130,21 +144,18 @@ def importar_cbo_xlsx(file_storage):
                 INSERT INTO ocupacoes (co_ocupacao, no_ocupacao)
                 VALUES (%s, %s)
                 ON CONFLICT (co_ocupacao)
-                DO UPDATE SET no_ocupacao = EXCLUDED.no_ocupacao
+                DO UPDATE SET no_ocupacao = EXCLUDED.no_ocupacao;
             """, (codigo, nome))
 
             processados += 1
 
         conn.commit()
+        cur.close()
         return processados, ignorados
 
     finally:
         conn.close()
 
-
-# ============================================================
-# IMPORTAÇÃO CID
-# ============================================================
 
 # ============================================================
 # IMPORTAÇÃO CID
@@ -189,10 +200,8 @@ def importar_cid_xlsx(file_storage):
         ignorados = 0
 
         for row in rows:
-            codigo = str(row[col_codigo] or "").strip().upper()
+            codigo = _normalizar_codigo_cid(row[col_codigo])
             nome = str(row[col_nome] or "").strip()
-
-            codigo = codigo.replace(".", "").replace("-", "").strip()
 
             if not codigo or not nome:
                 ignorados += 1
@@ -208,10 +217,12 @@ def importar_cid_xlsx(file_storage):
             processados += 1
 
         conn.commit()
+        cur.close()
         return processados, ignorados
 
     finally:
         conn.close()
+
 
 # ============================================================
 # IMPORTAÇÃO CEP / IBGE
@@ -244,14 +255,7 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
                 ignorados += 1
                 continue
 
-            lote.append((
-                cep,
-                ibge,
-                municipio,
-                coduf,
-                codmunicip,
-                criado_em,
-            ))
+            lote.append((cep, ibge, municipio, coduf, codmunicip, criado_em))
 
             if len(lote) >= chunk_size:
                 cur.executemany("""
@@ -273,16 +277,17 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
             processados += len(lote)
 
         conn.commit()
+        cur.close()
         return processados, ignorados
 
     finally:
         conn.close()
 
 
+# ============================================================
+# ROTA CBO
+# ============================================================
 
-# ============================================================
-# ROTAS
-# ============================================================
 @admin_bp.route("/cbo", methods=["GET", "POST"])
 @admin_required
 def biblioteca_cbo():
@@ -332,13 +337,15 @@ def biblioteca_cbo():
                 LIMIT 500;
             """)
 
-        rows = cur.fetchall()
+        rows = cur.fetchall() or []
 
         for row in rows:
             itens.append({
-                "codigo": row[0],
-                "descricao": row[1],
+                "codigo": _val(row, "codigo", 0, ""),
+                "descricao": _val(row, "descricao", 1, ""),
             })
+
+        cur.close()
 
     except Exception as e:
         conn.rollback()
@@ -353,6 +360,7 @@ def biblioteca_cbo():
         q=q,
         itens=itens,
     )
+
 
 # ============================================================
 # ROTA CID
@@ -396,13 +404,13 @@ def biblioteca_cid():
             like = f"%{q}%"
 
             cur.execute("""
-                SELECT COUNT(*)
+                SELECT COUNT(*) AS total
                 FROM cid_catalogo
                 WHERE co_cid ILIKE %s
                    OR no_cid ILIKE %s;
             """, (like, like))
 
-            total = cur.fetchone()[0]
+            total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             cur.execute("""
                 SELECT
@@ -417,11 +425,11 @@ def biblioteca_cid():
 
         else:
             cur.execute("""
-                SELECT COUNT(*)
+                SELECT COUNT(*) AS total
                 FROM cid_catalogo;
             """)
 
-            total = cur.fetchone()[0]
+            total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             cur.execute("""
                 SELECT
@@ -432,13 +440,15 @@ def biblioteca_cid():
                 LIMIT %s OFFSET %s;
             """, (por_pagina, offset))
 
-        rows = cur.fetchall()
+        rows = cur.fetchall() or []
 
         for row in rows:
             itens.append({
-                "codigo": row[0],
-                "descricao": row[1],
+                "codigo": _val(row, "codigo", 0, ""),
+                "descricao": _val(row, "descricao", 1, ""),
             })
+
+        cur.close()
 
     except Exception as e:
         conn.rollback()
@@ -463,6 +473,10 @@ def biblioteca_cid():
         por_pagina=por_pagina,
     )
 
+
+# ============================================================
+# ROTA CEP / IBGE
+# ============================================================
 
 @admin_bp.route("/cep-ibge", methods=["GET", "POST"])
 @admin_required
@@ -502,7 +516,7 @@ def biblioteca_cep_ibge():
             like = f"%{q}%"
 
             cur.execute("""
-                SELECT COUNT(*)
+                SELECT COUNT(*) AS total
                 FROM cep_ibge
                 WHERE cep ILIKE %s
                    OR ibge ILIKE %s
@@ -511,7 +525,7 @@ def biblioteca_cep_ibge():
                    OR codmunicip ILIKE %s;
             """, (like, like, like, like, like))
 
-            total = cur.fetchone()[0]
+            total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             cur.execute("""
                 SELECT
@@ -532,8 +546,8 @@ def biblioteca_cep_ibge():
             """, (like, like, like, like, like, por_pagina, offset))
 
         else:
-            cur.execute("SELECT COUNT(*) FROM cep_ibge;")
-            total = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) AS total FROM cep_ibge;")
+            total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             cur.execute("""
                 SELECT
@@ -548,17 +562,19 @@ def biblioteca_cep_ibge():
                 LIMIT %s OFFSET %s;
             """, (por_pagina, offset))
 
-        rows = cur.fetchall()
+        rows = cur.fetchall() or []
 
         for row in rows:
             itens.append({
-                "cep": row[0],
-                "ibge": row[1],
-                "municipio": row[2],
-                "coduf": row[3],
-                "codmunicip": row[4],
-                "criado_em": row[5],
+                "cep": _val(row, "cep", 0, ""),
+                "ibge": _val(row, "ibge", 1, ""),
+                "municipio": _val(row, "municipio", 2, ""),
+                "coduf": _val(row, "coduf", 3, ""),
+                "codmunicip": _val(row, "codmunicip", 4, ""),
+                "criado_em": _val(row, "criado_em", 5, ""),
             })
+
+        cur.close()
 
     except Exception as e:
         conn.rollback()
@@ -582,4 +598,3 @@ def biblioteca_cep_ibge():
         total=total,
         por_pagina=por_pagina,
     )
-    
