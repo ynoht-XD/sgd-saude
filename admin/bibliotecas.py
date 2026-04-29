@@ -151,7 +151,10 @@ def importar_cbo_xlsx(file_storage):
 
         conn.commit()
         cur.close()
+        print("CBO importados:", processados, "ignorados:", ignorados)
         return processados, ignorados
+    
+
 
     finally:
         conn.close()
@@ -218,7 +221,10 @@ def importar_cid_xlsx(file_storage):
 
         conn.commit()
         cur.close()
+        print("CID importados:", processados, "ignorados:", ignorados)
+        
         return processados, ignorados
+    
 
     finally:
         conn.close()
@@ -278,6 +284,7 @@ def importar_cep_ibge_txt(file_storage, chunk_size=10000):
 
         conn.commit()
         cur.close()
+        print("CEP/IBGE importados:", processados, "ignorados:", ignorados)
         return processados, ignorados
 
     finally:
