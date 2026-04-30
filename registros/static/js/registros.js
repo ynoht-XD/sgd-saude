@@ -1,37 +1,36 @@
 // registros/static/js/registros.js
 (function () {
-  const $  = (s, r = document) => r.querySelector(s);
+  const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
-  const frm        = $("#frmFiltros");
-  const inpBusca   = $("#f_busca");
-  const selProf    = $("#f_prof");
-  const inpProfId  = $("#f_prof_id");
-  const sugBox     = $("#f_prof_sugestoes");
+  const frm = $("#frmFiltros");
+  const inpBusca = $("#f_busca");
+  const selProf = $("#f_prof");
+  const inpProfId = $("#f_prof_id");
+  const sugBox = $("#f_prof_sugestoes");
 
   const inpDataIni = $("#f_data_ini");
   const inpDataFim = $("#f_data_fim");
-  const selStatus  = $("#f_status");
-  const selSexo    = $("#f_sexo");
-  const inpCID     = $("#f_cid");
-  const inpCidade  = $("#f_cidade");
+  const selStatus = $("#f_status");
+  const selSexo = $("#f_sexo");
+  const inpCID = $("#f_cid");
+  const inpCidade = $("#f_cidade");
 
-  const btnFiltrar        = $("#btnFiltrar");
-  const btnLimpar         = $("#btnLimpar");
-  const btnExportar       = $("#btnExportar");
-  const btnExportarEvoPdf = $("#btnExportarEvoPdf");
+  const btnFiltrar = $("#btnFiltrar");
+  const btnLimpar = $("#btnLimpar");
+  const btnExportar = $("#btnExportar");
 
-  const tbl       = $("#tblRegistros");
-  const tbody     = $("#tblRegistros tbody");
+  const tbl = $("#tblRegistros");
+  const tbody = $("#tblRegistros tbody");
   const lblResumo = $("#lblResumo");
 
-  const pagInfo     = $("#pagInfo");
-  const pagAtualEl  = $("#pagAtual");
-  const pagTotalEl  = $("#pagTotal");
+  const pagInfo = $("#pagInfo");
+  const pagAtualEl = $("#pagAtual");
+  const pagTotalEl = $("#pagTotal");
   const btnPagFirst = $("#pagFirst");
-  const btnPagPrev  = $("#pagPrev");
-  const btnPagNext  = $("#pagNext");
-  const btnPagLast  = $("#pagLast");
+  const btnPagPrev = $("#pagPrev");
+  const btnPagNext = $("#pagNext");
+  const btnPagLast = $("#pagLast");
 
   const PAGE_SIZE = 15;
   let allRows = [];
@@ -40,44 +39,47 @@
 
   const dlg = $("#modal-registro");
 
-  const mrSubtitle    = $("#mr_subtitle");
-  const mrBadgeData   = $("#mr_badge_data");
+  const mrSubtitle = $("#mr_subtitle");
+  const mrBadgeData = $("#mr_badge_data");
   const mrBadgeStatus = $("#mr_badge_status");
-  const mrBadgeCbo    = $("#mr_badge_cbo");
+  const mrBadgeCbo = $("#mr_badge_cbo");
   const mrBadgeOculta = $("#mr_badge_oculta");
 
-  const mrBtnCopyEvo    = $("#mr_btn_copiar_evo");
+  const mrBtnCopyEvo = $("#mr_btn_copiar_evo");
   const mrBtnCopyOculta = $("#mr_btn_copiar_oculta");
 
-  const mrProf         = $("#mr_profissional");
-  const mrProfCns      = $("#mr_prof_cns");
-  const mrProfCbo      = $("#mr_prof_cbo");
+  const mrProf = $("#mr_profissional");
+  const mrProfCns = $("#mr_prof_cns");
+  const mrProfCbo = $("#mr_prof_cbo");
   const mrProcedimento = $("#mr_procedimento");
-  const mrSigtap       = $("#mr_sigtap");
-  const mrCid          = $("#mr_cid");
-  const mrData         = $("#mr_data");
-  const mrStatus       = $("#mr_status");
-  const mrStatusJust   = $("#mr_status_just");
-  const mrEvolucao     = $("#mr_evolucao");
+  const mrSigtap = $("#mr_sigtap");
+  const mrCid = $("#mr_cid");
+  const mrData = $("#mr_data");
+  const mrStatus = $("#mr_status");
+  const mrStatusJust = $("#mr_status_just");
+  const mrEvolucao = $("#mr_evolucao");
 
-  const mrPaciente    = $("#mr_paciente");
-  const mrProntuario  = $("#mr_prontuario");
-  const mrPacIdade    = $("#mr_paciente_idade");
-  const mrPacMod      = $("#mr_paciente_mod");
-  const mrPacCPF      = $("#mr_pac_cpf");
-  const mrPacCNS      = $("#mr_pac_cns");
-  const mrPacNasc     = $("#mr_pac_nasc");
-  const mrPacSexo     = $("#mr_pac_sexo");
-  const mrPacTel      = $("#mr_pac_tel");
-  const mrPacCidade   = $("#mr_pac_cidade");
+  const mrPaciente = $("#mr_paciente");
+  const mrProntuario = $("#mr_prontuario");
+  const mrPacIdade = $("#mr_paciente_idade");
+  const mrPacMod = $("#mr_paciente_mod");
+  const mrPacCPF = $("#mr_pac_cpf");
+  const mrPacCNS = $("#mr_pac_cns");
+  const mrPacNasc = $("#mr_pac_nasc");
+  const mrPacSexo = $("#mr_pac_sexo");
+  const mrPacTel = $("#mr_pac_tel");
+  const mrPacCidade = $("#mr_pac_cidade");
   const mrPacEndereco = $("#mr_pac_endereco");
 
-  const mrOcultaTitulo   = $("#mr_oculta_titulo");
-  const mrOcultaSub      = $("#mr_oculta_sub");
+  const mrOcultaTitulo = $("#mr_oculta_titulo");
+  const mrOcultaSub = $("#mr_oculta_sub");
   const mrOcultaSituacao = $("#mr_oculta_situacao");
-  const mrOcultaTotal    = $("#mr_oculta_total");
-  const mrOcultaVisivel  = $("#mr_oculta_visivel");
+  const mrOcultaTotal = $("#mr_oculta_total");
+  const mrOcultaVisivel = $("#mr_oculta_visivel");
   const mrEvolucaoOculta = $("#mr_evolucao_oculta");
+
+  let cardsWrap = $("#cardsRegistros");
+  let selOrdem = $("#f_ordem");
 
   const PROFISSIONAIS = {
     "101": "Dr. João (Clínico)",
@@ -85,9 +87,21 @@
     "103": "Fisio Pedro (Fisioterapia)",
   };
 
-  const safe = (v, alt = "—") => (
-    v === undefined || v === null || String(v).trim() === "" ? alt : String(v)
-  );
+  const safe = (v, alt = "—") =>
+    v === undefined || v === null || String(v).trim() === "" ? alt : String(v);
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function escapeAttr(value) {
+    return escapeHtml(value);
+  }
 
   function valFiltro(v) {
     if (v == null) return "";
@@ -98,21 +112,45 @@
     return s;
   }
 
+  function hojeISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dia = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dia}`;
+  }
+
+  function inicioCompetenciaISO() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  }
+
+  function aplicarCompetenciaPadrao() {
+    if (inpDataIni && !inpDataIni.value) inpDataIni.value = inicioCompetenciaISO();
+    if (inpDataFim && !inpDataFim.value) inpDataFim.value = hojeISO();
+  }
+
   function fmtDataBR(d) {
     if (!d) return "—";
     const s = String(d).trim();
     if (!s) return "—";
 
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const [y, m, dia] = s.split("-");
+    const iso = s.slice(0, 10);
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      const [y, m, dia] = iso.split("-");
       return `${dia}/${m}/${y}`;
     }
 
-    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
-      return `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}`;
-    }
-
     return s;
+  }
+
+  function toDateNumber(v) {
+    const s = String(v || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return 0;
+    return Number(s.replaceAll("-", ""));
   }
 
   function pick(obj, keys, fallback = "—") {
@@ -160,6 +198,18 @@
     return pid ? `ID ${pid}` : "—";
   }
 
+  function pacienteNameFrom(obj) {
+    return pick(obj, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "—");
+  }
+
+  function dataFrom(obj) {
+    return pick(obj, ["data_atendimento", "data", "data_iso", "created_at"], "");
+  }
+
+  function cnsFrom(obj) {
+    return pick(obj, ["pac__cns", "paciente_cns", "cns", "cartao_sus"], "—");
+  }
+
   function formatTelefones(obj) {
     const tels = [
       pick(obj, ["pac__telefone", "paciente_telefone1", "telefone1", "telefone", "telefone_paciente"], ""),
@@ -173,13 +223,13 @@
   function formatEndereco(obj) {
     const partes = [];
 
-    const lograd  = pick(obj, ["pac__logradouro", "paciente_logradouro", "logradouro", "rua"], "");
-    const num     = pick(obj, ["pac__numero", "paciente_numero_casa", "numero_casa", "numero"], "");
-    const compl   = pick(obj, ["pac__complemento", "paciente_complemento", "complemento"], "");
-    const bairro  = pick(obj, ["pac__bairro", "paciente_bairro", "bairro", "bairro_paciente"], "");
+    const lograd = pick(obj, ["pac__logradouro", "paciente_logradouro", "logradouro", "rua"], "");
+    const num = pick(obj, ["pac__numero", "paciente_numero_casa", "numero_casa", "numero"], "");
+    const compl = pick(obj, ["pac__complemento", "paciente_complemento", "complemento"], "");
+    const bairro = pick(obj, ["pac__bairro", "paciente_bairro", "bairro", "bairro_paciente"], "");
     const cidade2 = pick(obj, ["pac__municipio", "pac__cidade", "paciente_municipio", "paciente_cidade", "municipio", "cidade"], "");
-    const uf      = pick(obj, ["pac__uf", "uf"], "");
-    const cep     = pick(obj, ["pac__cep", "paciente_cep", "cep"], "");
+    const uf = pick(obj, ["pac__uf", "uf"], "");
+    const cep = pick(obj, ["pac__cep", "paciente_cep", "cep"], "");
 
     if (lograd) partes.push(lograd);
     if (num) partes.push(`Nº ${num}`);
@@ -216,16 +266,10 @@
     });
   }
 
-  function escapeAttr(s) {
-    return String(s ?? "").replaceAll('"', "&quot;");
-  }
-
-  function parseRowFromTR(tr) {
-    const raw = tr.getAttribute("data-row") || "{}";
+  function decodeDataRow(raw) {
     try {
-      return JSON.parse(raw.replaceAll("&quot;", '"'));
-    } catch (e) {
-      console.warn("[registros] Falha ao parsear data-row:", e);
+      return JSON.parse(String(raw || "{}").replaceAll("&quot;", '"'));
+    } catch {
       return {};
     }
   }
@@ -277,22 +321,19 @@
   function setModalTab(tabName) {
     if (!dlg) return;
 
-    const tabs = dlg.querySelectorAll(".mr-tab");
-    const panels = dlg.querySelectorAll(".mr-panel");
-
-    tabs.forEach((t) => {
+    dlg.querySelectorAll(".mr-tab").forEach((t) => {
       t.classList.toggle("is-active", t.getAttribute("data-tab") === tabName);
     });
 
-    panels.forEach((p) => {
+    dlg.querySelectorAll(".mr-panel").forEach((p) => {
       p.classList.toggle("is-active", p.getAttribute("data-panel") === tabName);
     });
   }
 
   function fillModalHeaderBadges(obj) {
-    const nome  = pick(obj, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "");
+    const nome = pick(obj, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "");
     const pront = pick(obj, ["pac__prontuario", "paciente_prontuario", "prontuario", "prontuario_num"], "");
-    const cpf   = pick(obj, ["pac__cpf", "paciente_cpf", "cpf"], "");
+    const cpf = pick(obj, ["pac__cpf", "paciente_cpf", "cpf"], "");
 
     const parts = [];
     if (nome) parts.push(`Paciente: ${nome}`);
@@ -301,7 +342,7 @@
 
     setText(mrSubtitle, parts.length ? parts.join(" · ") : "—");
 
-    const dtRaw = pick(obj, ["data_atendimento", "data", "data_iso", "created_at"], "");
+    const dtRaw = dataFrom(obj);
     setText(mrBadgeData, `📅 ${dtRaw ? fmtDataBR(dtRaw) : "—"}`);
 
     const label = normalizeStatusLabel(pick(obj, ["pac__status", "status", "situacao", "comparecimento", "paciente_status"], ""));
@@ -338,38 +379,36 @@
     );
   }
 
-  function openModalFromTR(tr) {
+  function openModalFromObj(obj) {
     if (!dlg) return;
 
-    const obj = parseRowFromTR(tr);
     lastModalRowObj = obj;
-
     fillModalHeaderBadges(obj);
 
     mapFill(obj, [
-      { el: mrProf,         keys: ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario", "ag__profissional"], fmt: (_, o) => profNameFrom(o) },
-      { el: mrProfCns,      keys: ["profissional_cns", "cns_profissional"] },
-      { el: mrProfCbo,      keys: ["profissional_cbo", "cbo_profissional", "cbo", "ag__prof_cbo"] },
+      { el: mrProf, keys: ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario", "ag__profissional"], fmt: (_, o) => profNameFrom(o) },
+      { el: mrProfCns, keys: ["profissional_cns", "cns_profissional"] },
+      { el: mrProfCbo, keys: ["profissional_cbo", "cbo_profissional", "cbo", "ag__prof_cbo"] },
       { el: mrProcedimento, keys: ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"] },
-      { el: mrSigtap,       keys: ["codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap"] },
-      { el: mrCid,          keys: ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"] },
-      { el: mrData,         keys: ["data_atendimento", "data", "data_iso", "created_at"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
-      { el: mrStatus,       keys: ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], fmt: (v) => normalizeStatusLabel(v) },
-      { el: mrStatusJust,   keys: ["status_justificativa", "justificativa", "motivo"] },
-      { el: mrEvolucao,     keys: ["evolucao", "evolucao_texto", "observacao", "observacoes"] },
+      { el: mrSigtap, keys: ["codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap"] },
+      { el: mrCid, keys: ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"] },
+      { el: mrData, keys: ["data_atendimento", "data", "data_iso", "created_at"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
+      { el: mrStatus, keys: ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], fmt: (v) => normalizeStatusLabel(v) },
+      { el: mrStatusJust, keys: ["status_justificativa", "justificativa", "motivo"] },
+      { el: mrEvolucao, keys: ["evolucao", "evolucao_texto", "observacao", "observacoes"] },
     ]);
 
     mapFill(obj, [
-      { el: mrPaciente,    keys: ["pac__nome", "paciente_nome", "nome_paciente", "nome"] },
-      { el: mrProntuario,  keys: ["pac__prontuario", "paciente_prontuario", "prontuario", "prontuario_num"] },
-      { el: mrPacIdade,    keys: ["pac__idade", "paciente_idade", "idade"] },
-      { el: mrPacMod,      keys: ["pac__mod", "paciente_mod", "mod", "modalidade"] },
-      { el: mrPacCPF,      keys: ["pac__cpf", "paciente_cpf", "cpf"] },
-      { el: mrPacCNS,      keys: ["pac__cns", "paciente_cns", "cns", "cartao_sus"] },
-      { el: mrPacNasc,     keys: ["pac__nascimento", "paciente_nascimento", "nascimento", "data_nascimento", "dt_nasc"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
-      { el: mrPacSexo,     keys: ["pac__sexo", "paciente_sexo", "sexo", "sex"] },
-      { el: mrPacCidade,   keys: ["pac__municipio", "pac__cidade", "paciente_cidade", "paciente_municipio", "cidade", "municipio", "cidade_paciente", "municipio_paciente"] },
-      { el: mrPacTel,      keys: ["__tel__"], fmt: (_, o) => formatTelefones(o) },
+      { el: mrPaciente, keys: ["pac__nome", "paciente_nome", "nome_paciente", "nome"] },
+      { el: mrProntuario, keys: ["pac__prontuario", "paciente_prontuario", "prontuario", "prontuario_num"] },
+      { el: mrPacIdade, keys: ["pac__idade", "paciente_idade", "idade"] },
+      { el: mrPacMod, keys: ["pac__mod", "paciente_mod", "mod", "modalidade"] },
+      { el: mrPacCPF, keys: ["pac__cpf", "paciente_cpf", "cpf"] },
+      { el: mrPacCNS, keys: ["pac__cns", "paciente_cns", "cns", "cartao_sus"] },
+      { el: mrPacNasc, keys: ["pac__nascimento", "paciente_nascimento", "nascimento", "data_nascimento", "dt_nasc"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
+      { el: mrPacSexo, keys: ["pac__sexo", "paciente_sexo", "sexo", "sex"] },
+      { el: mrPacCidade, keys: ["pac__municipio", "pac__cidade", "paciente_cidade", "paciente_municipio", "cidade", "municipio", "cidade_paciente", "municipio_paciente"] },
+      { el: mrPacTel, keys: ["__tel__"], fmt: (_, o) => formatTelefones(o) },
       { el: mrPacEndereco, keys: ["__end__"], fmt: (_, o) => formatEndereco(o) },
     ]);
 
@@ -379,23 +418,153 @@
     try {
       if (typeof dlg.showModal === "function") dlg.showModal();
       else dlg.setAttribute("open", "open");
-    } catch (err) {
+    } catch {
       dlg.setAttribute("open", "open");
     }
   }
 
-  function renderTabela(rows) {
+  function ordenarRows(rows) {
+    const ordem = selOrdem?.value || "data_desc";
+    const arr = [...rows];
+
+    const byPaciente = (a, b) => pacienteNameFrom(a).localeCompare(pacienteNameFrom(b), "pt-BR");
+    const byProf = (a, b) => profNameFrom(a).localeCompare(profNameFrom(b), "pt-BR");
+    const byData = (a, b) => toDateNumber(dataFrom(a)) - toDateNumber(dataFrom(b));
+
+    if (ordem === "paciente_az") arr.sort(byPaciente);
+    else if (ordem === "paciente_za") arr.sort((a, b) => byPaciente(b, a));
+    else if (ordem === "prof_az") arr.sort(byProf);
+    else if (ordem === "data_asc") arr.sort(byData);
+    else arr.sort((a, b) => byData(b, a));
+
+    return arr;
+  }
+
+  function ensureCardsUI() {
+    if (selOrdem && cardsWrap) return;
+
+    const resultadosCard = tbl?.closest(".card") || $("#paginacao")?.closest(".card");
+    if (!resultadosCard) return;
+
+    if (!selOrdem) {
+      const toolbar = document.createElement("div");
+      toolbar.className = "result-toolbar";
+      toolbar.innerHTML = `
+        <div class="muted" id="lblResumoCards"></div>
+        <div class="field small">
+          <label for="f_ordem">Ordenar</label>
+          <select id="f_ordem" name="ordem">
+            <option value="data_desc">Mais recentes</option>
+            <option value="data_asc">Mais antigos</option>
+            <option value="paciente_az">Paciente A-Z</option>
+            <option value="paciente_za">Paciente Z-A</option>
+            <option value="prof_az">Profissional A-Z</option>
+          </select>
+        </div>
+      `;
+
+      const oldResumo = $("#lblResumo");
+      if (oldResumo) oldResumo.style.display = "none";
+
+      const tabelaWrap = tbl?.closest(".tabela-wrap");
+      resultadosCard.insertBefore(toolbar, tabelaWrap || $("#paginacao") || resultadosCard.firstChild);
+
+      selOrdem = $("#f_ordem");
+    }
+
+    if (!cardsWrap) {
+      cardsWrap = document.createElement("div");
+      cardsWrap.id = "cardsRegistros";
+      cardsWrap.className = "registros-cards";
+
+      const tabelaWrap = tbl?.closest(".tabela-wrap");
+      if (tabelaWrap) {
+        tabelaWrap.insertAdjacentElement("beforebegin", cardsWrap);
+        tabelaWrap.style.display = "none";
+      } else {
+        resultadosCard.insertBefore(cardsWrap, $("#paginacao") || null);
+      }
+    }
+
+    selOrdem?.addEventListener("change", () => {
+      currentPage = 1;
+      renderPagina();
+    });
+  }
+
+  function renderCards(rows) {
+    if (!cardsWrap) return;
+
     if (!rows || !rows.length) {
-      tbody.innerHTML = `<tr><td colspan="5">Nenhum registro encontrado.</td></tr>`;
+      cardsWrap.innerHTML = `<div class="empty-state">Nenhum registro encontrado.</div>`;
+      return;
+    }
+
+    cardsWrap.innerHTML = rows.map((r) => {
+      const paciente = pacienteNameFrom(r);
+      const cns = cnsFrom(r);
+      const dtRaw = dataFrom(r);
+      const dt = dtRaw ? fmtDataBR(dtRaw) : "—";
+      const prof = profNameFrom(r);
+      const status = normalizeStatusLabel(pick(r, ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], ""));
+      const cid = pick(r, ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"], "");
+      const proc = pick(r, ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"], "");
+
+      const info = evoOcultaInfo(r);
+      const privClass =
+        info.tipo === "visivel" ? "is-visible" :
+        info.tipo === "restrita" ? "is-restricted" :
+        "is-empty";
+
+      const privIcon =
+        info.tipo === "visivel" ? "🔓" :
+        info.tipo === "restrita" ? "🔒" :
+        "—";
+
+      const dataRow = JSON.stringify(r).replaceAll('"', "&quot;");
+
+      return `
+        <article class="registro-card" data-row="${dataRow}">
+          <div class="registro-top">
+            <strong title="${escapeAttr(paciente)}">${escapeHtml(paciente)}</strong>
+            <span class="badge">${escapeHtml(statusEmoji(status))} ${escapeHtml(status)}</span>
+          </div>
+
+          <div class="registro-meta">
+            <span>📅 ${escapeHtml(dt)}</span>
+            <span>👤 ${escapeHtml(prof)}</span>
+            ${cid ? `<span>🏷️ CID ${escapeHtml(cid)}</span>` : ""}
+            ${proc ? `<span class="registro-proc">🧾 ${escapeHtml(proc)}</span>` : ""}
+          </div>
+
+          <div class="registro-extra">
+            <span>CNS: ${escapeHtml(cns)}</span>
+            <span class="grid-priv ${privClass}">${privIcon}</span>
+          </div>
+
+          <div class="registro-actions">
+            <button class="btn primary" type="button" data-act="ver-card">Ver mais</button>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function renderTabelaCompat(rows) {
+    if (!tbody) return;
+
+    if (!rows || !rows.length) {
+      tbody.innerHTML = `<tr><td colspan="6">Nenhum registro encontrado.</td></tr>`;
       return;
     }
 
     tbody.innerHTML = rows.map((r) => {
-      const paciente = pick(r, ["pac__nome", "paciente_nome", "nome_paciente", "nome"], "—");
-      const cns      = pick(r, ["pac__cns", "paciente_cns", "cns", "cartao_sus"], "—");
-      const dtRaw    = pick(r, ["data_atendimento", "data", "data_iso", "created_at"], "—");
-      const dt       = dtRaw === "—" ? "—" : fmtDataBR(dtRaw);
-      const prof     = profNameFrom(r);
+      const paciente = pacienteNameFrom(r);
+      const cns = cnsFrom(r);
+      const dtRaw = dataFrom(r);
+      const dt = dtRaw ? fmtDataBR(dtRaw) : "—";
+      const prof = profNameFrom(r);
+      const status = normalizeStatusLabel(pick(r, ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], ""));
 
       const info = evoOcultaInfo(r);
       const privBadge =
@@ -407,10 +576,11 @@
 
       return `
         <tr data-row="${dataRow}">
-          <td>${safe(paciente)} ${privBadge}</td>
-          <td>${safe(prof)}</td>
-          <td>${safe(dt)}</td>
-          <td>${safe(cns)}</td>
+          <td>${escapeHtml(paciente)} ${privBadge}</td>
+          <td>${escapeHtml(prof)}</td>
+          <td>${escapeHtml(dt)}</td>
+          <td>${escapeHtml(status)}</td>
+          <td>${escapeHtml(cns)}</td>
           <td class="nowrap">
             <button class="btn primary" data-act="ver">Ver mais</button>
           </td>
@@ -421,10 +591,15 @@
 
   function updatePaginationUI(total, totalPages, pageCount, startIndex) {
     const from = total ? startIndex + 1 : 0;
-    const to   = total ? Math.min(startIndex + pageCount, total) : 0;
+    const to = total ? Math.min(startIndex + pageCount, total) : 0;
 
     if (pagInfo) pagInfo.textContent = `Mostrando ${from}–${to} de ${total} registro(s)`;
-    if (lblResumo) lblResumo.textContent = total ? `Encontrados ${total} registro(s).` : "Nenhum registro encontrado.";
+
+    const resumo = total ? `Encontrados ${total} registro(s).` : "Nenhum registro encontrado.";
+    if (lblResumo) lblResumo.textContent = resumo;
+
+    const lblResumoCards = $("#lblResumoCards");
+    if (lblResumoCards) lblResumoCards.textContent = resumo;
 
     if (pagAtualEl) pagAtualEl.textContent = String(total ? currentPage : 1);
     if (pagTotalEl) pagTotalEl.textContent = String(total ? totalPages : 1);
@@ -434,15 +609,17 @@
   }
 
   function renderPagina() {
-    const total = allRows.length;
+    const ordenadas = ordenarRows(allRows);
+    const total = ordenadas.length;
     const totalPages = total ? Math.ceil(total / PAGE_SIZE) : 1;
 
     currentPage = Math.max(1, Math.min(currentPage, totalPages));
 
     const start = (currentPage - 1) * PAGE_SIZE;
-    const pageRows = allRows.slice(start, start + PAGE_SIZE);
+    const pageRows = ordenadas.slice(start, start + PAGE_SIZE);
 
-    renderTabela(pageRows);
+    renderCards(pageRows);
+    renderTabelaCompat(pageRows);
     updatePaginationUI(total, totalPages, pageRows.length, start);
   }
 
@@ -509,7 +686,8 @@
     } catch (err) {
       console.error("[registros] Erro ao listar:", err);
       allRows = [];
-      tbody.innerHTML = `<tr><td colspan="5">Erro ao carregar registros.</td></tr>`;
+      renderCards([]);
+      renderTabelaCompat([]);
       if (lblResumo) lblResumo.textContent = "Erro ao carregar registros.";
       updatePaginationUI(0, 1, 0, 0);
     }
@@ -522,6 +700,11 @@
       sugBox.classList.add("hide");
       sugBox.innerHTML = "";
     }
+
+    aplicarCompetenciaPadrao();
+
+    if (selOrdem) selOrdem.value = "data_desc";
+
     lastModalRowObj = null;
     listar();
   }
@@ -573,7 +756,7 @@
 
         return `
           <button type="button" class="prof-sug" data-id="${escapeAttr(id)}" data-label="${escapeAttr(label)}">
-            <strong>${nome}</strong>${cbo ? ` <span class="muted">(CBO ${cbo})</span>` : ""}
+            <strong>${escapeHtml(nome)}</strong>${cbo ? ` <span class="muted">(CBO ${escapeHtml(cbo)})</span>` : ""}
           </button>
         `;
       }).join("");
@@ -708,11 +891,6 @@
     exportarXLSX();
   });
 
-  btnExportarEvoPdf?.addEventListener("click", (e) => {
-    e.preventDefault();
-    exportarEvolucoesPDF({ apenasPaciente: false });
-  });
-
   [selStatus, selSexo, inpDataIni, inpDataFim].forEach((el) => {
     el?.addEventListener("change", listar);
   });
@@ -733,10 +911,19 @@
     if (!btn) return;
 
     const tr = btn.closest("tr");
-    if (tr) openModalFromTR(tr);
+    const obj = decodeDataRow(tr?.getAttribute("data-row") || "{}");
+    openModalFromObj(obj);
   });
 
   document.addEventListener("click", (e) => {
+    const cardBtn = e.target.closest("[data-act='ver-card']");
+    if (cardBtn) {
+      const card = cardBtn.closest(".registro-card");
+      const obj = decodeDataRow(card?.getAttribute("data-row") || "{}");
+      openModalFromObj(obj);
+      return;
+    }
+
     if (!dlg) return;
     if (e.target.closest("[value='close']")) {
       if (typeof dlg.close === "function") dlg.close();
@@ -759,8 +946,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     const btnBPAI = $("#btnExportBPAI");
     btnBPAI?.addEventListener("click", () => {
-      const qs = window.location.search || "";
-      window.location.href = `/registros/exportar_bpai_xlsx${qs}`;
+      const qs = buildFilterParams().toString();
+      window.location.href = `/registros/exportar_bpai_xlsx${qs ? "?" + qs : ""}`;
     });
 
     const btnEvoGeral = $("#btnExportarEvoGeralPdf");
@@ -777,6 +964,8 @@
   });
 
   (async () => {
+    ensureCardsUI();
+    aplicarCompetenciaPadrao();
     initModalTabs();
     initCopyButtons();
 

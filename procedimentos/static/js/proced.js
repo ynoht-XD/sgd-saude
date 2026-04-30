@@ -1,60 +1,22 @@
 (() => {
   "use strict";
 
+  const DEBUG = true;
+
+  const log = (...args) => {
+    if (DEBUG) console.log("🧪 [proced.js]", ...args);
+  };
+
+  const warn = (...args) => {
+    if (DEBUG) console.warn("⚠️ [proced.js]", ...args);
+  };
+
   const byId = (id) => document.getElementById(id);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-  const inputArquivo = byId("arquivo");
-  const fileName = byId("file-name");
-  const filtrosAtivos = byId("filtros-ativos");
-
-  const modal = byId("proced-modal");
-  const modalTitle = byId("proced-modal-title");
-  const modalBody = byId("proced-modal-body");
-  const modalClose = byId("proced-modal-close");
-
-  const detalheModal = byId("proced-detalhe-modal");
-  const detalheClose = byId("proced-detalhe-close");
-
-  const detTitulo = byId("proced-detalhe-titulo");
-  const detSubtitulo = byId("proced-detalhe-subtitulo");
-
-  const detCodigo = byId("det-codigo");
-  const detBadges = byId("det-badges");
-  const detNome = byId("det-nome");
-
-  const detComplexidade = byId("det-complexidade");
-  const detCompetencia = byId("det-competencia");
-
-  const detValorSh = byId("det-valor-sh");
-  const detValorSa = byId("det-valor-sa");
-  const detValorSp = byId("det-valor-sp");
-  const detValorTotal = byId("det-valor-total");
-
-  const detCoFinanciamento = byId("det-co-financiamento");
-  const detNoFinanciamento = byId("det-no-financiamento");
-  const detCoRubrica = byId("det-co-rubrica");
-  const detNoRubrica = byId("det-no-rubrica");
-
-  const detQtdCids = byId("det-qtd-cids");
-  const detQtdCbos = byId("det-qtd-cbos");
-  const detQtdServicos = byId("det-qtd-servicos");
-
-  const detCidsCodigos = byId("det-cids-codigos");
-  const detCidsDescricoes = byId("det-cids-descricoes");
-
-  const detCbosCodigos = byId("det-cbos-codigos");
-  const detCbosDescricoes = byId("det-cbos-descricoes");
-
-  const detServicosCodigos = byId("det-servicos-codigos");
-  const detServicosDescricoes = byId("det-servicos-descricoes");
-
-  const detClassificacoesCodigos = byId("det-classificacoes-codigos");
-  const detClassificacoesDescricoes = byId("det-classificacoes-descricoes");
-
   function safeText(value, fallback = "—") {
     const txt = String(value ?? "").trim();
-    return txt && txt !== "undefined" && txt !== "null" ? txt : fallback;
+    return txt && txt !== "undefined" && txt !== "null" && txt !== "None" ? txt : fallback;
   }
 
   function escapeHtml(value) {
@@ -94,6 +56,94 @@
       .filter(Boolean);
   }
 
+  function setText(el, value, fallback = "—") {
+    if (!el) return;
+    el.textContent = safeText(value, fallback);
+  }
+
+  function setHtml(el, html) {
+    if (!el) return;
+    el.innerHTML = html && String(html).trim()
+      ? html
+      : `<span class="proced-empty-inline">Sem conteúdo.</span>`;
+  }
+
+  function getData(btn, key, fallback = "—") {
+    if (!btn || !btn.dataset) return fallback;
+    return safeText(btn.dataset[key], fallback);
+  }
+
+  function openDialog(dialog) {
+    if (!dialog) return;
+
+    try {
+      if (typeof dialog.showModal === "function") {
+        if (!dialog.open) dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "open");
+      }
+    } catch (err) {
+      warn("Falha no showModal, usando fallback:", err);
+      dialog.setAttribute("open", "open");
+    }
+  }
+
+  function closeDialog(dialog) {
+    if (!dialog) return;
+
+    try {
+      if (typeof dialog.close === "function" && dialog.open) {
+        dialog.close();
+      } else {
+        dialog.removeAttribute("open");
+      }
+    } catch (err) {
+      warn("Falha ao fechar modal, usando fallback:", err);
+      dialog.removeAttribute("open");
+    }
+  }
+
+  function bindBackdropClose(dialog) {
+    if (!dialog) return;
+
+    dialog.addEventListener("click", (e) => {
+      const box = dialog.querySelector(".proced-modal__dialog");
+      if (!box) return;
+
+      const rect = box.getBoundingClientRect();
+
+      const inside =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+
+      if (!inside) closeDialog(dialog);
+    });
+  }
+
+  function getBadgeClassByComplexidade(text) {
+    const value = safeText(text, "").toLowerCase();
+
+    if (value.includes("alta")) return "badge-red";
+    if (value.includes("média") || value.includes("media")) return "badge-yellow";
+    if (value.includes("baixa")) return "badge-green";
+
+    return "badge-neutral";
+  }
+
+  function renderChips(value, chipClass = "") {
+    const items = splitItems(value);
+
+    if (!items.length) {
+      return `<span class="proced-empty-inline">Nenhum item encontrado.</span>`;
+    }
+
+    return items
+      .map((item) => `<span class="chip ${chipClass}">${escapeHtml(item)}</span>`)
+      .join("");
+  }
+
   function zipCodigoDescricao(codigos, descricoes) {
     const codes = splitItems(codigos);
     const descs = splitItems(descricoes);
@@ -128,119 +178,35 @@
       .join("");
   }
 
-  function renderChips(value, chipClass = "") {
-    const items = splitItems(value);
-
-    if (!items.length) {
-      return `<span class="proced-empty-inline">Nenhum item encontrado.</span>`;
-    }
-
-    return items
-      .map((item) => `<span class="chip ${chipClass}">${escapeHtml(item)}</span>`)
-      .join("");
-  }
-
-  function setText(el, value, fallback = "—") {
-    if (!el) return;
-    el.textContent = safeText(value, fallback);
-  }
-
-  function setHtml(el, html) {
-    if (!el) return;
-    el.innerHTML = html && String(html).trim()
-      ? html
-      : `<span class="proced-empty-inline">Sem conteúdo.</span>`;
-  }
-
-  function getData(btn, key, fallback = "—") {
-    if (!btn || !btn.dataset) return fallback;
-    return safeText(btn.dataset[key], fallback);
-  }
-
-  function openDialog(dialog) {
-    if (!dialog) return;
-
-    try {
-      if (typeof dialog.showModal === "function") {
-        if (!dialog.open) dialog.showModal();
-      } else {
-        dialog.setAttribute("open", "open");
-      }
-    } catch (_) {
-      dialog.setAttribute("open", "open");
-    }
-  }
-
-  function closeDialog(dialog) {
-    if (!dialog) return;
-
-    try {
-      if (typeof dialog.close === "function" && dialog.open) {
-        dialog.close();
-      } else {
-        dialog.removeAttribute("open");
-      }
-    } catch (_) {
-      dialog.removeAttribute("open");
-    }
-  }
-
-  function bindBackdropClose(dialog) {
-    if (!dialog) return;
-
-    dialog.addEventListener("click", (e) => {
-      const box = dialog.querySelector(".proced-modal__dialog");
-      if (!box) return;
-
-      const rect = box.getBoundingClientRect();
-
-      const inside =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom;
-
-      if (!inside) closeDialog(dialog);
-    });
-  }
-
-  function getBadgeClassByComplexidade(text) {
-    const value = safeText(text, "").toLowerCase();
-
-    if (value.includes("alta")) return "badge-red";
-    if (value.includes("média") || value.includes("media")) return "badge-yellow";
-    if (value.includes("baixa")) return "badge-green";
-
-    return "badge-neutral";
-  }
-
-  function getQueryParams() {
-    const params = new URLSearchParams(window.location.search);
-
-    return {
-      q: safeText(params.get("q"), ""),
-      cid: safeText(params.get("cid"), ""),
-      cbo: safeText(params.get("cbo"), ""),
-      complexidade: safeText(params.get("complexidade"), ""),
-    };
-  }
-
   function atualizarResumoFiltros() {
+    const filtrosAtivos = byId("filtros-ativos");
     if (!filtrosAtivos) return;
 
-    const params = getQueryParams();
+    const params = new URLSearchParams(window.location.search);
     const parts = [];
 
-    if (params.q) parts.push(`Texto: ${params.q}`);
-    if (params.cid) parts.push(`CID(s): ${params.cid}`);
-    if (params.cbo) parts.push(`CBO(s): ${params.cbo}`);
-    if (params.complexidade) parts.push(`Complexidade: ${params.complexidade}`);
+    const q = safeText(params.get("q"), "");
+    const cid = safeText(params.get("cid"), "");
+    const cbo = safeText(params.get("cbo"), "");
+    const complexidade = safeText(params.get("complexidade"), "");
+
+    if (q) parts.push(`Texto: ${q}`);
+    if (cid) parts.push(`CID(s): ${cid}`);
+    if (cbo) parts.push(`CBO(s): ${cbo}`);
+    if (complexidade) parts.push(`Complexidade: ${complexidade}`);
 
     filtrosAtivos.textContent = parts.length ? parts.join(" • ") : "Nenhum";
   }
 
   function openModal(title, content) {
-    if (!modal || !modalTitle || !modalBody) return;
+    const modal = byId("proced-modal");
+    const modalTitle = byId("proced-modal-title");
+    const modalBody = byId("proced-modal-body");
+
+    if (!modal || !modalTitle || !modalBody) {
+      warn("Modal geral não encontrado.");
+      return;
+    }
 
     modalTitle.textContent = safeText(title, "Detalhes");
     modalBody.innerHTML = `<div class="proced-modal-list">${renderChips(content)}</div>`;
@@ -249,7 +215,10 @@
   }
 
   function bindMoreButtons() {
-    $$("[data-modal-title][data-modal-content]").forEach((btn) => {
+    const buttons = $$("[data-modal-title][data-modal-content]");
+    log("Botões de chips encontrados:", buttons.length);
+
+    buttons.forEach((btn) => {
       btn.addEventListener("click", () => {
         openModal(
           btn.getAttribute("data-modal-title"),
@@ -260,33 +229,34 @@
   }
 
   function preencherCabecalhoDetalhe(payload) {
-    setText(detTitulo, "Procedimento completo");
-    setText(
-      detSubtitulo,
-      payload.codigo !== "—"
-        ? `Código ${payload.codigo} · ${payload.competencia}`
-        : "Visualização detalhada do procedimento"
-    );
+    setText(byId("proced-detalhe-titulo"), "Procedimento completo");
 
-    setText(detCodigo, payload.codigo);
-    setText(detNome, payload.nome);
-    setText(detComplexidade, payload.complexidade);
-    setText(detCompetencia, payload.competencia);
+    const subtitulo = payload.codigo
+      ? `Código ${payload.codigo} · ${payload.competencia || "sem competência"}`
+      : "Visualização detalhada do procedimento";
 
-    setText(detCoFinanciamento, payload.coFinanciamento);
-    setText(detNoFinanciamento, payload.noFinanciamento);
-    setText(detCoRubrica, payload.coRubrica);
-    setText(detNoRubrica, payload.noRubrica);
+    setText(byId("proced-detalhe-subtitulo"), subtitulo);
+
+    setText(byId("det-codigo"), payload.codigo);
+    setText(byId("det-nome"), payload.nome);
+    setText(byId("det-complexidade"), payload.complexidade);
+    setText(byId("det-competencia"), payload.competencia);
+
+    setText(byId("det-co-financiamento"), payload.coFinanciamento);
+    setText(byId("det-no-financiamento"), payload.noFinanciamento);
+    setText(byId("det-co-rubrica"), payload.coRubrica);
+    setText(byId("det-no-rubrica"), payload.noRubrica);
   }
 
   function preencherValores(payload) {
-    setText(detValorSh, moeda(payload.valorSh), "R$ 0,00");
-    setText(detValorSa, moeda(payload.valorSa), "R$ 0,00");
-    setText(detValorSp, moeda(payload.valorSp), "R$ 0,00");
-    setText(detValorTotal, moeda(payload.valorTotal), "R$ 0,00");
+    setText(byId("det-valor-sh"), moeda(payload.valorSh), "R$ 0,00");
+    setText(byId("det-valor-sa"), moeda(payload.valorSa), "R$ 0,00");
+    setText(byId("det-valor-sp"), moeda(payload.valorSp), "R$ 0,00");
+    setText(byId("det-valor-total"), moeda(payload.valorTotal), "R$ 0,00");
   }
 
   function preencherBadgesDetalhe(payload) {
+    const detBadges = byId("det-badges");
     if (!detBadges) return;
 
     const badges = [];
@@ -297,7 +267,7 @@
       </span>
     `);
 
-    if (payload.complexidade !== "—") {
+    if (payload.complexidade) {
       badges.push(`
         <span class="badge ${getBadgeClassByComplexidade(payload.complexidade)}">
           ${escapeHtml(payload.complexidade)}
@@ -305,7 +275,7 @@
       `);
     }
 
-    if (payload.competencia !== "—") {
+    if (payload.competencia) {
       badges.push(`
         <span class="badge badge-neutral">
           Competência ${escapeHtml(payload.competencia)}
@@ -313,10 +283,10 @@
       `);
     }
 
-    if (payload.coFinanciamento !== "—" || payload.noFinanciamento !== "—") {
+    if (payload.coFinanciamento || payload.noFinanciamento) {
       badges.push(`
         <span class="badge badge-fin">
-          ${escapeHtml([payload.coFinanciamento, payload.noFinanciamento].filter(v => v !== "—").join(" · "))}
+          ${escapeHtml([payload.coFinanciamento, payload.noFinanciamento].filter(Boolean).join(" · "))}
         </span>
       `);
     }
@@ -325,43 +295,44 @@
   }
 
   function preencherRelacionamentos(payload) {
-    setText(detQtdCids, payload.qtdCids, "0");
-    setText(detQtdCbos, payload.qtdCbos, "0");
-    setText(detQtdServicos, payload.qtdServicos, "0");
+    setText(byId("det-qtd-cids"), payload.qtdCids || "0", "0");
+    setText(byId("det-qtd-cbos"), payload.qtdCbos || "0", "0");
+    setText(byId("det-qtd-servicos"), payload.qtdServicos || "0", "0");
 
-    setHtml(detCidsCodigos, renderPares(payload.cidsCodigos, payload.cidsDescricoes, "vinculo-cid"));
-    setHtml(detCidsDescricoes, renderChips(payload.cidsDescricoes, "chip-cid"));
+    setHtml(byId("det-cids-codigos"), renderPares(payload.cidsCodigos, payload.cidsDescricoes, "vinculo-cid"));
+    setHtml(byId("det-cids-descricoes"), renderChips(payload.cidsDescricoes, "chip-cid"));
 
-    setHtml(detCbosCodigos, renderPares(payload.cbosCodigos, payload.cbosDescricoes, "vinculo-cbo"));
-    setHtml(detCbosDescricoes, renderChips(payload.cbosDescricoes, "chip-cbo"));
+    setHtml(byId("det-cbos-codigos"), renderPares(payload.cbosCodigos, payload.cbosDescricoes, "vinculo-cbo"));
+    setHtml(byId("det-cbos-descricoes"), renderChips(payload.cbosDescricoes, "chip-cbo"));
 
-    setHtml(detServicosCodigos, renderPares(payload.servicosCodigos, payload.servicosDescricoes, "vinculo-serv"));
-    setHtml(detServicosDescricoes, renderChips(payload.servicosDescricoes, "chip-serv"));
+    setHtml(byId("det-servicos-codigos"), renderPares(payload.servicosCodigos, payload.servicosDescricoes, "vinculo-serv"));
+    setHtml(byId("det-servicos-descricoes"), renderChips(payload.servicosDescricoes, "chip-serv"));
 
     setHtml(
-      detClassificacoesCodigos,
+      byId("det-classificacoes-codigos"),
       renderPares(payload.classificacoesCodigos, payload.classificacoesDescricoes, "vinculo-class")
     );
-    setHtml(detClassificacoesDescricoes, renderChips(payload.classificacoesDescricoes, "chip-class"));
+    setHtml(byId("det-classificacoes-descricoes"), renderChips(payload.classificacoesDescricoes, "chip-class"));
   }
 
   function preencherDetalhe(btn) {
     const payload = {
-      codigo: getData(btn, "procedCodigo"),
-      nome: getData(btn, "procedNome"),
-      complexidade: getData(btn, "procedComplexidade"),
-      competencia: getData(btn, "procedCompetencia"),
+      id: getData(btn, "procedId", ""),
+      codigo: getData(btn, "procedCodigo", ""),
+      nome: getData(btn, "procedNome", ""),
+      complexidade: getData(btn, "procedComplexidade", ""),
+      competencia: getData(btn, "procedCompetencia", ""),
 
       valorSh: getData(btn, "procedValorSh", "0"),
       valorSa: getData(btn, "procedValorSa", "0"),
       valorSp: getData(btn, "procedValorSp", "0"),
       valorTotal: getData(btn, "procedValorTotal", "0"),
 
-      coFinanciamento: getData(btn, "procedCoFinanciamento"),
-      noFinanciamento: getData(btn, "procedNoFinanciamento"),
+      coFinanciamento: getData(btn, "procedCoFinanciamento", ""),
+      noFinanciamento: getData(btn, "procedNoFinanciamento", ""),
 
-      coRubrica: getData(btn, "procedCoRubrica"),
-      noRubrica: getData(btn, "procedNoRubrica"),
+      coRubrica: getData(btn, "procedCoRubrica", ""),
+      noRubrica: getData(btn, "procedNoRubrica", ""),
 
       qtdCids: getData(btn, "procedQtdCids", "0"),
       qtdCbos: getData(btn, "procedQtdCbos", "0"),
@@ -380,6 +351,8 @@
       classificacoesDescricoes: getData(btn, "procedClassificacoesDescricoes", ""),
     };
 
+    log("Payload do procedimento:", payload);
+
     preencherCabecalhoDetalhe(payload);
     preencherValores(payload);
     preencherBadgesDetalhe(payload);
@@ -387,7 +360,17 @@
   }
 
   function bindDetalheButtons() {
-    $$(".btn-ver-procedimento").forEach((btn) => {
+    const detalheModal = byId("proced-detalhe-modal");
+    const buttons = $$(".btn-ver-procedimento");
+
+    log("Cards encontrados:", $$(".proced-item-card").length);
+    log("Botões Ver procedimento encontrados:", buttons.length);
+
+    if (!detalheModal) {
+      warn("Modal de detalhe não encontrado: #proced-detalhe-modal");
+    }
+
+    buttons.forEach((btn) => {
       btn.addEventListener("click", () => {
         preencherDetalhe(btn);
         openDialog(detalheModal);
@@ -396,6 +379,9 @@
   }
 
   function bindFileInput() {
+    const inputArquivo = byId("arquivo");
+    const fileName = byId("file-name");
+
     if (!inputArquivo || !fileName) return;
 
     inputArquivo.addEventListener("change", () => {
@@ -418,6 +404,12 @@
   }
 
   function bindModalEvents() {
+    const modal = byId("proced-modal");
+    const modalClose = byId("proced-modal-close");
+
+    const detalheModal = byId("proced-detalhe-modal");
+    const detalheClose = byId("proced-detalhe-close");
+
     if (modalClose) {
       modalClose.addEventListener("click", () => closeDialog(modal));
     }
@@ -443,7 +435,25 @@
     });
   }
 
+  function diagnosticoInicial() {
+    log("JS carregado.");
+    log("URL:", window.location.href);
+    log("Grid:", document.querySelector(".proced-cards-grid"));
+    log("Cards:", $$(".proced-item-card").length);
+    log("Empty:", document.querySelector(".proced-empty"));
+    log("Resumo resultados:", document.querySelector(".summary-pill strong")?.textContent?.trim());
+
+    if (!document.querySelector(".proced-cards-grid") && document.querySelector(".proced-empty")) {
+      warn("O HTML renderizou estado vazio. Então o problema está no backend/listagem: variável dados veio vazia.");
+    }
+
+    if (document.querySelector(".proced-cards-grid") && $$(".proced-item-card").length === 0) {
+      warn("Existe grid, mas não existem cards dentro. Verifique o loop Jinja.");
+    }
+  }
+
   function init() {
+    diagnosticoInicial();
     bindFileInput();
     bindMoreButtons();
     bindDetalheButtons();

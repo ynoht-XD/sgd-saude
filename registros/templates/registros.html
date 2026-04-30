@@ -125,21 +125,22 @@
 <section class="card" aria-label="Resultados">
   <div class="muted" id="lblResumo"></div>
 
-  <div class="tabela-wrap">
-    <table id="tblRegistros" class="tabela">
-      <thead>
-        <tr>
-          <th>Paciente</th>
-          <th>Profissional</th>
-          <th>Data</th>
-          <th>Status</th>
-          <th>CNS</th>
-          <th class="nowrap">Ações</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <div class="result-toolbar">
+    <div class="muted" id="lblResumo"></div>
+
+    <div class="field small">
+      <label for="f_ordem">Ordenar</label>
+      <select id="f_ordem" name="ordem">
+        <option value="data_desc">Mais recentes</option>
+        <option value="data_asc">Mais antigos</option>
+        <option value="paciente_az">Paciente A-Z</option>
+        <option value="paciente_za">Paciente Z-A</option>
+        <option value="prof_az">Profissional A-Z</option>
+      </select>
+    </div>
   </div>
+
+<div id="cardsRegistros" class="registros-cards"></div>
 
   <div class="paginacao" id="paginacao" aria-label="Paginação">
     <div class="pag-info">

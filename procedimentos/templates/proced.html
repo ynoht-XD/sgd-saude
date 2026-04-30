@@ -24,6 +24,19 @@
       <a href="{{ url_for('procedimentos.lote') }}" class="btn btn-secondary">
         Pesquisa em lote
       </a>
+
+      <a
+        href="{{ url_for(
+          'procedimentos.exportar',
+          q=request.args.get('q',''),
+          cid=request.args.get('cid',''),
+          cbo=request.args.get('cbo',''),
+          complexidade=request.args.get('complexidade','')
+        ) }}"
+        class="btn btn-ghost"
+      >
+        Exportar XLSX
+      </a>
     </div>
   </header>
 
@@ -115,8 +128,12 @@
         <label for="complexidade">Complexidade</label>
         <select name="complexidade" id="complexidade">
           <option value="">Todas</option>
-          {% for cx in complexidades or [] %}
-            <option value="{{ cx }}" {% if request.args.get('complexidade') == cx %}selected{% endif %}>
+
+          {% set cx_atual = request.args.get('complexidade', '') %}
+          {% set lista_complexidades = complexidades if complexidades is defined else [] %}
+
+          {% for cx in lista_complexidades %}
+            <option value="{{ cx }}" {% if cx_atual == cx %}selected{% endif %}>
               {{ cx }}
             </option>
           {% endfor %}
@@ -173,13 +190,19 @@
       </div>
     </div>
 
-    {% if dados %}
+    {% if dados and dados|length > 0 %}
       <div class="proced-cards-grid">
         {% for item in dados %}
-          {% set cids_list = (item.cids_codigos or '').split(', ') if item.cids_codigos else [] %}
-          {% set cbos_list = (item.cbos_codigos or '').split(', ') if item.cbos_codigos else [] %}
-          {% set servicos_list = (item.servicos_codigos or '').split(', ') if item.servicos_codigos else [] %}
-          {% set classifs_list = (item.classificacoes_codigos or '').split(', ') if item.classificacoes_codigos else [] %}
+          {% set cids_raw = (item.cids_codigos or '')|replace(',', ', ') %}
+          {% set cbos_raw = (item.cbos_codigos or '')|replace(',', ', ') %}
+          {% set servicos_raw = (item.servicos_codigos or '')|replace(',', ', ') %}
+          {% set classifs_raw = (item.classificacoes_codigos or '')|replace(',', ', ') %}
+
+          {% set cids_list = cids_raw.split(', ') if cids_raw else [] %}
+          {% set cbos_list = cbos_raw.split(', ') if cbos_raw else [] %}
+          {% set servicos_list = servicos_raw.split(', ') if servicos_raw else [] %}
+          {% set classifs_list = classifs_raw.split(', ') if classifs_raw else [] %}
+
           {% set cx = (item.complexidade or '')|lower %}
 
           <article class="proced-item-card">
@@ -190,11 +213,9 @@
               </div>
 
               <div class="proced-item-card__badges">
-                {% if item.valor_total is not none %}
-                  <span class="badge badge-total">
-                    Total R$ {{ "%.2f"|format(item.valor_total|float) }}
-                  </span>
-                {% endif %}
+                <span class="badge badge-total">
+                  Total R$ {{ "%.2f"|format((item.valor_total or 0)|float) }}
+                </span>
 
                 {% if item.complexidade %}
                   <span class="
@@ -213,7 +234,6 @@
             <div class="proced-item-card__body">
               <h3 class="proced-item-card__title">{{ item.descricao or '—' }}</h3>
 
-              <!-- VALORES -->
               <div class="proced-valores">
                 <div class="proced-valor-pill">
                   <span>SH</span>
@@ -262,7 +282,9 @@
 
                 <div class="chips">
                   {% for cid in cids_list[:4] %}
-                    <span class="chip chip-cid">{{ cid }}</span>
+                    {% if cid.strip() %}
+                      <span class="chip chip-cid">{{ cid.strip() }}</span>
+                    {% endif %}
                   {% endfor %}
 
                   {% if cids_list|length > 4 %}
@@ -275,6 +297,10 @@
                       +{{ cids_list|length - 4 }} mais
                     </button>
                   {% endif %}
+
+                  {% if not item.cids_codigos %}
+                    <span class="chip chip-muted">—</span>
+                  {% endif %}
                 </div>
               </div>
 
@@ -286,7 +312,9 @@
 
                 <div class="chips">
                   {% for cbo in cbos_list[:4] %}
-                    <span class="chip chip-cbo">{{ cbo }}</span>
+                    {% if cbo.strip() %}
+                      <span class="chip chip-cbo">{{ cbo.strip() }}</span>
+                    {% endif %}
                   {% endfor %}
 
                   {% if cbos_list|length > 4 %}
@@ -299,10 +327,13 @@
                       +{{ cbos_list|length - 4 }} mais
                     </button>
                   {% endif %}
+
+                  {% if not item.cbos_codigos %}
+                    <span class="chip chip-muted">—</span>
+                  {% endif %}
                 </div>
               </div>
 
-              <!-- SERVIÇOS + CLASSIFICAÇÕES LADO A LADO -->
               <div class="proced-duo-sections">
                 <div class="proced-item-card__section">
                   <div class="proced-item-card__section-head">
@@ -312,7 +343,9 @@
 
                   <div class="chips">
                     {% for serv in servicos_list[:3] %}
-                      <span class="chip chip-serv">{{ serv }}</span>
+                      {% if serv.strip() %}
+                        <span class="chip chip-serv">{{ serv.strip() }}</span>
+                      {% endif %}
                     {% endfor %}
 
                     {% if servicos_list|length > 3 %}
@@ -325,18 +358,24 @@
                         +{{ servicos_list|length - 3 }} mais
                       </button>
                     {% endif %}
+
+                    {% if not item.servicos_codigos %}
+                      <span class="chip chip-muted">—</span>
+                    {% endif %}
                   </div>
                 </div>
 
                 <div class="proced-item-card__section">
                   <div class="proced-item-card__section-head">
                     <span>Classificações</span>
-                    <small>{{ classifs_list|length }}</small>
+                    <small>{{ classifs_list|length if item.classificacoes_codigos else 0 }}</small>
                   </div>
 
                   <div class="chips">
                     {% for cl in classifs_list[:3] %}
-                      <span class="chip chip-class">{{ cl }}</span>
+                      {% if cl.strip() %}
+                        <span class="chip chip-class">{{ cl.strip() }}</span>
+                      {% endif %}
                     {% endfor %}
 
                     {% if classifs_list|length > 3 %}
@@ -350,7 +389,7 @@
                       </button>
                     {% endif %}
 
-                    {% if not classifs_list %}
+                    {% if not item.classificacoes_codigos %}
                       <span class="chip chip-muted">—</span>
                     {% endif %}
                   </div>
@@ -362,27 +401,27 @@
               <button
                 type="button"
                 class="btn btn-primary btn-sm btn-ver-procedimento"
-                data-proced-id="{{ item.id }}"
-                data-proced-codigo="{{ item.codigo or '—' }}"
-                data-proced-nome="{{ item.descricao or '—' }}"
-                data-proced-complexidade="{{ item.complexidade or '—' }}"
-                data-proced-competencia="{{ item.competencia or '—' }}"
+                data-proced-id="{{ item.id or '' }}"
+                data-proced-codigo="{{ item.codigo or '' }}"
+                data-proced-nome="{{ item.descricao or '' }}"
+                data-proced-complexidade="{{ item.complexidade or '' }}"
+                data-proced-competencia="{{ item.competencia or '' }}"
                 data-proced-valor-sh="{{ item.valor_sh or 0 }}"
                 data-proced-valor-sa="{{ item.valor_sa or 0 }}"
                 data-proced-valor-sp="{{ item.valor_sp or 0 }}"
                 data-proced-valor-total="{{ item.valor_total or 0 }}"
-                data-proced-co-financiamento="{{ item.co_financiamento or '—' }}"
-                data-proced-no-financiamento="{{ item.no_financiamento or '—' }}"
-                data-proced-co-rubrica="{{ item.co_rubrica or '—' }}"
-                data-proced-no-rubrica="{{ item.no_rubrica or '—' }}"
-                data-proced-cids-codigos="{{ item.cids_codigos or '—' }}"
-                data-proced-cids-descricoes="{{ item.cids_descricoes or '—' }}"
-                data-proced-cbos-codigos="{{ item.cbos_codigos or '—' }}"
-                data-proced-cbos-descricoes="{{ item.cbos_descricoes or '—' }}"
-                data-proced-servicos-codigos="{{ item.servicos_codigos or '—' }}"
-                data-proced-servicos-descricoes="{{ item.servicos_descricoes or '—' }}"
-                data-proced-classificacoes-codigos="{{ item.classificacoes_codigos or '—' }}"
-                data-proced-classificacoes-descricoes="{{ item.classificacoes_descricoes or '—' }}"
+                data-proced-co-financiamento="{{ item.co_financiamento or '' }}"
+                data-proced-no-financiamento="{{ item.no_financiamento or '' }}"
+                data-proced-co-rubrica="{{ item.co_rubrica or '' }}"
+                data-proced-no-rubrica="{{ item.no_rubrica or '' }}"
+                data-proced-cids-codigos="{{ item.cids_codigos or '' }}"
+                data-proced-cids-descricoes="{{ item.cids_descricoes or '' }}"
+                data-proced-cbos-codigos="{{ item.cbos_codigos or '' }}"
+                data-proced-cbos-descricoes="{{ item.cbos_descricoes or '' }}"
+                data-proced-servicos-codigos="{{ item.servicos_codigos or '' }}"
+                data-proced-servicos-descricoes="{{ item.servicos_descricoes or '' }}"
+                data-proced-classificacoes-codigos="{{ item.classificacoes_codigos or '' }}"
+                data-proced-classificacoes-descricoes="{{ item.classificacoes_descricoes or '' }}"
                 data-proced-qtd-cids="{{ item.qtd_cids or 0 }}"
                 data-proced-qtd-cbos="{{ item.qtd_cbos or 0 }}"
                 data-proced-qtd-servicos="{{ item.qtd_servicos or 0 }}"
@@ -451,7 +490,7 @@
   </div>
 </dialog>
 
-<!-- MODAL COMPLETO DO PROCEDIMENTO — SUPREMO -->
+<!-- MODAL COMPLETO -->
 <dialog id="proced-detalhe-modal" class="proced-modal proced-modal--xl">
   <div class="proced-modal__dialog proced-modal__dialog--xl">
 

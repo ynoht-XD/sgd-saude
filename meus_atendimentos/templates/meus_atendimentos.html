@@ -136,65 +136,43 @@
   <section class="ma-list" aria-label="Lista de atendimentos">
 
     {% if atendimentos and atendimentos|length %}
-      <div class="ma-table-wrap">
-        <table class="ma-table">
-          <thead>
-            <tr>
-              <th>Paciente</th>
-              <th>Procedimento</th>
-              <th class="ma-col-date">Data</th>
-              <th class="ma-col-age">Idade</th>
-              <th>Evolução</th>
-            </tr>
-          </thead>
+      <div class="ma-cards-grid">
+        {% for a in atendimentos %}
+        <article
+          class="ma-card"
+          data-id="{{ a.id }}"
+          data-paciente="{{ (a.paciente or '-')|e }}"
+          data-procedimento="{{ (a.procedimento or '-')|e }}"
+          data-data="{{ (a.data or '-')|e }}"
+          data-idade="{{ (a.idade if a.idade is not none else '—')|e }}"
+          data-evolucao="{{ (a.evolucao or 'Sem evolução registrada.')|e }}"
+          data-evolucao-oculta="{{ (a.evolucao_oculta or a.evolucoes_ocultas_visiveis or '')|e }}"
+        >
+          <div class="ma-card-top">
+            <strong>{{ a.paciente or "-" }}</strong>
+            <span>{{ a.data or "-" }}</span>
+          </div>
 
-          <tbody>
-            {% for a in atendimentos %}
-              <tr data-id="{{ a.id }}">
-                <td class="ma-paciente">
-                  <strong>{{ a.paciente or "-" }}</strong>
-                </td>
+          <div class="ma-card-evo">
+            <span class="ma-evo-label">Evolução</span>
+            <p>{{ a.evolucao_preview or a.evolucao or "Sem evolução registrada." }}</p>
+          </div>
 
-                <td class="ma-proced">
-                  {{ a.procedimento or "-" }}
-                </td>
+          {% if a.evolucao_oculta or a.evolucoes_ocultas_visiveis %}
+            <div class="ma-card-evo ma-card-evo-private">
+              <span class="ma-evo-label">Privada</span>
+              <p>{{ a.evolucao_oculta or a.evolucoes_ocultas_visiveis }}</p>
+            </div>
+          {% endif %}
 
-                <td class="ma-date">
-                  {{ a.data or "-" }}
-                </td>
-
-                <td class="ma-age">
-                  {% if a.idade is not none %}
-                    {{ a.idade }}
-                  {% else %}
-                    <span class="ma-muted">—</span>
-                  {% endif %}
-                </td>
-
-                <td class="ma-evol">
-                  {% set evo = a.evolucao_preview if a.evolucao_preview is defined else a.evolucao %}
-                  {% if evo and evo|string|trim %}
-                    <div class="ma-evol-preview">
-                      {{ evo }}
-                      {% if a.evolucao and (a.evolucao|string|length) > (evo|string|length) %}
-                        <span class="ma-more">…</span>
-                      {% endif %}
-                    </div>
-
-                    <details class="ma-evol-details">
-                      <summary>Ver evolução completa</summary>
-                      <div class="ma-evol-full">
-                        {{ a.evolucao }}
-                      </div>
-                    </details>
-                  {% else %}
-                    <span class="ma-muted">Sem evolução</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+          <div class="ma-card-footer">
+            <span>Idade: {{ a.idade if a.idade is not none else '—' }}</span>
+            <button type="button" class="btn btn-primary ma-open-modal">
+              Ver detalhes
+            </button>
+          </div>
+        </article>
+        {% endfor %}
       </div>
 
       <!-- =========================
@@ -236,6 +214,48 @@
   </section>
 
 </div>
+
+
+
+<dialog id="modalMeuAtendimento" class="ma-modal">
+  <div class="ma-modal-box">
+    <header class="ma-modal-head">
+      <div>
+        <h3 id="maModalPaciente">Paciente</h3>
+        <p id="maModalSub">Detalhes do atendimento</p>
+      </div>
+
+      <button type="button" class="ma-modal-close" data-close-modal>
+        ×
+      </button>
+    </header>
+
+    <div class="ma-modal-body">
+      <div class="ma-info-grid">
+        <div>
+          <span>Data</span>
+          <strong id="maModalData">—</strong>
+        </div>
+
+        <div>
+          <span>Idade</span>
+          <strong id="maModalIdade">—</strong>
+        </div>
+
+        <div class="wide">
+          <span>Procedimento</span>
+          <strong id="maModalProcedimento">—</strong>
+        </div>
+      </div>
+
+      <section class="ma-evo-modal">
+        <h4>Evolução</h4>
+        <div id="maModalEvolucao">—</div>
+      </section>
+    </div>
+  </div>
+</dialog>
+
 {% endblock %}
 
 {% block extra_js %}

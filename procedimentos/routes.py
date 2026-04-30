@@ -2,6 +2,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, s
 import math
 import re
 from io import BytesIO
+import unicodedata
 
 import pandas as pd
 
@@ -10,7 +11,7 @@ from . import procedimentos_bp
 
 
 # =========================================================
-# CONEXÃO (POSTGRES)
+# CONEXÃO
 # =========================================================
 def get_conn():
     return conectar_db()
@@ -31,9 +32,72 @@ def safe_like(v):
     return f"%{normalize_text(v)}%"
 
 
+def normalize_col(c):
+    c = str(c or "").strip().lower()
+    c = unicodedata.normalize("NFKD", c)
+    c = "".join(ch for ch in c if not unicodedata.combining(ch))
+    c = re.sub(r"[^a-z0-9]+", "_", c)
+    return c.strip("_")
+
+
+def get_col(row, *names):
+    for name in names:
+        key = normalize_col(name)
+
+        try:
+            val = row.get(key)
+            if val is not None and str(val).strip() != "":
+                return val
+        except Exception:
+            pass
+
+        try:
+            val = row.get(name)
+            if val is not None and str(val).strip() != "":
+                return val
+        except Exception:
+            pass
+
+    return ""
+
+
+def row_to_dict(row, cols=None):
+    if row is None:
+        return None
+
+    if isinstance(row, dict):
+        return dict(row)
+
+    if hasattr(row, "keys"):
+        return {k: row[k] for k in row.keys()}
+
+    if cols:
+        return dict(zip(cols, row))
+
+    try:
+        return dict(row)
+    except Exception:
+        return {}
+
+
+def fetchone_value(row):
+    if not row:
+        return 0
+
+    if isinstance(row, dict):
+        return list(row.values())[0]
+
+    if hasattr(row, "keys"):
+        keys = list(row.keys())
+        return row[keys[0]] if keys else 0
+
+    return row[0]
+
+
 def to_float(v):
     try:
         txt = str(v or "").strip()
+
         if not txt:
             return 0.0
 
@@ -57,19 +121,99 @@ def to_int(v):
         return 0
 
 
-def get_col(row, *names):
-    for name in names:
-        try:
-            val = row.get(name)
-            if val is not None and str(val).strip() != "":
-                return val
-        except Exception:
-            continue
-    return ""
+def montar_where(args):
+    q = normalize_text(args.get("q"))
+    codigo = normalize_text(args.get("codigo"))
+    descricao = normalize_text(args.get("descricao"))
+    complexidade = normalize_text(args.get("complexidade"))
+    competencia = normalize_text(args.get("competencia"))
+    cid = normalize_text(args.get("cid"))
+    cbo = normalize_text(args.get("cbo"))
+    servico = normalize_text(args.get("servico"))
+    financiamento = normalize_text(args.get("financiamento"))
+    rubrica = normalize_text(args.get("rubrica"))
+
+    where = ["1=1"]
+    params = []
+
+    if q:
+        where.append("""
+            (
+                codigo ILIKE %s OR
+                descricao ILIKE %s OR
+                cids_codigos ILIKE %s OR
+                cids_descricoes ILIKE %s OR
+                cbos_codigos ILIKE %s OR
+                cbos_descricoes ILIKE %s OR
+                servicos_codigos ILIKE %s OR
+                servicos_descricoes ILIKE %s OR
+                classificacoes_codigos ILIKE %s OR
+                classificacoes_descricoes ILIKE %s
+            )
+        """)
+        params.extend([safe_like(q)] * 10)
+
+    if codigo:
+        where.append("codigo ILIKE %s")
+        params.append(safe_like(codigo))
+
+    if descricao:
+        where.append("descricao ILIKE %s")
+        params.append(safe_like(descricao))
+
+    if complexidade:
+        where.append("complexidade ILIKE %s")
+        params.append(safe_like(complexidade))
+
+    if competencia:
+        where.append("competencia ILIKE %s")
+        params.append(safe_like(competencia))
+
+    if cid:
+        where.append("(cids_codigos ILIKE %s OR cids_descricoes ILIKE %s)")
+        params.extend([safe_like(cid), safe_like(cid)])
+
+    if cbo:
+        where.append("(cbos_codigos ILIKE %s OR cbos_descricoes ILIKE %s)")
+        params.extend([safe_like(cbo), safe_like(cbo)])
+
+    if servico:
+        where.append("""
+            (
+                servicos_codigos ILIKE %s OR
+                servicos_descricoes ILIKE %s OR
+                classificacoes_codigos ILIKE %s OR
+                classificacoes_descricoes ILIKE %s
+            )
+        """)
+        params.extend([safe_like(servico)] * 4)
+
+    if financiamento:
+        where.append("(co_financiamento ILIKE %s OR no_financiamento ILIKE %s)")
+        params.extend([safe_like(financiamento), safe_like(financiamento)])
+
+    if rubrica:
+        where.append("(co_rubrica ILIKE %s OR no_rubrica ILIKE %s)")
+        params.extend([safe_like(rubrica), safe_like(rubrica)])
+
+    filtros = {
+        "q": q,
+        "codigo": codigo,
+        "descricao": descricao,
+        "complexidade": complexidade,
+        "competencia": competencia,
+        "cid": cid,
+        "cbo": cbo,
+        "servico": servico,
+        "financiamento": financiamento,
+        "rubrica": rubrica,
+    }
+
+    return " AND ".join(where), params, filtros
 
 
 # =========================================================
-# SCHEMA (POSTGRES)
+# SCHEMA
 # =========================================================
 def ensure_schema():
     conn = get_conn()
@@ -116,7 +260,6 @@ def ensure_schema():
             )
         """)
 
-        # Colunas novas, caso a tabela já exista antiga
         alter_columns = {
             "codigo": "TEXT",
             "descricao": "TEXT",
@@ -187,116 +330,34 @@ def ensure_schema():
 
 
 # =========================================================
-# LISTAGEM / PESQUISA
+# LISTAGEM
 # =========================================================
 @procedimentos_bp.route("/")
 def index():
     ensure_schema()
 
-    q = normalize_text(request.args.get("q"))
-    codigo = normalize_text(request.args.get("codigo"))
-    descricao = normalize_text(request.args.get("descricao"))
-    complexidade = normalize_text(request.args.get("complexidade"))
-    competencia = normalize_text(request.args.get("competencia"))
-    cid = normalize_text(request.args.get("cid"))
-    cbo = normalize_text(request.args.get("cbo"))
-    servico = normalize_text(request.args.get("servico"))
-    financiamento = normalize_text(request.args.get("financiamento"))
-    rubrica = normalize_text(request.args.get("rubrica"))
-
     pagina = max(1, request.args.get("pagina", 1, type=int))
     por_pagina = 12
     offset = (pagina - 1) * por_pagina
+
+    where_sql, params, filtros = montar_where(request.args)
 
     conn = get_conn()
 
     try:
         cur = conn.cursor()
 
-        where = ["1=1"]
-        params = []
-
-        if q:
-            where.append("""
-                (
-                    codigo ILIKE %s OR
-                    descricao ILIKE %s OR
-                    cids_codigos ILIKE %s OR
-                    cids_descricoes ILIKE %s OR
-                    cbos_codigos ILIKE %s OR
-                    cbos_descricoes ILIKE %s OR
-                    servicos_codigos ILIKE %s OR
-                    servicos_descricoes ILIKE %s OR
-                    classificacoes_codigos ILIKE %s OR
-                    classificacoes_descricoes ILIKE %s
-                )
-            """)
-            like = safe_like(q)
-            params.extend([like] * 10)
-
-        if codigo:
-            where.append("codigo ILIKE %s")
-            params.append(safe_like(codigo))
-
-        if descricao:
-            where.append("descricao ILIKE %s")
-            params.append(safe_like(descricao))
-
-        if complexidade:
-            where.append("complexidade ILIKE %s")
-            params.append(safe_like(complexidade))
-
-        if competencia:
-            where.append("competencia ILIKE %s")
-            params.append(safe_like(competencia))
-
-        if cid:
-            where.append("(cids_codigos ILIKE %s OR cids_descricoes ILIKE %s)")
-            params.extend([safe_like(cid), safe_like(cid)])
-
-        if cbo:
-            where.append("(cbos_codigos ILIKE %s OR cbos_descricoes ILIKE %s)")
-            params.extend([safe_like(cbo), safe_like(cbo)])
-
-        if servico:
-            where.append("""
-                (
-                    servicos_codigos ILIKE %s OR
-                    servicos_descricoes ILIKE %s OR
-                    classificacoes_codigos ILIKE %s OR
-                    classificacoes_descricoes ILIKE %s
-                )
-            """)
-            params.extend([safe_like(servico)] * 4)
-
-        if financiamento:
-            where.append("(co_financiamento ILIKE %s OR no_financiamento ILIKE %s)")
-            params.extend([safe_like(financiamento), safe_like(financiamento)])
-
-        if rubrica:
-            where.append("(co_rubrica ILIKE %s OR no_rubrica ILIKE %s)")
-            params.extend([safe_like(rubrica), safe_like(rubrica)])
-
-        where_sql = " AND ".join(where)
-
-        # TOTAL
         cur.execute(f"""
-            SELECT COUNT(*)
+            SELECT COUNT(*) AS total
             FROM procedimentos
             WHERE {where_sql}
         """, params)
 
-        row = cur.fetchone()
+        total = fetchone_value(cur.fetchone())
+        total = int(total or 0)
 
-        if not row:
-            total = 0
-        elif isinstance(row, dict):
-            total = list(row.values())[0]
-        else:
-            total = row[0]
         total_paginas = max(1, math.ceil(total / por_pagina))
 
-        # DADOS
         cur.execute(f"""
             SELECT
                 id,
@@ -330,37 +391,48 @@ def index():
         """, params + [por_pagina, offset])
 
         rows = cur.fetchall()
-
-        # 🔥 AQUI ESTÁ A CORREÇÃO
         cols = [desc[0] for desc in cur.description]
-        dados = [dict(zip(cols, row)) for row in rows]
+        dados = [row_to_dict(row, cols) for row in rows]
 
-        filtros = {
-            "q": q,
-            "codigo": codigo,
-            "descricao": descricao,
-            "complexidade": complexidade,
-            "competencia": competencia,
-            "cid": cid,
-            "cbo": cbo,
-            "servico": servico,
-            "financiamento": financiamento,
-            "rubrica": rubrica,
-        }
+        cur.execute("""
+            SELECT DISTINCT complexidade
+            FROM procedimentos
+            WHERE complexidade IS NOT NULL AND TRIM(complexidade) <> ''
+            ORDER BY complexidade
+        """)
+
+        cx_rows = cur.fetchall()
+        cx_cols = [desc[0] for desc in cur.description]
+        complexidades = [
+            row_to_dict(row, cx_cols).get("complexidade")
+            for row in cx_rows
+            if row_to_dict(row, cx_cols).get("complexidade")
+        ]
+
+        print("====== DEBUG LISTAGEM PROCEDIMENTOS ======")
+        print("Total:", total)
+        print("Página:", pagina)
+        print("Itens renderizados:", len(dados))
+        if dados:
+            print("Primeiro item:", dados[0])
 
         return render_template(
             "proced.html",
             dados=dados,
             filtros=filtros,
             pagina=pagina,
+            por_pagina=por_pagina,
             total_paginas=total_paginas,
             total=total,
+            complexidades=complexidades,
         )
 
     finally:
         conn.close()
+
+
 # =========================================================
-# API - DETALHE DO PROCEDIMENTO
+# API - DETALHE
 # =========================================================
 @procedimentos_bp.route("/api/<int:procedimento_id>")
 def api_detalhe(procedimento_id):
@@ -407,7 +479,7 @@ def api_detalhe(procedimento_id):
             return jsonify({"ok": False, "erro": "Procedimento não encontrado"}), 404
 
         cols = [desc[0] for desc in cur.description]
-        item = dict(zip(cols, row))
+        item = row_to_dict(row, cols)
 
         return jsonify({"ok": True, "procedimento": item})
 
@@ -424,14 +496,22 @@ def importar_xls():
 
     file = request.files.get("arquivo")
 
-    if not file:
+    if not file or file.filename == "":
         flash("Arquivo não enviado.", "error")
         return redirect(url_for("procedimentos.index"))
 
-
     try:
         df = pd.read_excel(file, dtype=str).fillna("")
-        df.columns = [normalize_text(c).lower() for c in df.columns]
+        df.columns = [normalize_col(c) for c in df.columns]
+
+        print("====== DEBUG IMPORTAÇÃO PROCEDIMENTOS ======")
+        print("Arquivo:", file.filename)
+        print("Colunas detectadas:", list(df.columns))
+        print("Total de linhas no Excel:", len(df))
+
+        if len(df) > 0:
+            print("Primeira linha:", df.iloc[0].to_dict())
+
     except Exception as e:
         flash(f"Erro ao ler arquivo: {e}", "error")
         return redirect(url_for("procedimentos.index"))
@@ -440,23 +520,29 @@ def importar_xls():
 
     try:
         cur = conn.cursor()
-
-        # Importação substitutiva
         cur.execute("TRUNCATE TABLE procedimentos RESTART IDENTITY;")
 
-        total = 0
+        total_linhas = 0
+        total_importados = 0
+        total_ignorados = 0
 
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
+            total_linhas += 1
+
+            codigo = normalize_text(get_col(row, "codigo", "co_procedimento", "cod_procedimento"))
+            descricao = normalize_text(get_col(row, "descricao", "no_procedimento", "procedimento"))
+
+            if not codigo and not descricao:
+                total_ignorados += 1
+                print(f"[IGNORADO] Linha {idx + 2}: sem código e sem descrição")
+                continue
+
             valor_sh = to_float(get_col(row, "valor_sh", "vl_sh"))
             valor_sa = to_float(get_col(row, "valor_sa", "vl_sa"))
             valor_sp = to_float(get_col(row, "valor_sp", "vl_sp"))
 
             valor_total_planilha = to_float(get_col(row, "valor_total", "vl_total"))
-
-            if valor_total_planilha > 0:
-                valor_total = valor_total_planilha
-            else:
-                valor_total = valor_sh + valor_sa + valor_sp
+            valor_total = valor_total_planilha if valor_total_planilha > 0 else valor_sh + valor_sa + valor_sp
 
             cur.execute("""
                 INSERT INTO procedimentos (
@@ -503,43 +589,66 @@ def importar_xls():
                     CURRENT_TIMESTAMP
                 )
             """, (
-    normalize_text(get_col(row, "codigo")),
-    normalize_text(get_col(row, "descricao")),
-    normalize_text(get_col(row, "complexidade")),
-    normalize_text(get_col(row, "competencia")),
+                codigo,
+                descricao,
+                normalize_text(get_col(row, "complexidade", "tp_complexidade")),
+                normalize_text(get_col(row, "competencia", "dt_competencia")),
 
-    valor_sh,
-    valor_sa,
-    valor_sp,
-    valor_total,
+                valor_sh,
+                valor_sa,
+                valor_sp,
+                valor_total,
 
-    normalize_text(get_col(row, "co_financiamento")),
-    normalize_text(get_col(row, "no_financiamento")),
-    normalize_text(get_col(row, "co_rubrica")),
-    normalize_text(get_col(row, "no_rubrica")),
+                normalize_text(get_col(row, "co_financiamento")),
+                normalize_text(get_col(row, "no_financiamento")),
+                normalize_text(get_col(row, "co_rubrica")),
+                normalize_text(get_col(row, "no_rubrica")),
 
-    to_int(get_col(row, "qtd_cids")),
-    normalize_text(get_col(row, "cids_codigos")),
-    normalize_text(get_col(row, "cids_descricoes")),
+                to_int(get_col(row, "qtd_cids")),
+                normalize_text(get_col(row, "cids_codigos")),
+                normalize_text(get_col(row, "cids_descricoes")),
 
-    to_int(get_col(row, "qtd_cbos")),
-    normalize_text(get_col(row, "cbos_codigos")),
-    normalize_text(get_col(row, "cbos_descricoes")),
+                to_int(get_col(row, "qtd_cbos")),
+                normalize_text(get_col(row, "cbos_codigos")),
+                normalize_text(get_col(row, "cbos_descricoes")),
 
-    to_int(get_col(row, "qtd_servicos")),
-    normalize_text(get_col(row, "servicos_codigos")),
-    normalize_text(get_col(row, "servicos_descricoes")),
+                to_int(get_col(row, "qtd_servicos")),
+                normalize_text(get_col(row, "servicos_codigos")),
+                normalize_text(get_col(row, "servicos_descricoes")),
 
-    normalize_text(get_col(row, "classificacoes_codigos")),
-    normalize_text(get_col(row, "classificacoes_descricoes")),
-))
-            total += 1
+                normalize_text(get_col(row, "classificacoes_codigos")),
+                normalize_text(get_col(row, "classificacoes_descricoes")),
+            ))
+
+            total_importados += 1
+
+        cur.execute("""
+            SELECT 
+                COUNT(*) AS total,
+                COUNT(NULLIF(TRIM(codigo), '')) AS com_codigo,
+                COUNT(NULLIF(TRIM(descricao), '')) AS com_descricao
+            FROM procedimentos
+        """)
+
+        resumo = row_to_dict(cur.fetchone(), [desc[0] for desc in cur.description])
 
         conn.commit()
-        flash(f"{total} procedimentos importados com sucesso.", "success")
+
+        print("====== RESULTADO IMPORTAÇÃO ======")
+        print("Linhas Excel:", total_linhas)
+        print("Importados:", total_importados)
+        print("Ignorados:", total_ignorados)
+        print("Resumo banco:", resumo)
+
+        flash(
+            f"{total_importados} procedimentos importados. "
+            f"{total_ignorados} linhas ignoradas.",
+            "success"
+        )
 
     except Exception as e:
         conn.rollback()
+        print("ERRO NA IMPORTAÇÃO:", e)
         flash(f"Erro na importação: {e}", "error")
 
     finally:
@@ -549,7 +658,7 @@ def importar_xls():
 
 
 # =========================================================
-# EXCLUSÃO INDIVIDUAL
+# EXCLUSÃO
 # =========================================================
 @procedimentos_bp.route("/excluir/<int:procedimento_id>", methods=["POST"])
 def excluir(procedimento_id):
@@ -559,7 +668,6 @@ def excluir(procedimento_id):
 
     try:
         cur = conn.cursor()
-
         cur.execute("DELETE FROM procedimentos WHERE id = %s", (procedimento_id,))
 
         if cur.rowcount == 0:
@@ -590,7 +698,7 @@ def limpar():
 
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM procedimentos")
+        cur.execute("TRUNCATE TABLE procedimentos RESTART IDENTITY;")
         conn.commit()
 
         flash("Base de procedimentos limpa com sucesso.", "success")
@@ -605,94 +713,24 @@ def limpar():
     return redirect(url_for("procedimentos.index"))
 
 
+@procedimentos_bp.route("/limpar-banco", methods=["POST"])
+def limpar_banco():
+    return limpar()
+
+
 # =========================================================
-# EXPORTAÇÃO XLSX DOS FILTROS
+# EXPORTAÇÃO XLSX
 # =========================================================
 @procedimentos_bp.route("/exportar", methods=["GET"])
 def exportar():
     ensure_schema()
 
-    q = normalize_text(request.args.get("q"))
-    codigo = normalize_text(request.args.get("codigo"))
-    descricao = normalize_text(request.args.get("descricao"))
-    complexidade = normalize_text(request.args.get("complexidade"))
-    competencia = normalize_text(request.args.get("competencia"))
-    cid = normalize_text(request.args.get("cid"))
-    cbo = normalize_text(request.args.get("cbo"))
-    servico = normalize_text(request.args.get("servico"))
-    financiamento = normalize_text(request.args.get("financiamento"))
-    rubrica = normalize_text(request.args.get("rubrica"))
+    where_sql, params, _ = montar_where(request.args)
 
     conn = get_conn()
 
     try:
         cur = conn.cursor()
-
-        where = ["1=1"]
-        params = []
-
-        if q:
-            where.append("""
-                (
-                    codigo ILIKE %s OR
-                    descricao ILIKE %s OR
-                    cids_codigos ILIKE %s OR
-                    cids_descricoes ILIKE %s OR
-                    cbos_codigos ILIKE %s OR
-                    cbos_descricoes ILIKE %s OR
-                    servicos_codigos ILIKE %s OR
-                    servicos_descricoes ILIKE %s OR
-                    classificacoes_codigos ILIKE %s OR
-                    classificacoes_descricoes ILIKE %s
-                )
-            """)
-            like = safe_like(q)
-            params.extend([like] * 10)
-
-        if codigo:
-            where.append("codigo ILIKE %s")
-            params.append(safe_like(codigo))
-
-        if descricao:
-            where.append("descricao ILIKE %s")
-            params.append(safe_like(descricao))
-
-        if complexidade:
-            where.append("complexidade ILIKE %s")
-            params.append(safe_like(complexidade))
-
-        if competencia:
-            where.append("competencia ILIKE %s")
-            params.append(safe_like(competencia))
-
-        if cid:
-            where.append("(cids_codigos ILIKE %s OR cids_descricoes ILIKE %s)")
-            params.extend([safe_like(cid), safe_like(cid)])
-
-        if cbo:
-            where.append("(cbos_codigos ILIKE %s OR cbos_descricoes ILIKE %s)")
-            params.extend([safe_like(cbo), safe_like(cbo)])
-
-        if servico:
-            where.append("""
-                (
-                    servicos_codigos ILIKE %s OR
-                    servicos_descricoes ILIKE %s OR
-                    classificacoes_codigos ILIKE %s OR
-                    classificacoes_descricoes ILIKE %s
-                )
-            """)
-            params.extend([safe_like(servico)] * 4)
-
-        if financiamento:
-            where.append("(co_financiamento ILIKE %s OR no_financiamento ILIKE %s)")
-            params.extend([safe_like(financiamento), safe_like(financiamento)])
-
-        if rubrica:
-            where.append("(co_rubrica ILIKE %s OR no_rubrica ILIKE %s)")
-            params.extend([safe_like(rubrica), safe_like(rubrica)])
-
-        where_sql = " AND ".join(where)
 
         cur.execute(f"""
             SELECT
@@ -726,8 +764,9 @@ def exportar():
 
         rows = cur.fetchall()
         cols = [desc[0] for desc in cur.description]
+        dados = [row_to_dict(row, cols) for row in rows]
 
-        df = pd.DataFrame(rows, columns=cols)
+        df = pd.DataFrame(dados, columns=cols)
 
         mem = BytesIO()
 
@@ -745,6 +784,7 @@ def exportar():
 
     finally:
         conn.close()
+
 
 # =========================================================
 # PESQUISA EM LOTE
@@ -809,7 +849,7 @@ def lote():
 
                     if row:
                         cols = [desc[0] for desc in cur.description]
-                        item = dict(zip(cols, row))
+                        item = row_to_dict(row, cols)
                         item["encontrado"] = True
                         resultados.append(item)
                         total_encontrados += 1
@@ -829,10 +869,3 @@ def lote():
         total_enviados=total_enviados,
         total_encontrados=total_encontrados
     )
-
-# =========================================================
-# LIMPAR BANCO - ALIAS PARA COMPATIBILIDADE COM O TEMPLATE
-# =========================================================
-@procedimentos_bp.route("/limpar-banco", methods=["POST"])
-def limpar_banco():
-    return limpar()
