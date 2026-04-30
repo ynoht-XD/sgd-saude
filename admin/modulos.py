@@ -274,38 +274,57 @@ ROLES_BASE = [
 def get_conn():
     if conectar_db is None:
         raise RuntimeError(
-            "Não encontrei a função conectar_db em db.py. "
-            "Ajuste o import no topo de admin/modulos.py."
+            "Não encontrei conectar_db em db.py"
         )
 
     conn = conectar_db()
 
+    # 🔥 PADRÃO UNIVERSAL (SQLite + Postgres)
     try:
-        conn.autocommit = False
+        conn.row_factory = None  # evita conflito com sqlite Row
     except Exception:
         pass
 
     return conn
 
 
+def row_to_dict(row, cur=None):
+    if row is None:
+        return None
+
+    if isinstance(row, dict) or hasattr(row, "keys"):
+        return dict(row)
+
+    if cur and cur.description:
+        cols = [desc[0] for desc in cur.description]
+        return dict(zip(cols, row))
+
+    return dict(row)
+
+
+def row_value(row, key=0):
+    if row is None:
+        return None
+
+    if isinstance(row, dict) or hasattr(row, "keys"):
+        d = dict(row)
+        if isinstance(key, int):
+            return list(d.values())[key]
+        return d.get(key)
+
+    return row[key]
+
+
 def dictfetchall(cur):
-    cols = [desc[0] for desc in cur.description]
-    return [dict(zip(cols, row)) for row in cur.fetchall()]
+    return [row_to_dict(row, cur) for row in cur.fetchall()]
 
 
 def dictfetchone(cur):
-    row = cur.fetchone()
-
-    if not row:
-        return None
-
-    cols = [desc[0] for desc in cur.description]
-    return dict(zip(cols, row))
+    return row_to_dict(cur.fetchone(), cur)
 
 
 def only_digits(valor: str | None) -> str:
     return re.sub(r"\D", "", valor or "")
-
 
 # =============================================================================
 # SEGURANÇA MASTER
@@ -526,28 +545,33 @@ def ensure_clinica_padrao():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT id FROM clinicas ORDER BY id ASC LIMIT 1;")
-    row = cur.fetchone()
+    try:
+        cur.execute("SELECT id FROM clinicas ORDER BY id ASC LIMIT 1;")
+        row = cur.fetchone()
 
-    if row:
-        clinica_id = row[0]
-    else:
-        cur.execute(
-            """
-            INSERT INTO clinicas (nome, documento, ativo)
-            VALUES (%s, %s, TRUE)
-            RETURNING id;
-            """,
-            ("Clínica Principal", None),
-        )
-        clinica_id = cur.fetchone()[0]
-        conn.commit()
+        if row:
+            clinica_id = row_value(row, "id")
+        else:
+            cur.execute(
+                """
+                INSERT INTO clinicas (nome, documento, ativo)
+                VALUES (%s, %s, TRUE)
+                RETURNING id;
+                """,
+                ("Clínica Principal", None),
+            )
+            clinica_id = row_value(cur.fetchone(), "id")
+            conn.commit()
 
-    cur.close()
-    conn.close()
+        return int(clinica_id)
 
-    return clinica_id
+    except Exception:
+        conn.rollback()
+        raise
 
+    finally:
+        cur.close()
+        conn.close()
 
 def preparar_modulos():
     ensure_modulos_schema()
@@ -681,7 +705,7 @@ def listar_usuarios_por_role(clinica_id: int | None = None):
           AND table_name = 'usuarios';
         """
     )
-    cols = {r[0] for r in cur.fetchall()}
+    cols = {row_value(r, "column_name") for r in cur.fetchall()}
 
     filtro_clinica = ""
     params = []
@@ -746,7 +770,7 @@ def listar_cbos_com_profissionais(clinica_id: int | None = None):
           AND table_name = 'usuarios';
         """
     )
-    cols = {r[0] for r in cur.fetchall()}
+    cols = {row_value(r, "column_name") for r in cur.fetchall()}
 
     filtro_clinica = ""
     params = []
@@ -766,7 +790,7 @@ def listar_cbos_com_profissionais(clinica_id: int | None = None):
         );
         """
     )
-    tem_cbo_catalogo = bool(cur.fetchone()[0])
+    tem_cbo_catalogo = bool(row_value(cur.fetchone(), "exists"))
 
     if tem_cbo_catalogo:
         cur.execute(
@@ -1155,7 +1179,10 @@ def nivel_regra(
     if row is None:
         return None
 
-    nivel, permitido = row
+    dado = row_to_dict(row, cur)
+
+    nivel = dado.get("nivel_acesso")
+    permitido = dado.get("permitido")
 
     if permitido is False:
         return 0
