@@ -181,6 +181,7 @@ def ensure_atendimentos_schema(conn) -> None:
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
+
 def ensure_atendimento_procedimentos_schema(conn) -> None:
     cur = conn.cursor()
 
