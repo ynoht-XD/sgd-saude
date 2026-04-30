@@ -161,33 +161,25 @@ def ensure_atendimentos_schema(conn) -> None:
         """
     )
 
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS paciente_id INTEGER")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS data_atendimento DATE")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS status TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS justificativa TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS evolucao TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS nome TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS prontuario TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS mod TEXT")
+    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS status_paciente TEXT")
+
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS anexo_atestado TEXT")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS profissional_id INTEGER")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS nome_profissional TEXT")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS cns_profissional TEXT")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS cbo_profissional TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS status_paciente TEXT")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS combo_plano_id INTEGER")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS contabiliza_sessao INTEGER NOT NULL DEFAULT 0")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_atends_paciente_data
-            ON atendimentos (paciente_id, data_atendimento)
-        """
-    )
-
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_atends_combo_plano
-            ON atendimentos (combo_plano_id)
-        """
-    )
-
-    conn.commit()
-
 
 def ensure_atendimento_procedimentos_schema(conn) -> None:
     cur = conn.cursor()
