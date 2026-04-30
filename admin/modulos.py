@@ -274,19 +274,18 @@ ROLES_BASE = [
 def get_conn():
     if conectar_db is None:
         raise RuntimeError(
-            "Não encontrei conectar_db em db.py"
+            "Não encontrei a função conectar_db em db.py. "
+            "Ajuste o import no topo de admin/modulos.py."
         )
 
     conn = conectar_db()
 
-    # 🔥 PADRÃO UNIVERSAL (SQLite + Postgres)
     try:
-        conn.row_factory = None  # evita conflito com sqlite Row
+        conn.autocommit = False
     except Exception:
         pass
 
     return conn
-
 
 def row_to_dict(row, cur=None):
     if row is None:
