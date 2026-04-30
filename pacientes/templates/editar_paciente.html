@@ -41,11 +41,14 @@
           <div>
             <label for="mod">Modalidade (MOD):</label>
             <select id="mod" name="mod">
-              <option value="Intelectual" {{ 'selected' if paciente.mod == 'Intelectual' else '' }}>Intelectual</option>
-              <option value="Físico"      {{ 'selected' if paciente.mod == 'Físico' else '' }}>Físico</option>
-              <option value="Auditivo"    {{ 'selected' if paciente.mod == 'Auditivo' else '' }}>Auditivo</option>
-              <option value="Equoterapia" {{ 'selected' if paciente.mod == 'Equoterapia' else '' }}>Equoterapia</option>
-              <option value="Visual"      {{ 'selected' if paciente.mod == 'Visual' else '' }}>Visual</option>
+              <option value="SEM MOD" {{ 'selected' if paciente.mod == 'SEM MOD' else '' }}>Sem modalidade</option>
+              <option value="FIS" {{ 'selected' if paciente.mod == 'FIS' else '' }}>Físico / Fisioterapia</option>
+              <option value="INT" {{ 'selected' if paciente.mod == 'INT' else '' }}>Intelectual</option>
+              <option value="AUD" {{ 'selected' if paciente.mod == 'AUD' else '' }}>Auditivo</option>
+              <option value="VISU" {{ 'selected' if paciente.mod == 'VISU' else '' }}>Visual</option>
+              <option value="EQUO" {{ 'selected' if paciente.mod == 'EQUO' else '' }}>Equoterapia</option>
+              <option value="MED" {{ 'selected' if paciente.mod == 'MED' else '' }}>Médico</option>
+              <option value="EXAM" {{ 'selected' if paciente.mod == 'EXAM' else '' }}>Exames</option>
             </select>
           </div>
 
