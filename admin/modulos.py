@@ -13,6 +13,7 @@ from flask import (
     session,
     abort,
     jsonify,
+    g,
 )
 
 from . import admin_bp, admin_required
@@ -1189,6 +1190,147 @@ def nivel_regra(
     return int(nivel or 0)
 
 
+
+def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
+    """
+    Carrega todas as permissões do usuário em UMA consulta principal.
+    Evita abrir conexão várias vezes para cada módulo.
+    """
+
+    cache_key = f"permissoes_fast_{clinica_id}_{usuario_id}"
+
+    if hasattr(g, cache_key):
+        return getattr(g, cache_key)
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                id,
+                nome,
+                UPPER(COALESCE(role, '')) AS role,
+                COALESCE(cbo, '') AS cbo,
+                COALESCE(is_master, FALSE) AS is_master,
+                COALESCE(is_superuser, FALSE) AS is_superuser
+            FROM usuarios
+            WHERE id = %s
+            LIMIT 1;
+            """,
+            (usuario_id,),
+        )
+
+        usuario = dictfetchone(cur)
+
+        if not usuario:
+            resultado = {
+                "usuario": None,
+                "master": False,
+                "modulos_ativos": set(),
+                "regras_usuario": {},
+                "regras_cbo": {},
+                "regras_role": {},
+            }
+            setattr(g, cache_key, resultado)
+            return resultado
+
+        role = (usuario.get("role") or "").upper()
+
+        if role == "RECEPÇÃO":
+            role = "RECEPCAO"
+
+        if role == "PROFISSIONAIS":
+            role = "PROFISSIONAL"
+
+        cbo_digits = only_digits(usuario.get("cbo"))
+
+        usuario["role"] = role
+        usuario["cbo_digits"] = cbo_digits
+
+        cur.execute(
+            """
+            SELECT modulo_codigo
+            FROM clinica_modulos
+            WHERE clinica_id = %s
+              AND ativo = TRUE;
+            """,
+            (clinica_id,),
+        )
+
+        modulos_ativos = {
+            row_value(row, "modulo_codigo")
+            for row in cur.fetchall()
+        }
+
+        alvos = [
+            ("USUARIO", str(usuario_id)),
+            ("ROLE", role),
+        ]
+
+        if cbo_digits:
+            alvos.append(("CBO", cbo_digits))
+
+        cur.execute(
+            """
+            SELECT
+                modulo_codigo,
+                alvo_tipo,
+                alvo_valor,
+                nivel_acesso,
+                permitido
+            FROM modulo_regras_acesso
+            WHERE clinica_id = %s
+              AND permitido = TRUE
+              AND (
+                    (alvo_tipo = 'USUARIO' AND alvo_valor = %s)
+                 OR (alvo_tipo = 'ROLE'    AND alvo_valor = %s)
+                 OR (alvo_tipo = 'CBO'     AND alvo_valor = %s)
+              );
+            """,
+            (
+                clinica_id,
+                str(usuario_id),
+                role,
+                cbo_digits or "__SEM_CBO__",
+            ),
+        )
+
+        regras_usuario = {}
+        regras_cbo = {}
+        regras_role = {}
+
+        for r in dictfetchall(cur):
+            modulo = r.get("modulo_codigo")
+            alvo_tipo = (r.get("alvo_tipo") or "").upper()
+            nivel = int(r.get("nivel_acesso") or 0)
+
+            if alvo_tipo == "USUARIO":
+                regras_usuario[modulo] = nivel
+            elif alvo_tipo == "CBO":
+                regras_cbo[modulo] = nivel
+            elif alvo_tipo == "ROLE":
+                regras_role[modulo] = nivel
+
+        resultado = {
+            "usuario": usuario,
+            "master": bool(usuario.get("is_master") or usuario.get("is_superuser")),
+            "modulos_ativos": modulos_ativos,
+            "regras_usuario": regras_usuario,
+            "regras_cbo": regras_cbo,
+            "regras_role": regras_role,
+        }
+
+        setattr(g, cache_key, resultado)
+        return resultado
+
+    finally:
+        cur.close()
+        conn.close()
+
+
+
 def usuario_tem_permissao(
     usuario_id: int,
     clinica_id: int,
@@ -1197,69 +1339,51 @@ def usuario_tem_permissao(
     perfil_id: int | None = None,
 ) -> bool:
     """
-    Prioridade:
-    1. Master pode tudo.
-    2. Clínica precisa ter módulo ativo.
-    3. Regra por USUÁRIO tem prioridade máxima.
-    4. Depois CBO.
-    5. Depois ROLE.
-    6. Sem regra = bloqueado.
+    Versão rápida:
+    - 1 carregamento por request
+    - permissões em memória via g
+    - prioridade: USUARIO > CBO > ROLE
     """
 
     if usuario_eh_master():
         return True
 
-    if not clinica_tem_modulo(clinica_id, modulo_codigo):
-        return False
+    dados = carregar_permissoes_usuario_fast(
+        usuario_id=int(usuario_id),
+        clinica_id=int(clinica_id),
+    )
 
-    usuario = buscar_usuario_para_permissao(usuario_id)
+    usuario = dados.get("usuario")
 
     if not usuario:
         return False
 
-    if usuario.get("is_master") is True or usuario.get("is_superuser") is True:
+    if dados.get("master"):
         return True
 
-    # 1) Exceção direta por usuário
-    nivel_usuario = nivel_regra(
-        clinica_id=clinica_id,
-        modulo_codigo=modulo_codigo,
-        alvo_tipo="USUARIO",
-        alvo_valor=usuario_id,
-    )
+    if modulo_codigo not in dados["modulos_ativos"]:
+        return False
 
-    if nivel_usuario is not None:
-        return valor_permite_acao(nivel_usuario, acao)
-
-    # 2) Regra por CBO
-    cbo = usuario.get("cbo_digits")
-
-    if cbo:
-        nivel_cbo = nivel_regra(
-            clinica_id=clinica_id,
-            modulo_codigo=modulo_codigo,
-            alvo_tipo="CBO",
-            alvo_valor=cbo,
+    if modulo_codigo in dados["regras_usuario"]:
+        return valor_permite_acao(
+            dados["regras_usuario"][modulo_codigo],
+            acao,
         )
 
-        if nivel_cbo is not None:
-            return valor_permite_acao(nivel_cbo, acao)
-
-    # 3) Regra por ROLE
-    role = usuario.get("role")
-
-    if role:
-        nivel_role = nivel_regra(
-            clinica_id=clinica_id,
-            modulo_codigo=modulo_codigo,
-            alvo_tipo="ROLE",
-            alvo_valor=role,
+    if modulo_codigo in dados["regras_cbo"]:
+        return valor_permite_acao(
+            dados["regras_cbo"][modulo_codigo],
+            acao,
         )
 
-        if nivel_role is not None:
-            return valor_permite_acao(nivel_role, acao)
+    if modulo_codigo in dados["regras_role"]:
+        return valor_permite_acao(
+            dados["regras_role"][modulo_codigo],
+            acao,
+        )
 
     return False
+
 
 
 def require_permission(modulo_codigo: str, acao: str = "ver"):
