@@ -18,6 +18,38 @@
   const CURRENT_PROF_CPF = meta("current-prof-cpf") || "";
   const onlyDigits = (v) => (v || "").replace(/\D/g, "");
 
+  function whatsappHref(numero) {
+    const digits = onlyDigits(numero);
+
+    if (!digits) return "";
+
+    // Se já vier com 55, mantém. Se vier só DDD+número, adiciona 55.
+    const finalNumber = digits.startsWith("55") ? digits : `55${digits}`;
+
+    return `https://wa.me/${finalNumber}`;
+  }
+
+  function telefonePacienteHTML(numero) {
+    const digits = onlyDigits(numero);
+
+    if (!digits) {
+      return `<span class="ag-card-phone empty">Sem telefone</span>`;
+    }
+
+    return `
+      <a 
+        class="ag-card-phone"
+        href="${whatsappHref(numero)}"
+        target="_blank"
+        rel="noopener"
+        title="Abrir WhatsApp"
+      >
+        <span>📱</span>
+        <span>${numero}</span>
+      </a>
+    `;
+  }
+
   console.debug("[agenda] META current-prof-cpf:", CURRENT_PROF_CPF);
 
   const debounce = (fn, ms = 250) => {
@@ -388,6 +420,10 @@
       const pac      = it.paciente || "—";
       const qtd      = it.qtd != null ? it.qtd : "—";
       const pront    = it.prontuario || it.paciente_prontuario || "";
+      const telefone = it.telefone || it.paciente_telefone || it.celular || "";
+      const telefoneHTML = telefonePacienteHTML(telefone);
+
+
 
       const prontBtn = it.paciente_id ? `
         <a class="icon-btn" href="/visualizar/${it.paciente_id}" title="Ver prontuário" target="_blank" aria-label="Ver prontuário">
@@ -434,7 +470,10 @@
       return `
         <article class="ag-card" data-cache-index="${idxCache}">
           <header class="ag-card-head">
-            <div class="ag-card-paciente">${pac}</div>
+            <div>
+              <div class="ag-card-paciente">${pac}</div>
+              ${telefoneHTML}
+            </div>
             <div class="ag-card-dia">${diaLabel} • ${hora}</div>
           </header>
           <div class="ag-card-body">

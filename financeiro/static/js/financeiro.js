@@ -1,763 +1,648 @@
 (() => {
   "use strict";
 
-  // =========================================================
-  // HELPERS
-  // =========================================================
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const API = "/financeiro/api";
 
   const state = {
-    recebimentos: [],
+    competencia: "",
+    tipo: "",
+    categorias: {
+      receitas: [],
+      despesas: [],
+      formas_pagamento: [],
+      status: [],
+    },
     lancamentos: [],
-    resumo: {},
+    combos: [],
+    planos: [],
+    pacienteSelecionado: null,
   };
 
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  const $ = (sel, ctx = document) => ctx.querySelector(sel);
+  const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel));
+
+  const money = (v) =>
+    Number(v || 0).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
+
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+  const currentCompetencia = () => new Date().toISOString().slice(0, 7);
+
+  const fmtDateBR = (value) => {
+    if (!value) return "-";
+    const d = String(value).slice(0, 10);
+    const [y, m, day] = d.split("-");
+    return y && m && day ? `${day}/${m}/${y}` : value;
+  };
+
+  async function api(path, options = {}) {
+    const config = {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    };
+
+    const res = await fetch(`${API}${path}`, config);
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.erro || "Erro na requisição.");
+    }
+
+    return data;
   }
 
-  function money(v) {
-    const num = Number(v || 0);
-    return num.toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL"
+  function toast(msg, type = "ok") {
+    console.log(`[${type}] ${msg}`);
+    alert(msg);
+  }
+
+  function openModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.setAttribute("open", "open");
+  }
+
+  function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+
+    if (typeof modal.close === "function") modal.close();
+    else modal.removeAttribute("open");
+  }
+
+  function fillSelect(select, items, placeholder = "Selecione") {
+    if (!select) return;
+
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+
+    items.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item;
+      opt.textContent = item;
+      select.appendChild(opt);
     });
   }
 
-  function normalizeText(v) {
-    return String(v || "").trim().toLowerCase();
+  function setCompetenciaAtual() {
+    state.competencia = currentCompetencia();
+
+    const filtro = $("#filtroCompetencia");
+    if (filtro && !filtro.value) filtro.value = state.competencia;
+
+    const lancCompetencia = $("#lancCompetencia");
+    if (lancCompetencia) lancCompetencia.value = state.competencia;
+
+    const txt = $("#txtCompetenciaAtual");
+    if (txt) txt.textContent = `Competência ${state.competencia}`;
   }
 
-  function formatDateBR(value) {
-    if (!value) return "—";
+  async function carregarCategorias() {
+    const data = await api("/categorias");
+
+    state.categorias = {
+      receitas: data.receitas || [],
+      despesas: data.despesas || [],
+      formas_pagamento: data.formas_pagamento || [],
+      status: data.status || [],
+    };
+
+    preencherCategoriasPorTipo();
+    fillSelect($("#planoFormaPagamento"), state.categorias.formas_pagamento, "Selecione");
+    fillSelect($("#lancFormaPagamento"), state.categorias.formas_pagamento, "Selecione");
+  }
+
+  function preencherCategoriasPorTipo() {
+    const tipo = $("#lancTipo")?.value || "entrada";
+    const categoriaLanc = $("#lancCategoria");
+    const filtroCategoria = $("#filtroCategoria");
+
+    const lista =
+      tipo === "saida" ? state.categorias.despesas : state.categorias.receitas;
+
+    fillSelect(categoriaLanc, lista, "Selecione");
+    fillSelect(filtroCategoria, [...state.categorias.receitas, ...state.categorias.despesas], "Todas");
+  }
+
+  async function carregarResumo() {
+    const comp = $("#filtroCompetencia")?.value || state.competencia;
+
+    const data = await api(`/resumo?competencia=${encodeURIComponent(comp)}`);
+    const r = data.resumo || {};
+
+    $("#kpiEntradasPagas").textContent = money(r.entradas_pagas);
+    $("#kpiSaidasPagas").textContent = money(r.saidas_pagas);
+    $("#kpiSaldoPago").textContent = money(r.saldo_pago);
+
+    const pendentes = Number(r.entradas_pendentes || 0) + Number(r.saidas_pendentes || 0);
+    $("#kpiPendentes").textContent = money(pendentes);
+  }
+
+  async function carregarFechamento() {
+    const comp = $("#filtroCompetencia")?.value || state.competencia;
+
+    const data = await api(`/fechamento?competencia=${encodeURIComponent(comp)}`);
+    const f = data.fechamento || {};
+
+    $("#fechamentoSaldo").textContent = money(f.saldo);
+    $("#fechamentoEntradas").textContent = money(f.entradas);
+    $("#fechamentoSaidas").textContent = money(f.saidas);
+
+    const box = $("#listaCategoriasFechamento");
+    if (!box) return;
+
+    const categorias = f.por_categoria || [];
+
+    if (!categorias.length) {
+      box.innerHTML = `<div class="empty-state">Nenhuma movimentação nesta competência.</div>`;
+      return;
+    }
+
+    box.innerHTML = categorias
+      .map((c) => {
+        const tipo = c.tipo || "";
+        return `
+          <div class="fin-category-item ${tipo}">
+            <div>
+              <strong>${c.categoria || "Sem categoria"}</strong>
+              <small>${tipo === "entrada" ? "Receita" : "Despesa"} · ${c.quantidade || 0} lançamento(s)</small>
+            </div>
+            <span class="valor">${money(c.total_pago)}</span>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function paramsLancamentos() {
+    const params = new URLSearchParams();
+
+    const competencia = $("#filtroCompetencia")?.value || state.competencia;
+    const status = $("#filtroStatus")?.value || "";
+    const categoria = $("#filtroCategoria")?.value || "";
+    const q = $("#filtroBusca")?.value || "";
+
+    if (competencia) params.set("competencia", competencia);
+    if (state.tipo) params.set("tipo", state.tipo);
+    if (status) params.set("status", status);
+    if (categoria) params.set("categoria", categoria);
+    if (q) params.set("q", q);
+
+    params.set("per_page", "200");
+
+    return params.toString();
+  }
+
+  async function carregarLancamentos() {
+    const tbody = $("#tbodyLancamentos");
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">Carregando lançamentos...</td></tr>`;
+    }
+
+    const data = await api(`/lancamentos?${paramsLancamentos()}`);
+    state.lancamentos = data.items || [];
+
+    renderLancamentos();
+  }
+
+  function renderLancamentos() {
+    const tbody = $("#tbodyLancamentos");
+    if (!tbody) return;
+
+    if (!state.lancamentos.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">Nenhum lançamento encontrado.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = state.lancamentos
+      .map((l) => {
+        const tipo = l.tipo || "";
+        const valorClass = tipo === "saida" ? "valor-saida" : "valor-entrada";
+
+        return `
+          <tr>
+            <td>${fmtDateBR(l.data_movimento || l.data_pagamento || l.vencimento || l.criado_em)}</td>
+            <td><span class="badge ${tipo}">${tipo === "saida" ? "Saída" : "Entrada"}</span></td>
+            <td>
+              <strong>${l.descricao || "-"}</strong><br>
+              <small>${l.cliente_nome || l.fornecedor || l.documento || ""}</small>
+            </td>
+            <td>${l.categoria || "-"}</td>
+            <td><span class="badge ${l.status || "pendente"}">${l.status || "pendente"}</span></td>
+            <td class="text-right ${valorClass}">${money(l.valor)}</td>
+            <td class="text-right">
+              <div class="row-actions">
+                ${
+                  l.status !== "pago"
+                    ? `<button data-action="pagar" data-id="${l.id}">Pagar</button>`
+                    : ""
+                }
+                <button data-action="editar" data-id="${l.id}">Editar</button>
+                <button data-action="excluir" data-id="${l.id}">Excluir</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  function limparFormLancamento() {
+    $("#formLancamento")?.reset();
+
+    $("#lancamentoId").value = "";
+    $("#tituloModalLancamento").textContent = "Novo lançamento";
+    $("#lancTipo").value = "entrada";
+    $("#lancStatus").value = "pago";
+    $("#lancDataMovimento").value = todayISO();
+    $("#lancCompetencia").value = $("#filtroCompetencia")?.value || state.competencia;
+
+    preencherCategoriasPorTipo();
+  }
+
+  function preencherFormLancamento(l) {
+    $("#lancamentoId").value = l.id || "";
+    $("#tituloModalLancamento").textContent = "Editar lançamento";
+
+    $("#lancTipo").value = l.tipo || "entrada";
+    preencherCategoriasPorTipo();
+
+    $("#lancStatus").value = l.status || "pendente";
+    $("#lancDataMovimento").value = String(l.data_movimento || l.data_pagamento || l.vencimento || todayISO()).slice(0, 10);
+    $("#lancCompetencia").value = l.competencia || state.competencia;
+    $("#lancCategoria").value = l.categoria || "";
+    $("#lancSubcategoria").value = l.subcategoria || "";
+    $("#lancDescricao").value = l.descricao || "";
+    $("#lancValor").value = Number(l.valor || 0).toFixed(2);
+    $("#lancFormaPagamento").value = l.forma_pagamento || "";
+    $("#lancClienteNome").value = l.cliente_nome || "";
+    $("#lancFornecedor").value = l.fornecedor || "";
+    $("#lancDocumento").value = l.documento || "";
+    $("#lancObservacoes").value = l.observacoes || "";
+  }
+
+  function payloadLancamento() {
+    return {
+      tipo: $("#lancTipo").value,
+      status: $("#lancStatus").value,
+      data_movimento: $("#lancDataMovimento").value,
+      competencia: $("#lancCompetencia").value,
+      categoria: $("#lancCategoria").value,
+      subcategoria: $("#lancSubcategoria").value,
+      descricao: $("#lancDescricao").value,
+      valor: $("#lancValor").value,
+      forma_pagamento: $("#lancFormaPagamento").value,
+      cliente_nome: $("#lancClienteNome").value,
+      fornecedor: $("#lancFornecedor").value,
+      documento: $("#lancDocumento").value,
+      observacoes: $("#lancObservacoes").value,
+    };
+  }
+
+  async function salvarLancamento(ev) {
+    ev.preventDefault();
+
+    const id = $("#lancamentoId").value;
+    const payload = payloadLancamento();
+
     try {
-      const d = new Date(`${String(value).slice(0, 10)}T00:00:00`);
-      if (Number.isNaN(d.getTime())) return String(value);
-      return d.toLocaleDateString("pt-BR");
-    } catch {
-      return String(value);
+      if (id) {
+        await api(`/lancamentos/${id}`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await api("/lancamentos", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      closeModal("modalLancamento");
+      await refreshAll();
+      toast("Lançamento salvo com sucesso.");
+    } catch (err) {
+      toast(err.message, "erro");
     }
   }
 
-  function toast(msg) {
-    window.alert(msg);
+  async function pagarLancamento(id) {
+    try {
+      await api(`/lancamentos/${id}/pagar`, {
+        method: "POST",
+        body: JSON.stringify({
+          data_pagamento: todayISO(),
+        }),
+      });
+
+      await refreshAll();
+      toast("Lançamento marcado como pago.");
+    } catch (err) {
+      toast(err.message, "erro");
+    }
   }
 
-  function debounce(fn, delay = 250) {
+  async function excluirLancamento(id) {
+    if (!confirm("Excluir este lançamento?")) return;
+
+    try {
+      await api(`/lancamentos/${id}`, { method: "DELETE" });
+      await refreshAll();
+      toast("Lançamento excluído.");
+    } catch (err) {
+      toast(err.message, "erro");
+    }
+  }
+
+  async function carregarCombos() {
+    const data = await api("/combos?ativo=1");
+    state.combos = data.items || [];
+
+    const select = $("#planoComboId");
+    if (!select) return;
+
+    select.innerHTML = `<option value="">Selecione</option>`;
+
+    state.combos.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = `${c.nome} · ${c.sessoes || 0} sessões · ${money(c.preco)}`;
+      opt.dataset.sessoes = c.sessoes || 0;
+      opt.dataset.preco = c.preco || 0;
+      select.appendChild(opt);
+    });
+  }
+
+  async function carregarPlanos() {
+    const data = await api("/pacientes-planos");
+    state.planos = data.items || [];
+    renderPlanos();
+  }
+
+  function renderPlanos() {
+    const box = $("#listaPacientesPlanos");
+    if (!box) return;
+
+    if (!state.planos.length) {
+      box.innerHTML = `<div class="empty-state">Nenhum vínculo cadastrado.</div>`;
+      return;
+    }
+
+    box.innerHTML = state.planos
+      .map((p) => {
+        const nome = p.combo_nome || p.nome_plano || "Plano";
+        const perc = Math.min(100, Number(p.percentual_usado || 0));
+
+        return `
+          <article class="plano-card">
+            <h3>${p.paciente_nome || "-"}</h3>
+            <p>${p.tipo === "combo" ? "Combo" : "Particular"} · ${nome}</p>
+
+            <div class="plano-progress">
+              <span style="width:${perc}%"></span>
+            </div>
+
+            <div class="plano-meta">
+              <span>${p.sessoes_usadas || 0}/${p.sessoes_contratadas || 0} sessões</span>
+              <strong>${money(p.valor_total)}</strong>
+            </div>
+
+            <div class="plano-meta">
+              <span>Status: ${p.status || "ativo"}</span>
+              <span>Restam: ${p.sessoes_restantes || 0}</span>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function limparFormPlano() {
+    $("#formPlano")?.reset();
+
+    state.pacienteSelecionado = null;
+    $("#planoPacienteId").value = "";
+    $("#resultadoPacientesPlano").innerHTML = "";
+    $("#planoDataInicio").value = todayISO();
+    $("#planoStatus").value = "ativo";
+    $("#planoTipo").value = "combo";
+    $("#wrapComboPlano").style.display = "";
+  }
+
+  async function buscarPacientesPlano(q) {
+    const box = $("#resultadoPacientesPlano");
+    if (!box) return;
+
+    if (!q || q.length < 2) {
+      box.innerHTML = "";
+      return;
+    }
+
+    try {
+      const data = await api(`/pacientes/buscar?q=${encodeURIComponent(q)}&limit=8`);
+      const items = data.items || [];
+
+      if (!items.length) {
+        box.innerHTML = `<div class="autocomplete-list"><div class="autocomplete-item">Nenhum paciente encontrado.</div></div>`;
+        return;
+      }
+
+      box.innerHTML = `
+        <div class="autocomplete-list">
+          ${items
+            .map(
+              (p) => `
+                <div class="autocomplete-item" data-paciente-id="${p.id}" data-paciente-nome="${p.nome}">
+                  <strong>${p.nome}</strong>
+                  <small>${p.cpf || p.cns || "Sem CPF/CNS"}</small>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `;
+    } catch (err) {
+      box.innerHTML = "";
+    }
+  }
+
+  function payloadPlano() {
+    return {
+      paciente_id: $("#planoPacienteId").value,
+      tipo: $("#planoTipo").value,
+      combo_id: $("#planoComboId").value,
+      nome_plano: $("#planoNome").value,
+      sessoes_contratadas: $("#planoSessoes").value,
+      valor_total: $("#planoValorTotal").value,
+      data_inicio: $("#planoDataInicio").value,
+      data_fim: $("#planoDataFim").value,
+      forma_pagamento: $("#planoFormaPagamento").value,
+      status: $("#planoStatus").value,
+      observacoes: $("#planoObservacoes").value,
+    };
+  }
+
+  async function salvarPlano(ev) {
+    ev.preventDefault();
+
+    try {
+      await api("/pacientes-planos", {
+        method: "POST",
+        body: JSON.stringify(payloadPlano()),
+      });
+
+      closeModal("modalPlano");
+      await refreshAll();
+      toast("Vínculo salvo com sucesso.");
+    } catch (err) {
+      toast(err.message, "erro");
+    }
+  }
+
+  async function refreshAll() {
+    await Promise.all([
+      carregarResumo(),
+      carregarFechamento(),
+      carregarLancamentos(),
+      carregarPlanos(),
+    ]);
+  }
+
+  function bindEvents() {
+    $("#btnNovoLancamento")?.addEventListener("click", () => {
+      limparFormLancamento();
+      openModal("modalLancamento");
+    });
+
+    $("#btnNovoPlano")?.addEventListener("click", () => {
+      limparFormPlano();
+      openModal("modalPlano");
+    });
+
+    $$("[data-close-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
+    });
+
+    $("#formLancamento")?.addEventListener("submit", salvarLancamento);
+    $("#formPlano")?.addEventListener("submit", salvarPlano);
+
+    $("#lancTipo")?.addEventListener("change", preencherCategoriasPorTipo);
+
+    $("#filtroCompetencia")?.addEventListener("change", async (ev) => {
+      state.competencia = ev.target.value || currentCompetencia();
+
+      const txt = $("#txtCompetenciaAtual");
+      if (txt) txt.textContent = `Competência ${state.competencia}`;
+
+      await refreshAll();
+    });
+
+    $("#filtroStatus")?.addEventListener("change", carregarLancamentos);
+    $("#filtroCategoria")?.addEventListener("change", carregarLancamentos);
+
+    $("#filtroBusca")?.addEventListener("input", debounce(carregarLancamentos, 350));
+
+    $("#btnLimparFiltros")?.addEventListener("click", async () => {
+      $("#filtroBusca").value = "";
+      $("#filtroStatus").value = "";
+      $("#filtroCategoria").value = "";
+      state.tipo = "";
+
+      $$(".fin-tabs button").forEach((b) => b.classList.remove("active"));
+      $('.fin-tabs button[data-tipo=""]')?.classList.add("active");
+
+      await carregarLancamentos();
+    });
+
+    $$(".fin-tabs button").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        $$(".fin-tabs button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        state.tipo = btn.dataset.tipo || "";
+        await carregarLancamentos();
+      });
+    });
+
+    $("#tbodyLancamentos")?.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest("button[data-action]");
+      if (!btn) return;
+
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+
+      const item = state.lancamentos.find((l) => Number(l.id) === id);
+
+      if (action === "editar" && item) {
+        preencherFormLancamento(item);
+        openModal("modalLancamento");
+      }
+
+      if (action === "pagar") {
+        await pagarLancamento(id);
+      }
+
+      if (action === "excluir") {
+        await excluirLancamento(id);
+      }
+    });
+
+    $("#planoTipo")?.addEventListener("change", () => {
+      const isCombo = $("#planoTipo").value === "combo";
+      $("#wrapComboPlano").style.display = isCombo ? "" : "none";
+    });
+
+    $("#planoComboId")?.addEventListener("change", () => {
+      const opt = $("#planoComboId").selectedOptions[0];
+      if (!opt) return;
+
+      $("#planoSessoes").value = opt.dataset.sessoes || 0;
+      $("#planoValorTotal").value = opt.dataset.preco || 0;
+    });
+
+    $("#buscaPacientePlano")?.addEventListener(
+      "input",
+      debounce((ev) => buscarPacientesPlano(ev.target.value), 300)
+    );
+
+    $("#resultadoPacientesPlano")?.addEventListener("click", (ev) => {
+      const item = ev.target.closest(".autocomplete-item[data-paciente-id]");
+      if (!item) return;
+
+      $("#planoPacienteId").value = item.dataset.pacienteId;
+      $("#buscaPacientePlano").value = item.dataset.pacienteNome;
+      $("#resultadoPacientesPlano").innerHTML = "";
+
+      state.pacienteSelecionado = {
+        id: item.dataset.pacienteId,
+        nome: item.dataset.pacienteNome,
+      };
+    });
+  }
+
+  function debounce(fn, delay = 300) {
     let timer = null;
+
     return (...args) => {
       clearTimeout(timer);
       timer = setTimeout(() => fn(...args), delay);
     };
   }
 
-  function setLoading(btn, isLoading, loadingText = "Carregando...") {
-    if (!btn) return;
-    if (isLoading) {
-      btn.dataset.originalText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = loadingText;
-    } else {
-      btn.disabled = false;
-      btn.textContent = btn.dataset.originalText || btn.textContent;
-    }
-  }
-
-  async function requestJSON(url, options = {}) {
-    const config = {
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {})
-      },
-      ...options
-    };
-
-    const res = await fetch(url, config);
-    let data = null;
-
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-
-    if (!res.ok || !data || data.ok === false) {
-      const erro = data?.erro || `Erro na requisição (${res.status}).`;
-      throw new Error(erro);
-    }
-
-    return data;
-  }
-
-  function openDialog(dialog) {
-    if (!dialog) return;
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
-    } else {
-      dialog.classList.add("open");
-    }
-  }
-
-  function closeDialog(dialog) {
-    if (!dialog) return;
-    if (typeof dialog.close === "function") {
-      dialog.close();
-    } else {
-      dialog.classList.remove("open");
-    }
-  }
-
-  // =========================================================
-  // ELEMENTOS
-  // =========================================================
-  const els = {
-    // filtros globais
-    fDataIni: $("#fDataIni"),
-    fDataFim: $("#fDataFim"),
-    fCompetencia: $("#fCompetencia"),
-    fTipoLanc: $("#fTipoLanc"),
-    fStatusLanc: $("#fStatusLanc"),
-    fBuscaLanc: $("#fBuscaLanc"),
-    btnAplicarFinanceiro: $("#btnAplicarFinanceiro"),
-    btnLimparFinanceiro: $("#btnLimparFinanceiro"),
-
-    // KPIs
-    kpiSaldo: $("#kpiSaldo"),
-    kpiEntradas: $("#kpiEntradas"),
-    kpiSaidas: $("#kpiSaidas"),
-    kpiPendentes: $("#kpiPendentes"),
-
-    // recebimentos
-    fRecebBusca: $("#fRecebBusca"),
-    fRecebStatus: $("#fRecebStatus"),
-    fRecebTipo: $("#fRecebTipo"),
-    btnAtualizarRecebimentos: $("#btnAtualizarRecebimentos"),
-    finCardsRecebimentos: $("#finCardsRecebimentos"),
-
-    // lançamento manual
-    formLancamentoManual: $("#formLancamentoManual"),
-    lancTipo: $("#lancTipo"),
-    lancCategoria: $("#lancCategoria"),
-    lancDescricao: $("#lancDescricao"),
-    lancValor: $("#lancValor"),
-    lancForma: $("#lancForma"),
-    lancStatus: $("#lancStatus"),
-    lancVencimento: $("#lancVencimento"),
-    lancCompetencia: $("#lancCompetencia"),
-    lancObservacoes: $("#lancObservacoes"),
-    btnSalvarLancamento: $("#btnSalvarLancamento"),
-    btnLimparLancamento: $("#btnLimparLancamento"),
-
-    // cards de lançamentos
-    btnAtualizarLancamentos: $("#btnAtualizarLancamentos"),
-    finCardsLancamentos: $("#finCardsLancamentos"),
-
-    // fechamento
-    sumEntradasPagas: $("#sumEntradasPagas"),
-    sumSaidasPagas: $("#sumSaidasPagas"),
-    sumEntradasPendentes: $("#sumEntradasPendentes"),
-    sumSaldoProjetado: $("#sumSaldoProjetado"),
-    finResumoCategorias: $("#finResumoCategorias"),
-    finResumoDias: $("#finResumoDias"),
-
-    // modal lançamento
-    modalLancamento: $("#modalLancamento"),
-    formModalLancamento: $("#formModalLancamento"),
-    mlId: $("#mlId"),
-    mlTipo: $("#mlTipo"),
-    mlCategoria: $("#mlCategoria"),
-    mlDescricao: $("#mlDescricao"),
-    mlValor: $("#mlValor"),
-    mlFormaPagamento: $("#mlFormaPagamento"),
-    mlStatus: $("#mlStatus"),
-    mlVencimento: $("#mlVencimento"),
-    mlDataPagamento: $("#mlDataPagamento"),
-    mlCompetencia: $("#mlCompetencia"),
-    mlObservacoes: $("#mlObservacoes"),
-    btnExcluirLancamentoModal: $("#btnExcluirLancamentoModal"),
-    btnFecharLancamentoModal: $("#btnFecharLancamentoModal"),
-  };
-
-  // =========================================================
-  // QUERY PARAMS
-  // =========================================================
-  function getGlobalFilterParams() {
-    const params = new URLSearchParams();
-
-    const data_ini = els.fDataIni?.value || "";
-    const data_fim = els.fDataFim?.value || "";
-    const competencia = els.fCompetencia?.value || "";
-    const tipo = els.fTipoLanc?.value || "";
-    const status = els.fStatusLanc?.value || "";
-    const q = els.fBuscaLanc?.value?.trim() || "";
-
-    if (data_ini) params.set("data_ini", data_ini);
-    if (data_fim) params.set("data_fim", data_fim);
-    if (competencia) params.set("competencia", competencia);
-    if (tipo) params.set("tipo", tipo);
-    if (status) params.set("status", status);
-    if (q) params.set("q", q);
-
-    return params;
-  }
-
-  function getRecebimentosFilterParams() {
-    const params = new URLSearchParams();
-
-    const q = els.fRecebBusca?.value?.trim() || "";
-    const status = els.fRecebStatus?.value || "";
-    const tipo = els.fRecebTipo?.value || "";
-
-    if (q) params.set("q", q);
-    if (status) params.set("status", status);
-    if (tipo) params.set("tipo", tipo);
-
-    return params;
-  }
-
-  // =========================================================
-  // KPIS / RESUMO
-  // =========================================================
-  async function loadResumo() {
-    const params = getGlobalFilterParams();
-    const data = await requestJSON(`/financeiro/api/resumo?${params.toString()}`);
-    state.resumo = data.resumo || {};
-
-    const saldo = Number(state.resumo.saldo_caixa || data.saldo_caixa || 0);
-    const entradas = Number(state.resumo.entradas || data.entradas || 0);
-    const saidas = Number(state.resumo.saidas || data.saidas || 0);
-    const pendentes = Number(state.resumo.pendentes || data.pendentes || 0);
-
-    if (els.kpiSaldo) els.kpiSaldo.textContent = money(saldo);
-    if (els.kpiEntradas) els.kpiEntradas.textContent = money(entradas);
-    if (els.kpiSaidas) els.kpiSaidas.textContent = money(saidas);
-    if (els.kpiPendentes) els.kpiPendentes.textContent = money(pendentes);
-
-    if (els.sumEntradasPagas) {
-      els.sumEntradasPagas.textContent = money(state.resumo.entradas_pagas || entradas);
-    }
-    if (els.sumSaidasPagas) {
-      els.sumSaidasPagas.textContent = money(state.resumo.saidas_pagas || saidas);
-    }
-    if (els.sumEntradasPendentes) {
-      els.sumEntradasPendentes.textContent = money(state.resumo.entradas_pendentes || pendentes);
-    }
-    if (els.sumSaldoProjetado) {
-      els.sumSaldoProjetado.textContent = money(state.resumo.saldo_projetado || saldo);
-    }
-  }
-
-  async function loadFechamento() {
-    const params = getGlobalFilterParams();
-    const data = await requestJSON(`/financeiro/api/fechamento?${params.toString()}`);
-
-    const categorias = Array.isArray(data.por_categoria) ? data.por_categoria : [];
-    const dias = Array.isArray(data.por_dia) ? data.por_dia : [];
-
-    renderResumoCategorias(categorias);
-    renderResumoDias(dias);
-  }
-
-  function renderResumoCategorias(items) {
-    if (!els.finResumoCategorias) return;
-
-    if (!items.length) {
-      els.finResumoCategorias.innerHTML = `<div class="fin-empty-inline">Sem dados.</div>`;
-      return;
-    }
-
-    els.finResumoCategorias.innerHTML = items.map(item => `
-      <div class="fin-list-row">
-        <div class="fin-list-row__left">
-          <strong>${escapeHtml(item.categoria || "sem_categoria")}</strong>
-          <span>${escapeHtml(item.tipo || "—")} · ${escapeHtml(item.status || "—")} · ${Number(item.qtd || 0)} registro(s)</span>
-        </div>
-        <div class="fin-list-row__right">${money(item.total)}</div>
-      </div>
-    `).join("");
-  }
-
-  function renderResumoDias(items) {
-    if (!els.finResumoDias) return;
-
-    if (!items.length) {
-      els.finResumoDias.innerHTML = `<div class="fin-empty-inline">Sem dados.</div>`;
-      return;
-    }
-
-    els.finResumoDias.innerHTML = items.map(item => `
-      <div class="fin-list-row">
-        <div class="fin-list-row__left">
-          <strong>${escapeHtml(formatDateBR(item.dia))}</strong>
-          <span>Entradas: ${money(item.entradas)} · Saídas: ${money(item.saidas)}</span>
-        </div>
-        <div class="fin-list-row__right">${money(Number(item.entradas || 0) - Number(item.saidas || 0))}</div>
-      </div>
-    `).join("");
-  }
-
-  // =========================================================
-  // RECEBIMENTOS
-  // =========================================================
-  async function loadRecebimentos() {
-    const params = getRecebimentosFilterParams();
-    const data = await requestJSON(`/financeiro/api/pacientes-planos?${params.toString()}`);
-    state.recebimentos = Array.isArray(data.items) ? data.items : [];
-    renderRecebimentos();
-  }
-
-  function renderRecebimentos() {
-    if (!els.finCardsRecebimentos) return;
-
-    if (!state.recebimentos.length) {
-      els.finCardsRecebimentos.innerHTML = `
-        <div class="fin-empty">
-          <strong>Nenhum recebimento carregado.</strong>
-          <span>Os vínculos do comercial aparecerão aqui.</span>
-        </div>
-      `;
-      return;
-    }
-
-    els.finCardsRecebimentos.innerHTML = state.recebimentos.map(item => {
-      const tipo = normalizeText(item.tipo);
-      const status = normalizeText(item.status);
-      const nomeVinculo = item.combo_nome || item.nome_plano || "Sem vínculo";
-      const contratadas = Number(item.sessoes_contratadas || 0);
-      const usadas = Number(item.sessoes_usadas || 0);
-      const restantes = Number(item.sessoes_restantes || Math.max(contratadas - usadas, 0));
-
-      return `
-        <article class="fin-item-card">
-          <div class="fin-item-head">
-            <div class="fin-item-title">
-              <strong>${escapeHtml(item.paciente_nome || "Sem paciente")}</strong>
-              <div class="fin-item-sub">${escapeHtml(nomeVinculo)}</div>
-            </div>
-
-            <div class="fin-badges">
-              <span class="fin-badge ${tipo === "combo" ? "fin-badge--entrada" : "fin-badge--soft"}">
-                ${escapeHtml(item.tipo || "—")}
-              </span>
-              <span class="fin-badge ${
-                status === "ativo"
-                  ? "fin-badge--pago"
-                  : status === "encerrado"
-                    ? "fin-badge--pendente"
-                    : "fin-badge--soft"
-              }">
-                ${escapeHtml(item.status || "—")}
-              </span>
-            </div>
-          </div>
-
-          <div class="fin-item-meta">
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Valor total</span>
-              <div class="fin-meta-box__value fin-money">${money(item.valor_total)}</div>
-            </div>
-
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Forma pagamento</span>
-              <div class="fin-meta-box__value">${escapeHtml(item.forma_pagamento || "—")}</div>
-            </div>
-
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Sessões</span>
-              <div class="fin-meta-box__value">
-                ${contratadas} contratada(s) · ${usadas} usada(s) · ${restantes} restante(s)
-              </div>
-            </div>
-          </div>
-
-          ${
-            item.observacoes
-              ? `<div class="fin-item-sub">${escapeHtml(item.observacoes)}</div>`
-              : ""
-          }
-        </article>
-      `;
-    }).join("");
-  }
-
-  // =========================================================
-  // LANÇAMENTOS
-  // =========================================================
-  async function loadLancamentos() {
-    const params = getGlobalFilterParams();
-    const data = await requestJSON(`/financeiro/api/lancamentos?${params.toString()}`);
-    state.lancamentos = Array.isArray(data.items) ? data.items : [];
-    renderLancamentos();
-  }
-
-  function getLancamentoBadgeTipo(tipo) {
-    return normalizeText(tipo) === "saida" ? "fin-badge--saida" : "fin-badge--entrada";
-  }
-
-  function getLancamentoBadgeStatus(status) {
-    const s = normalizeText(status);
-    if (s === "pago") return "fin-badge--pago";
-    if (s === "pendente") return "fin-badge--pendente";
-    if (s === "parcial") return "fin-badge--parcial";
-    return "fin-badge--soft";
-  }
-
-  function renderLancamentos() {
-    if (!els.finCardsLancamentos) return;
-
-    if (!state.lancamentos.length) {
-      els.finCardsLancamentos.innerHTML = `
-        <div class="fin-empty">
-          <strong>Nenhum lançamento carregado.</strong>
-          <span>As movimentações aparecerão aqui.</span>
-        </div>
-      `;
-      return;
-    }
-
-    els.finCardsLancamentos.innerHTML = state.lancamentos.map(item => {
-      const tipo = normalizeText(item.tipo);
-      const cardClass = tipo === "saida" ? "is-saida" : "is-entrada";
-
-      return `
-        <article class="fin-item-card ${cardClass}" data-lanc-id="${item.id}">
-          <div class="fin-item-head">
-            <div class="fin-item-title">
-              <strong>${escapeHtml(item.descricao || "Sem descrição")}</strong>
-              <div class="fin-item-sub">
-                ${escapeHtml(item.categoria || "sem categoria")}
-                ${item.origem ? ` · ${escapeHtml(item.origem)}` : ""}
-              </div>
-            </div>
-
-            <div class="fin-badges">
-              <span class="fin-badge ${getLancamentoBadgeTipo(item.tipo)}">${escapeHtml(item.tipo || "—")}</span>
-              <span class="fin-badge ${getLancamentoBadgeStatus(item.status)}">${escapeHtml(item.status || "—")}</span>
-            </div>
-          </div>
-
-          <div class="fin-item-meta">
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Valor</span>
-              <div class="fin-meta-box__value fin-money ${tipo === "saida" ? "is-saida" : ""}">
-                ${money(item.valor)}
-              </div>
-            </div>
-
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Forma pagamento</span>
-              <div class="fin-meta-box__value">${escapeHtml(item.forma_pagamento || "—")}</div>
-            </div>
-
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Vencimento</span>
-              <div class="fin-meta-box__value">${formatDateBR(item.vencimento)}</div>
-            </div>
-
-            <div class="fin-meta-box">
-              <span class="fin-meta-box__label">Data pagamento</span>
-              <div class="fin-meta-box__value">${formatDateBR(item.data_pagamento)}</div>
-            </div>
-          </div>
-
-          ${
-            item.observacoes
-              ? `<div class="fin-item-sub">${escapeHtml(item.observacoes)}</div>`
-              : ""
-          }
-
-          <div class="fin-actions">
-            ${
-              normalizeText(item.status) !== "pago"
-                ? `<button type="button" class="fin-btn fin-btn--primary" data-action="baixar-lancamento" data-id="${item.id}">
-                    Baixar
-                  </button>`
-                : ""
-            }
-            <button type="button" class="fin-btn fin-btn--ghost" data-action="editar-lancamento" data-id="${item.id}">
-              Editar
-            </button>
-          </div>
-        </article>
-      `;
-    }).join("");
-  }
-
-  // =========================================================
-  // FORM MANUAL
-  // =========================================================
-  function resetFormLancamento() {
-    els.formLancamentoManual?.reset();
-
-    const hoje = new Date().toISOString().slice(0, 10);
-    const competencia = hoje.slice(0, 7);
-
-    if (els.lancStatus) els.lancStatus.value = "pago";
-    if (els.lancTipo) els.lancTipo.value = "entrada";
-    if (els.lancVencimento) els.lancVencimento.value = hoje;
-    if (els.lancCompetencia) els.lancCompetencia.value = competencia;
-  }
-
-  async function submitLancamentoManual(ev) {
-    ev.preventDefault();
-
-    const payload = {
-      tipo: els.lancTipo.value,
-      categoria: els.lancCategoria.value.trim(),
-      descricao: els.lancDescricao.value.trim(),
-      valor: Number(els.lancValor.value || 0),
-      forma_pagamento: els.lancForma.value,
-      status: els.lancStatus.value,
-      vencimento: els.lancVencimento.value,
-      competencia: els.lancCompetencia.value,
-      observacoes: els.lancObservacoes.value.trim(),
-    };
-
-    if (!payload.descricao) {
-      toast("Informe a descrição do lançamento.");
-      return;
-    }
-
-    if (!(payload.valor > 0)) {
-      toast("Informe um valor maior que zero.");
-      return;
-    }
-
-    setLoading(els.btnSalvarLancamento, true, "Salvando...");
-
-    try {
-      await requestJSON("/financeiro/api/lancamentos", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-
-      toast("Lançamento cadastrado com sucesso.");
-      resetFormLancamento();
-      await refreshAllFinanceiro();
-    } catch (err) {
-      toast(err.message || "Não foi possível salvar o lançamento.");
-    } finally {
-      setLoading(els.btnSalvarLancamento, false);
-    }
-  }
-
-  // =========================================================
-  // MODAL LANÇAMENTO
-  // =========================================================
-  async function openModalLancamento(id) {
-    try {
-      const data = await requestJSON(`/financeiro/api/lancamentos/${id}`);
-      const item = data.item;
-      if (!item) return;
-
-      els.mlId.value = item.id || "";
-      els.mlTipo.value = item.tipo || "entrada";
-      els.mlCategoria.value = item.categoria || "";
-      els.mlDescricao.value = item.descricao || "";
-      els.mlValor.value = Number(item.valor || 0);
-      els.mlFormaPagamento.value = item.forma_pagamento || "";
-      els.mlStatus.value = item.status || "pendente";
-      els.mlVencimento.value = item.vencimento ? String(item.vencimento).slice(0, 10) : "";
-      els.mlDataPagamento.value = item.data_pagamento ? String(item.data_pagamento).slice(0, 10) : "";
-      els.mlCompetencia.value = item.competencia || "";
-      els.mlObservacoes.value = item.observacoes || "";
-
-      openDialog(els.modalLancamento);
-    } catch (err) {
-      toast(err.message || "Não foi possível abrir o lançamento.");
-    }
-  }
-
-  async function submitModalLancamento(ev) {
-    ev.preventDefault();
-
-    const id = els.mlId.value.trim();
-    if (!id) return;
-
-    const payload = {
-      tipo: els.mlTipo.value,
-      categoria: els.mlCategoria.value.trim(),
-      descricao: els.mlDescricao.value.trim(),
-      valor: Number(els.mlValor.value || 0),
-      forma_pagamento: els.mlFormaPagamento.value,
-      status: els.mlStatus.value,
-      vencimento: els.mlVencimento.value,
-      data_pagamento: els.mlDataPagamento.value,
-      competencia: els.mlCompetencia.value,
-      observacoes: els.mlObservacoes.value.trim(),
-    };
-
-    try {
-      await requestJSON(`/financeiro/api/lancamentos/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-
-      toast("Lançamento atualizado com sucesso.");
-      closeDialog(els.modalLancamento);
-      await refreshAllFinanceiro();
-    } catch (err) {
-      toast(err.message || "Não foi possível atualizar o lançamento.");
-    }
-  }
-
-  async function excluirLancamentoModal() {
-    const id = els.mlId.value.trim();
-    if (!id) return;
-
-    const confirmed = window.confirm("Deseja realmente excluir este lançamento?");
-    if (!confirmed) return;
-
-    try {
-      await requestJSON(`/financeiro/api/lancamentos/${id}`, {
-        method: "DELETE"
-      });
-
-      toast("Lançamento removido com sucesso.");
-      closeDialog(els.modalLancamento);
-      await refreshAllFinanceiro();
-    } catch (err) {
-      toast(err.message || "Não foi possível excluir o lançamento.");
-    }
-  }
-
-  async function baixarLancamento(id) {
-    const confirmed = window.confirm("Deseja baixar este lançamento como pago?");
-    if (!confirmed) return;
-
-    const hoje = new Date().toISOString().slice(0, 10);
-
-    try {
-      await requestJSON(`/financeiro/api/lancamentos/${id}/baixar`, {
-        method: "POST",
-        body: JSON.stringify({
-          data_pagamento: hoje,
-        }),
-      });
-
-      toast("Lançamento baixado com sucesso.");
-      await refreshAllFinanceiro();
-    } catch (err) {
-      toast(err.message || "Não foi possível baixar o lançamento.");
-    }
-  }
-
-  // =========================================================
-  // REFRESH GERAL
-  // =========================================================
-  async function refreshAllFinanceiro() {
-    await Promise.all([
-      loadResumo(),
-      loadRecebimentos(),
-      loadLancamentos(),
-      loadFechamento(),
-    ]);
-  }
-
-  function limparFiltrosFinanceiro() {
-    if (els.fDataIni) els.fDataIni.value = "";
-    if (els.fDataFim) els.fDataFim.value = "";
-    if (els.fCompetencia) els.fCompetencia.value = "";
-    if (els.fTipoLanc) els.fTipoLanc.value = "";
-    if (els.fStatusLanc) els.fStatusLanc.value = "";
-    if (els.fBuscaLanc) els.fBuscaLanc.value = "";
-
-    if (els.fRecebBusca) els.fRecebBusca.value = "";
-    if (els.fRecebStatus) els.fRecebStatus.value = "";
-    if (els.fRecebTipo) els.fRecebTipo.value = "";
-  }
-
-  // =========================================================
-  // EVENTS
-  // =========================================================
-  function bindEvents() {
-    // filtros globais
-    els.btnAplicarFinanceiro?.addEventListener("click", () => {
-      refreshAllFinanceiro().catch(err => toast(err.message));
-    });
-
-    els.btnLimparFinanceiro?.addEventListener("click", () => {
-      limparFiltrosFinanceiro();
-      refreshAllFinanceiro().catch(err => toast(err.message));
-    });
-
-    els.fBuscaLanc?.addEventListener("input", debounce(() => {
-      loadLancamentos().catch(err => toast(err.message));
-    }, 250));
-
-    els.fTipoLanc?.addEventListener("change", () => {
-      loadLancamentos().catch(err => toast(err.message));
-      loadResumo().catch(err => toast(err.message));
-      loadFechamento().catch(err => toast(err.message));
-    });
-
-    els.fStatusLanc?.addEventListener("change", () => {
-      loadLancamentos().catch(err => toast(err.message));
-      loadResumo().catch(err => toast(err.message));
-    });
-
-    // recebimentos
-    els.btnAtualizarRecebimentos?.addEventListener("click", () => {
-      loadRecebimentos().catch(err => toast(err.message));
-    });
-
-    els.fRecebBusca?.addEventListener("input", debounce(() => {
-      loadRecebimentos().catch(err => toast(err.message));
-    }, 250));
-
-    els.fRecebStatus?.addEventListener("change", () => {
-      loadRecebimentos().catch(err => toast(err.message));
-    });
-
-    els.fRecebTipo?.addEventListener("change", () => {
-      loadRecebimentos().catch(err => toast(err.message));
-    });
-
-    // lançamento manual
-    els.formLancamentoManual?.addEventListener("submit", submitLancamentoManual);
-    els.btnLimparLancamento?.addEventListener("click", resetFormLancamento);
-
-    // cards de lançamentos
-    els.btnAtualizarLancamentos?.addEventListener("click", () => {
-      loadLancamentos().catch(err => toast(err.message));
-    });
-
-    els.finCardsLancamentos?.addEventListener("click", (ev) => {
-      const btnEditar = ev.target.closest("[data-action='editar-lancamento']");
-      if (btnEditar) {
-        openModalLancamento(btnEditar.dataset.id);
-        return;
-      }
-
-      const btnBaixar = ev.target.closest("[data-action='baixar-lancamento']");
-      if (btnBaixar) {
-        baixarLancamento(btnBaixar.dataset.id);
-      }
-    });
-
-    // modal
-    els.formModalLancamento?.addEventListener("submit", submitModalLancamento);
-    els.btnExcluirLancamentoModal?.addEventListener("click", excluirLancamentoModal);
-    els.btnFecharLancamentoModal?.addEventListener("click", () => closeDialog(els.modalLancamento));
-  }
-
-  // =========================================================
-  // INIT
-  // =========================================================
   async function init() {
-    bindEvents();
-    resetFormLancamento();
-
     try {
-      await refreshAllFinanceiro();
+      setCompetenciaAtual();
+      bindEvents();
+
+      await carregarCategorias();
+      await carregarCombos();
+      await refreshAll();
     } catch (err) {
-      toast(err.message || "Erro ao carregar a tela financeira.");
+      console.error(err);
+      toast(err.message || "Erro ao iniciar financeiro.", "erro");
     }
   }
 

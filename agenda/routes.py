@@ -555,7 +555,8 @@ def api_agregados():
                     a.paciente,
                     COUNT(*) AS qtd_agendamentos,
                     MIN(a.id) AS any_id,
-                    {("MIN(p.id) AS paciente_id" if has_pacientes else "NULL::integer AS paciente_id")}
+                    {("MIN(p.id) AS paciente_id, MIN(p.telefone) AS telefone" if has_pacientes else "NULL::integer AS paciente_id")}
+
                     {select_pront if has_pacientes else ""}
                     {select_dia}
                     {select_fin}
@@ -579,6 +580,7 @@ def api_agregados():
                 qtd_agendamentos = r["qtd_agendamentos"]
                 any_id = r["any_id"]
                 paciente_id = r["paciente_id"]
+                telefone = r.get("telefone")
                 pront = r["prontuario"] if has_pront else None
                 dia_data = r["dia_data"] if has_dia else None
                 qtd_sessoes = r["qtd_sessoes"]
@@ -603,6 +605,7 @@ def api_agregados():
                         "hora_ini": hora_ini or "—",
                         "profissional": prof or "—",
                         "paciente": pac or "—",
+                        "telefone": telefone,
                         "paciente_id": int(paciente_id) if paciente_id is not None else None,
                         "prontuario": pront,
                         "qtd_agendamentos": int(qtd_agendamentos or 0),

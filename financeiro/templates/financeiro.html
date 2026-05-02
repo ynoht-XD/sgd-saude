@@ -3,417 +3,360 @@
 {% block title %}Financeiro{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/financeiro.css') }}">
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/financeiro.css') }}">
 {% endblock %}
 
 {% block content %}
-<section class="fin-page">
-  <div class="fin-shell">
+<main class="financeiro-page" data-page="financeiro">
 
-    <!-- HERO / RESUMO -->
-    <header class="fin-card fin-hero">
-      <div class="fin-hero__main">
-        <div class="fin-kicker">SGD · Financeiro</div>
-        <h1>Controle financeiro</h1>
-        <p>
-          Acompanhe entradas, saídas, pendências e a movimentação de combos e planos
-          em uma visão mais limpa e operacional.
-        </p>
-
-        <div class="fin-hero__chips">
-          <span class="fin-chip fin-chip--blue">Entradas</span>
-          <span class="fin-chip fin-chip--red">Saídas</span>
-          <span class="fin-chip fin-chip--green">Recebimentos</span>
-          <span class="fin-chip fin-chip--soft">Livro caixa</span>
-        </div>
-      </div>
-
-      <div class="fin-hero__stats">
-        <div class="fin-stat">
-          <span class="fin-stat__label">Saldo atual</span>
-          <strong id="kpiSaldo">R$ {{ ((kpis|default({})).get('saldo_caixa', 0.0)) | round(2) }}</strong>
-        </div>
-
-        <div class="fin-stat">
-          <span class="fin-stat__label">Entradas</span>
-          <strong id="kpiEntradas">R$ {{ ((kpis|default({})).get('entradas', 0.0)) | round(2) }}</strong>
-        </div>
-
-        <div class="fin-stat">
-          <span class="fin-stat__label">Saídas</span>
-          <strong id="kpiSaidas">R$ {{ ((kpis|default({})).get('saidas', 0.0)) | round(2) }}</strong>
-        </div>
-
-        <div class="fin-stat">
-          <span class="fin-stat__label">Pendente a receber</span>
-          <strong id="kpiPendentes">R$ {{ ((kpis|default({})).get('pendentes', 0.0)) | round(2) }}</strong>
-        </div>
-      </div>
-    </header>
-
-    <!-- FILTROS -->
-    <section class="fin-card fin-section">
-      <div class="fin-head">
-        <div>
-          <span class="fin-eyebrow">Filtro</span>
-          <h2>Período e visão</h2>
-          <p>Use os filtros para enxergar melhor o fluxo financeiro do período.</p>
-        </div>
-      </div>
-
-      <div class="fin-grid fin-grid--filters">
-        <div class="fin-field">
-          <label class="fin-label" for="fDataIni">Data inicial</label>
-          <input class="fin-input" id="fDataIni" type="date">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fDataFim">Data final</label>
-          <input class="fin-input" id="fDataFim" type="date">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fCompetencia">Competência</label>
-          <input class="fin-input" id="fCompetencia" type="month">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fTipoLanc">Tipo</label>
-          <select class="fin-select" id="fTipoLanc">
-            <option value="">Todos</option>
-            <option value="entrada">Entradas</option>
-            <option value="saida">Saídas</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fStatusLanc">Status</label>
-          <select class="fin-select" id="fStatusLanc">
-            <option value="">Todos</option>
-            <option value="pago">Pago</option>
-            <option value="pendente">Pendente</option>
-            <option value="parcial">Parcial</option>
-          </select>
-        </div>
-
-        <div class="fin-field fin-field--grow">
-          <label class="fin-label" for="fBuscaLanc">Pesquisar</label>
-          <input class="fin-input" id="fBuscaLanc" type="text" placeholder="Paciente, descrição, categoria...">
-        </div>
-
-        <div class="fin-actions fin-field--full">
-          <button type="button" class="fin-btn fin-btn--primary" id="btnAplicarFinanceiro">
-            Aplicar filtros
-          </button>
-          <button type="button" class="fin-btn fin-btn--ghost" id="btnLimparFinanceiro">
-            Limpar
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- RECEBIMENTOS DE COMBOS / PLANOS -->
-    <section class="fin-card fin-section">
-      <div class="fin-head fin-head--row">
-        <div>
-          <span class="fin-eyebrow">Recebimentos</span>
-          <h2>Combos e planos</h2>
-          <p>Entradas geradas a partir dos vínculos do comercial.</p>
-        </div>
-
-        <div class="fin-head__actions">
-          <button type="button" class="fin-btn fin-btn--ghost" id="btnAtualizarRecebimentos">
-            Atualizar
-          </button>
-        </div>
-      </div>
-
-      <div class="fin-toolbar">
-        <div class="fin-field">
-          <label class="fin-label" for="fRecebBusca">Pesquisar</label>
-          <input class="fin-input" id="fRecebBusca" type="text" placeholder="Paciente, combo, plano...">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fRecebStatus">Status</label>
-          <select class="fin-select" id="fRecebStatus">
-            <option value="">Todos</option>
-            <option value="ativo">Ativo</option>
-            <option value="encerrado">Encerrado</option>
-            <option value="cancelado">Cancelado</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="fRecebTipo">Tipo</label>
-          <select class="fin-select" id="fRecebTipo">
-            <option value="">Todos</option>
-            <option value="combo">Combo</option>
-            <option value="plano">Plano</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="finCardsRecebimentos" class="fin-cards">
-        <div class="fin-empty">
-          <strong>Nenhum recebimento carregado.</strong>
-          <span>Os vínculos do comercial aparecerão aqui.</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- LIVRO CAIXA -->
-    <section class="fin-card fin-section">
-      <div class="fin-head">
-        <div>
-          <span class="fin-eyebrow">Livro caixa</span>
-          <h2>Entradas e saídas manuais</h2>
-          <p>Registre despesas, receitas extras e outras movimentações.</p>
-        </div>
-      </div>
-
-      <form id="formLancamentoManual" class="fin-grid fin-grid--manual">
-        <div class="fin-field">
-          <label class="fin-label" for="lancTipo">Tipo</label>
-          <select class="fin-select" id="lancTipo" name="tipo" required>
-            <option value="entrada">Entrada</option>
-            <option value="saida">Saída</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancCategoria">Categoria</label>
-          <input class="fin-input" id="lancCategoria" name="categoria" type="text" placeholder="Ex: aluguel, pix, manutenção">
-        </div>
-
-        <div class="fin-field fin-field--grow">
-          <label class="fin-label" for="lancDescricao">Descrição</label>
-          <input class="fin-input" id="lancDescricao" name="descricao" type="text" placeholder="Descrição do lançamento" required>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancValor">Valor</label>
-          <input class="fin-input" id="lancValor" name="valor" type="number" min="0" step="0.01" placeholder="0,00" required>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancForma">Forma pagamento</label>
-          <select class="fin-select" id="lancForma" name="forma_pagamento">
-            <option value="">Selecione...</option>
-            <option value="pix">Pix</option>
-            <option value="dinheiro">Dinheiro</option>
-            <option value="cartao_credito">Cartão de crédito</option>
-            <option value="cartao_debito">Cartão de débito</option>
-            <option value="transferencia">Transferência</option>
-            <option value="boleto">Boleto</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancStatus">Status</label>
-          <select class="fin-select" id="lancStatus" name="status">
-            <option value="pago">Pago</option>
-            <option value="pendente">Pendente</option>
-            <option value="parcial">Parcial</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancVencimento">Vencimento</label>
-          <input class="fin-input" id="lancVencimento" name="vencimento" type="date">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="lancCompetencia">Competência</label>
-          <input class="fin-input" id="lancCompetencia" name="competencia" type="month">
-        </div>
-
-        <div class="fin-field fin-field--full">
-          <label class="fin-label" for="lancObservacoes">Observações</label>
-          <textarea class="fin-textarea" id="lancObservacoes" name="observacoes" rows="3" placeholder="Observações do lançamento"></textarea>
-        </div>
-
-        <div class="fin-actions fin-field--full">
-          <button type="submit" class="fin-btn fin-btn--primary" id="btnSalvarLancamento">
-            Salvar lançamento
-          </button>
-          <button type="button" class="fin-btn fin-btn--ghost" id="btnLimparLancamento">
-            Limpar
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <!-- MOVIMENTAÇÕES -->
-    <section class="fin-card fin-section">
-      <div class="fin-head fin-head--row">
-        <div>
-          <span class="fin-eyebrow">Movimentações</span>
-          <h2>Lançamentos financeiros</h2>
-          <p>Entradas, saídas, pendências e registros manuais do caixa.</p>
-        </div>
-
-        <div class="fin-head__actions">
-          <button type="button" class="fin-btn fin-btn--ghost" id="btnAtualizarLancamentos">
-            Atualizar
-          </button>
-        </div>
-      </div>
-
-      <div id="finCardsLancamentos" class="fin-cards">
-        <div class="fin-empty">
-          <strong>Nenhum lançamento carregado.</strong>
-          <span>As movimentações aparecerão aqui.</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- FECHAMENTO -->
-    <section class="fin-card fin-section">
-      <div class="fin-head">
-        <div>
-          <span class="fin-eyebrow">Fechamento</span>
-          <h2>Resumo do período</h2>
-          <p>Uma visão consolidada para conferência do caixa.</p>
-        </div>
-      </div>
-
-      <div class="fin-grid fin-grid--closing">
-        <div class="fin-summary-box">
-          <span class="fin-summary-box__label">Entradas pagas</span>
-          <strong id="sumEntradasPagas">R$ 0,00</strong>
-        </div>
-
-        <div class="fin-summary-box">
-          <span class="fin-summary-box__label">Saídas pagas</span>
-          <strong id="sumSaidasPagas">R$ 0,00</strong>
-        </div>
-
-        <div class="fin-summary-box">
-          <span class="fin-summary-box__label">Entradas pendentes</span>
-          <strong id="sumEntradasPendentes">R$ 0,00</strong>
-        </div>
-
-        <div class="fin-summary-box">
-          <span class="fin-summary-box__label">Saldo projetado</span>
-          <strong id="sumSaldoProjetado">R$ 0,00</strong>
-        </div>
-      </div>
-
-      <div class="fin-closing-list">
-        <div class="fin-closing-col">
-          <h3>Categorias</h3>
-          <div id="finResumoCategorias" class="fin-list-clean">
-            <div class="fin-empty-inline">Sem dados.</div>
-          </div>
-        </div>
-
-        <div class="fin-closing-col">
-          <h3>Movimento por dia</h3>
-          <div id="finResumoDias" class="fin-list-clean">
-            <div class="fin-empty-inline">Sem dados.</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </div>
-</section>
-
-<!-- MODAL LANÇAMENTO -->
-<dialog id="modalLancamento" class="fin-dialog">
-  <form method="dialog" class="fin-dialog-card" id="formModalLancamento">
-    <header class="fin-dialog-head">
-      <div>
-        <h3>Editar lançamento</h3>
-        <p>Atualize ou remova um lançamento do financeiro.</p>
-      </div>
-      <button class="fin-dialog-close" value="cancel" aria-label="Fechar">×</button>
-    </header>
-
-    <div class="fin-dialog-body">
-      <input type="hidden" id="mlId">
-
-      <div class="fin-grid fin-grid--manual">
-        <div class="fin-field">
-          <label class="fin-label" for="mlTipo">Tipo</label>
-          <select class="fin-select" id="mlTipo">
-            <option value="entrada">Entrada</option>
-            <option value="saida">Saída</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlCategoria">Categoria</label>
-          <input class="fin-input" id="mlCategoria" type="text">
-        </div>
-
-        <div class="fin-field fin-field--grow">
-          <label class="fin-label" for="mlDescricao">Descrição</label>
-          <input class="fin-input" id="mlDescricao" type="text">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlValor">Valor</label>
-          <input class="fin-input" id="mlValor" type="number" min="0" step="0.01">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlFormaPagamento">Forma pagamento</label>
-          <select class="fin-select" id="mlFormaPagamento">
-            <option value="">Selecione...</option>
-            <option value="pix">Pix</option>
-            <option value="dinheiro">Dinheiro</option>
-            <option value="cartao_credito">Cartão de crédito</option>
-            <option value="cartao_debito">Cartão de débito</option>
-            <option value="transferencia">Transferência</option>
-            <option value="boleto">Boleto</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlStatus">Status</label>
-          <select class="fin-select" id="mlStatus">
-            <option value="pago">Pago</option>
-            <option value="pendente">Pendente</option>
-            <option value="parcial">Parcial</option>
-          </select>
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlVencimento">Vencimento</label>
-          <input class="fin-input" id="mlVencimento" type="date">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlDataPagamento">Data pagamento</label>
-          <input class="fin-input" id="mlDataPagamento" type="date">
-        </div>
-
-        <div class="fin-field">
-          <label class="fin-label" for="mlCompetencia">Competência</label>
-          <input class="fin-input" id="mlCompetencia" type="month">
-        </div>
-
-        <div class="fin-field fin-field--full">
-          <label class="fin-label" for="mlObservacoes">Observações</label>
-          <textarea class="fin-textarea" id="mlObservacoes" rows="3"></textarea>
-        </div>
-      </div>
+  <section class="fin-hero">
+    <div>
+      <span class="fin-eyebrow">Livro caixa</span>
+      <h1>Financeiro</h1>
+      <p>Controle receitas, despesas, planos, combos e fechamento mensal em um só lugar.</p>
     </div>
 
-    <footer class="fin-dialog-actions">
-      <button type="button" class="fin-btn fin-btn--danger" id="btnExcluirLancamentoModal">Excluir</button>
+    <div class="fin-hero-actions">
+      <label class="fin-field compact">
+        <span>Competência</span>
+        <input type="month" id="filtroCompetencia">
+      </label>
 
-      <div class="fin-dialog-actions__right">
-        <button type="button" class="fin-btn fin-btn--ghost" id="btnFecharLancamentoModal">Fechar</button>
-        <button type="submit" class="fin-btn fin-btn--primary">Salvar alterações</button>
+      <button class="btn primary" id="btnNovoLancamento" type="button">
+        + Novo lançamento
+      </button>
+    </div>
+  </section>
+
+  <section class="fin-kpis">
+    <article class="fin-kpi success">
+      <span>Entradas pagas</span>
+      <strong id="kpiEntradasPagas">R$ 0,00</strong>
+      <small>Receitas confirmadas no mês</small>
+    </article>
+
+    <article class="fin-kpi danger">
+      <span>Saídas pagas</span>
+      <strong id="kpiSaidasPagas">R$ 0,00</strong>
+      <small>Despesas confirmadas no mês</small>
+    </article>
+
+    <article class="fin-kpi balance">
+      <span>Saldo do caixa</span>
+      <strong id="kpiSaldoPago">R$ 0,00</strong>
+      <small>Entradas - saídas pagas</small>
+    </article>
+
+    <article class="fin-kpi pending">
+      <span>Pendente</span>
+      <strong id="kpiPendentes">R$ 0,00</strong>
+      <small>Valores ainda não quitados</small>
+    </article>
+  </section>
+
+  <section class="fin-grid">
+    <aside class="fin-card fin-fechamento">
+      <div class="fin-card-head">
+        <div>
+          <h2>Fechamento do mês</h2>
+          <p id="txtCompetenciaAtual">Competência atual</p>
+        </div>
       </div>
-    </footer>
+
+      <div class="fin-total-box">
+        <span>Saldo final</span>
+        <strong id="fechamentoSaldo">R$ 0,00</strong>
+      </div>
+
+      <div class="fin-mini-row">
+        <span>Entrou</span>
+        <strong id="fechamentoEntradas">R$ 0,00</strong>
+      </div>
+
+      <div class="fin-mini-row">
+        <span>Saiu</span>
+        <strong id="fechamentoSaidas">R$ 0,00</strong>
+      </div>
+
+      <div class="fin-divider"></div>
+
+      <h3>Por categoria</h3>
+      <div id="listaCategoriasFechamento" class="fin-category-list">
+        <div class="empty-state">Nenhuma movimentação nesta competência.</div>
+      </div>
+    </aside>
+
+    <section class="fin-card fin-main">
+      <div class="fin-card-head">
+        <div>
+          <h2>Movimentações</h2>
+          <p>Receitas e despesas do livro caixa</p>
+        </div>
+
+        <div class="fin-tabs" role="tablist">
+          <button class="active" data-tipo="">Todos</button>
+          <button data-tipo="entrada">Entradas</button>
+          <button data-tipo="saida">Saídas</button>
+        </div>
+      </div>
+
+      <div class="fin-filters">
+        <label class="fin-field">
+          <span>Buscar</span>
+          <input type="search" id="filtroBusca" placeholder="Descrição, cliente, fornecedor...">
+        </label>
+
+        <label class="fin-field">
+          <span>Status</span>
+          <select id="filtroStatus">
+            <option value="">Todos</option>
+            <option value="pago">Pago</option>
+            <option value="pendente">Pendente</option>
+            <option value="parcial">Parcial</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </label>
+
+        <label class="fin-field">
+          <span>Categoria</span>
+          <select id="filtroCategoria">
+            <option value="">Todas</option>
+          </select>
+        </label>
+
+        <button class="btn ghost" id="btnLimparFiltros" type="button">
+          Limpar
+        </button>
+      </div>
+
+      <div class="fin-table-wrap">
+        <table class="fin-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Tipo</th>
+              <th>Descrição</th>
+              <th>Categoria</th>
+              <th>Status</th>
+              <th class="text-right">Valor</th>
+              <th class="text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyLancamentos">
+            <tr>
+              <td colspan="7" class="empty-cell">Carregando lançamentos...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section class="fin-card fin-planos">
+    <div class="fin-card-head">
+      <div>
+        <h2>Planos, combos e particulares</h2>
+        <p>Vínculos comerciais dos pacientes</p>
+      </div>
+
+      <button class="btn secondary" id="btnNovoPlano" type="button">
+        + Vincular paciente
+      </button>
+    </div>
+
+    <div id="listaPacientesPlanos" class="fin-planos-grid">
+      <div class="empty-state">Carregando vínculos...</div>
+    </div>
+  </section>
+
+</main>
+
+
+<dialog id="modalLancamento" class="fin-modal">
+  <form method="dialog" class="fin-modal-box" id="formLancamento">
+    <div class="fin-modal-head">
+      <div>
+        <h2 id="tituloModalLancamento">Novo lançamento</h2>
+        <p>Registre uma entrada ou saída do caixa.</p>
+      </div>
+      <button type="button" class="icon-btn" data-close-modal="modalLancamento">×</button>
+    </div>
+
+    <input type="hidden" id="lancamentoId">
+
+    <div class="form-grid">
+      <label class="fin-field">
+        <span>Tipo</span>
+        <select id="lancTipo" required>
+          <option value="entrada">Entrada / Receita</option>
+          <option value="saida">Saída / Despesa</option>
+        </select>
+      </label>
+
+      <label class="fin-field">
+        <span>Status</span>
+        <select id="lancStatus">
+          <option value="pago">Pago</option>
+          <option value="pendente">Pendente</option>
+          <option value="parcial">Parcial</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </label>
+
+      <label class="fin-field">
+        <span>Data</span>
+        <input type="date" id="lancDataMovimento" required>
+      </label>
+
+      <label class="fin-field">
+        <span>Competência</span>
+        <input type="month" id="lancCompetencia">
+      </label>
+
+      <label class="fin-field">
+        <span>Categoria</span>
+        <select id="lancCategoria" required></select>
+      </label>
+
+      <label class="fin-field">
+        <span>Subcategoria</span>
+        <input type="text" id="lancSubcategoria" placeholder="Ex: brinquedos, internet, aluguel...">
+      </label>
+
+      <label class="fin-field span-2">
+        <span>Descrição</span>
+        <input type="text" id="lancDescricao" placeholder="Ex: Venda de jogo terapêutico" required>
+      </label>
+
+      <label class="fin-field">
+        <span>Valor</span>
+        <input type="number" id="lancValor" step="0.01" min="0" placeholder="0,00" required>
+      </label>
+
+      <label class="fin-field">
+        <span>Forma de pagamento</span>
+        <select id="lancFormaPagamento"></select>
+      </label>
+
+      <label class="fin-field">
+        <span>Cliente</span>
+        <input type="text" id="lancClienteNome" placeholder="Opcional">
+      </label>
+
+      <label class="fin-field">
+        <span>Fornecedor</span>
+        <input type="text" id="lancFornecedor" placeholder="Opcional">
+      </label>
+
+      <label class="fin-field">
+        <span>Documento</span>
+        <input type="text" id="lancDocumento" placeholder="Nota, recibo...">
+      </label>
+
+      <label class="fin-field span-2">
+        <span>Observações</span>
+        <textarea id="lancObservacoes" rows="3" placeholder="Detalhes importantes..."></textarea>
+      </label>
+    </div>
+
+    <div class="fin-modal-actions">
+      <button type="button" class="btn ghost" data-close-modal="modalLancamento">Cancelar</button>
+      <button type="submit" class="btn primary">Salvar lançamento</button>
+    </div>
   </form>
 </dialog>
+
+
+<dialog id="modalPlano" class="fin-modal">
+  <form method="dialog" class="fin-modal-box" id="formPlano">
+    <div class="fin-modal-head">
+      <div>
+        <h2>Vincular paciente</h2>
+        <p>Cadastre combo, plano ou particular.</p>
+      </div>
+      <button type="button" class="icon-btn" data-close-modal="modalPlano">×</button>
+    </div>
+
+    <input type="hidden" id="planoPacienteId">
+
+    <div class="form-grid">
+      <label class="fin-field span-2">
+        <span>Paciente</span>
+        <input type="text" id="buscaPacientePlano" placeholder="Digite o nome do paciente">
+        <div id="resultadoPacientesPlano" class="autocomplete-box"></div>
+      </label>
+
+      <label class="fin-field">
+        <span>Tipo</span>
+        <select id="planoTipo">
+          <option value="combo">Combo</option>
+          <option value="plano">Particular / Plano</option>
+        </select>
+      </label>
+
+      <label class="fin-field" id="wrapComboPlano">
+        <span>Combo</span>
+        <select id="planoComboId">
+          <option value="">Selecione</option>
+        </select>
+      </label>
+
+      <label class="fin-field span-2">
+        <span>Nome do plano</span>
+        <input type="text" id="planoNome" placeholder="Ex: Particular, pacote mensal...">
+      </label>
+
+      <label class="fin-field">
+        <span>Sessões</span>
+        <input type="number" id="planoSessoes" min="0" value="0">
+      </label>
+
+      <label class="fin-field">
+        <span>Valor total</span>
+        <input type="number" id="planoValorTotal" step="0.01" min="0">
+      </label>
+
+      <label class="fin-field">
+        <span>Início</span>
+        <input type="date" id="planoDataInicio">
+      </label>
+
+      <label class="fin-field">
+        <span>Fim</span>
+        <input type="date" id="planoDataFim">
+      </label>
+
+      <label class="fin-field">
+        <span>Forma de pagamento</span>
+        <select id="planoFormaPagamento"></select>
+      </label>
+
+      <label class="fin-field">
+        <span>Status</span>
+        <select id="planoStatus">
+          <option value="ativo">Ativo</option>
+          <option value="encerrado">Encerrado</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </label>
+
+      <label class="fin-field span-2">
+        <span>Observações</span>
+        <textarea id="planoObservacoes" rows="3"></textarea>
+      </label>
+    </div>
+
+    <div class="fin-modal-actions">
+      <button type="button" class="btn ghost" data-close-modal="modalPlano">Cancelar</button>
+      <button type="submit" class="btn primary">Salvar vínculo</button>
+    </div>
+  </form>
+</dialog>
+
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('financeiro.static', filename='js/financeiro.js') }}"></script>
+  {{ super() }}
+  <script src="{{ url_for('financeiro.static', filename='js/financeiro.js') }}"></script>
 {% endblock %}
