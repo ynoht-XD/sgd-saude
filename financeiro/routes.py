@@ -1,23 +1,12 @@
 # financeiro/routes.py
 from __future__ import annotations
 
-# ============================================================
-# IMPORTAÇÕES FUTURAS DO MÓDULO FINANCEIRO
-# ============================================================
-# Importa para registrar as rotas do livro caixa:
-# /api/lancamentos
-# /api/fechamento
-# /api/resumo
-# /api/categorias
-# /api/pacientes-planos
-# /api/pacientes/buscar
-# /api/pacientes-sem-vinculo
-from . import financas  # noqa: F401
-
-
-from flask import jsonify, request
+from flask import jsonify, request, session
 
 from . import financeiro_bp
+
+# Registra rotas do livro-caixa/financeiro principal
+from . import financas  # noqa: F401
 
 from .financas import (
     ensure_financeiro_schema,
@@ -31,6 +20,8 @@ from .financas import (
     _now_iso,
     _is_postgres_conn,
 )
+
+from admin.modulos import require_permission
 
 
 # ============================================================
@@ -49,11 +40,142 @@ def _fail(message: str, status: int = 400, **kwargs):
     return jsonify(payload), status
 
 
+def _usuario_id_atual():
+    return session.get("user_id") or session.get("usuario_id")
+
+
+def _clinica_id_atual(default=1):
+    val = session.get("clinica_id") or session.get("clinic_id") or default
+    try:
+        return int(val) if val is not None else None
+    except Exception:
+        return default
+
+
+def _table_exists(conn, table: str) -> bool:
+    try:
+        if _is_postgres_conn(conn):
+            cur = _execute(conn, """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = ?
+                LIMIT 1
+            """, (table,))
+            return cur.fetchone() is not None
+
+        cur = _execute(conn, """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = ?
+            LIMIT 1
+        """, (table,))
+        return cur.fetchone() is not None
+    except Exception:
+        return False
+
+
+def _cols(conn, table: str) -> set[str]:
+    try:
+        if _is_postgres_conn(conn):
+            cur = _execute(conn, """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ?
+            """, (table,))
+            rows = _fetchall_dict(cur)
+            return {r.get("column_name") for r in rows if r.get("column_name")}
+
+        cur = _execute(conn, f"PRAGMA table_info({table})")
+        rows = _fetchall_dict(cur)
+        return {r.get("name") for r in rows if r.get("name")}
+    except Exception:
+        return set()
+
+
+def _has_col(conn, table: str, col: str) -> bool:
+    return col in _cols(conn, table)
+
+
+def _add_clinica_where(conn, table: str, alias: str, where_parts: list[str], params: list, clinica_id=None):
+    clinica_id = clinica_id or _clinica_id_atual()
+
+    if not clinica_id:
+        return
+
+    if _has_col(conn, table, "clinica_id"):
+        where_parts.append(f"{alias}.clinica_id = ?")
+        params.append(int(clinica_id))
+
+
+def _insert_with_optional_clinica(conn, table: str, cols: list[str], values: list):
+    if _has_col(conn, table, "clinica_id") and "clinica_id" not in cols:
+        cols.insert(0, "clinica_id")
+        values.insert(0, _clinica_id_atual())
+
+    placeholders = ", ".join(["?"] * len(cols))
+    col_sql = ", ".join(cols)
+
+    return col_sql, placeholders, values
+
+
+def _registrar_log(conn, acao: str, referencia_id=None, detalhes: str = "", sucesso: bool = True):
+    """
+    Log tolerante:
+    - se tabela logs não existir, ignora;
+    - se algumas colunas não existirem, usa só as disponíveis.
+    """
+
+    try:
+        if not _table_exists(conn, "logs"):
+            return
+
+        cols = _cols(conn, "logs")
+        campos = []
+        valores = []
+        params = []
+
+        def add(campo, valor):
+            if campo in cols:
+                campos.append(campo)
+                valores.append("?")
+                params.append(valor)
+
+        add("usuario_id", _usuario_id_atual())
+        add("clinica_id", _clinica_id_atual())
+        add("modulo", "financeiro")
+        add("acao", acao)
+        add("referencia_id", str(referencia_id or ""))
+        add("detalhes", detalhes or "")
+        add("sucesso", sucesso)
+
+        if "created_at" in cols:
+            campos.append("created_at")
+            valores.append("CURRENT_TIMESTAMP")
+        elif "criado_em" in cols:
+            campos.append("criado_em")
+            valores.append("CURRENT_TIMESTAMP")
+
+        if not campos:
+            return
+
+        _execute(conn, f"""
+            INSERT INTO logs ({", ".join(campos)})
+            VALUES ({", ".join(valores)})
+        """, params)
+
+    except Exception as e:
+        print(f"[FINANCEIRO][LOG] Falha ao registrar log: {e}")
+
+
 # ============================================================
 # COMBOS
 # ============================================================
 
 @financeiro_bp.get("/api/combos")
+@require_permission("financeiro", "ver")
 def api_listar_combos():
     ensure_financeiro_schema()
 
@@ -63,38 +185,43 @@ def api_listar_combos():
     conn = _conn()
 
     try:
-        sql = """
-            SELECT
-                id,
-                nome,
-                descricao,
-                sessoes,
-                preco,
-                ativo,
-                criado_em,
-                atualizado_em
-            FROM financeiro_combos
-            WHERE 1=1
-        """
+        where = ["1=1"]
         params = []
+
+        _add_clinica_where(conn, "financeiro_combos", "fc", where, params)
 
         if q:
             like_op = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
-            sql += f"""
-                AND (
-                    nome {like_op} ?
-                    OR COALESCE(descricao, '') {like_op} ?
+            where.append(f"""
+                (
+                    fc.nome {like_op} ?
+                    OR COALESCE(fc.descricao, '') {like_op} ?
                 )
-            """
+            """)
             params.extend([f"%{q}%", f"%{q}%"])
 
         if ativo in ("0", "1"):
-            sql += " AND ativo = ?"
+            where.append("fc.ativo = ?")
             params.append(int(ativo))
 
-        sql += " ORDER BY ativo DESC, nome ASC"
+        cur = _execute(conn, f"""
+            SELECT
+                fc.id,
+                fc.nome,
+                fc.descricao,
+                fc.sessoes,
+                fc.preco,
+                fc.ativo,
+                fc.criado_em,
+                fc.atualizado_em
+            FROM financeiro_combos fc
+            WHERE {" AND ".join(where)}
+            ORDER BY fc.ativo DESC, fc.nome ASC
+        """, params)
 
-        cur = _execute(conn, sql, params)
+        _registrar_log(conn, "LISTAR_COMBOS", detalhes=f"q={q}; ativo={ativo}")
+        conn.commit()
+
         return _ok(items=_fetchall_dict(cur))
 
     except Exception as e:
@@ -105,6 +232,7 @@ def api_listar_combos():
 
 
 @financeiro_bp.post("/api/combos")
+@require_permission("financeiro", "editar")
 def api_criar_combo():
     ensure_financeiro_schema()
 
@@ -128,60 +256,68 @@ def api_criar_combo():
     conn = _conn()
 
     try:
+        cols = [
+            "nome",
+            "descricao",
+            "sessoes",
+            "preco",
+            "ativo",
+            "criado_em",
+            "atualizado_em",
+        ]
+
+        vals = [
+            nome,
+            descricao,
+            sessoes,
+            preco,
+            ativo,
+            _now_iso(),
+            _now_iso(),
+        ]
+
+        col_sql, placeholders, vals = _insert_with_optional_clinica(
+            conn,
+            "financeiro_combos",
+            cols,
+            vals,
+        )
+
         if _is_postgres_conn(conn):
-            cur = _execute(conn, """
-                INSERT INTO financeiro_combos (
-                    nome,
-                    descricao,
-                    sessoes,
-                    preco,
-                    ativo,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            cur = _execute(conn, f"""
+                INSERT INTO financeiro_combos ({col_sql})
+                VALUES ({placeholders})
                 RETURNING id
-            """, (
-                nome,
-                descricao,
-                sessoes,
-                preco,
-                ativo,
-                _now_iso(),
-                _now_iso(),
-            ))
+            """, vals)
 
             combo_id = _fetchone_dict(cur)["id"]
 
         else:
-            cur = _execute(conn, """
-                INSERT INTO financeiro_combos (
-                    nome,
-                    descricao,
-                    sessoes,
-                    preco,
-                    ativo,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                nome,
-                descricao,
-                sessoes,
-                preco,
-                ativo,
-                _now_iso(),
-                _now_iso(),
-            ))
+            cur = _execute(conn, f"""
+                INSERT INTO financeiro_combos ({col_sql})
+                VALUES ({placeholders})
+            """, vals)
 
             combo_id = cur.lastrowid
 
+        _registrar_log(
+            conn,
+            "CRIAR_COMBO",
+            referencia_id=combo_id,
+            detalhes=f"Combo criado: {nome}",
+        )
+
         conn.commit()
 
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [combo_id]
+        _add_clinica_where(conn, "financeiro_combos", "financeiro_combos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_combos
-            WHERE id = ?
-        """, (combo_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -197,6 +333,7 @@ def api_criar_combo():
 
 
 @financeiro_bp.put("/api/combos/<int:combo_id>")
+@require_permission("financeiro", "editar")
 def api_editar_combo(combo_id: int):
     ensure_financeiro_schema()
 
@@ -220,17 +357,21 @@ def api_editar_combo(combo_id: int):
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [combo_id]
+        _add_clinica_where(conn, "financeiro_combos", "financeiro_combos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT id
             FROM financeiro_combos
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
             LIMIT 1
-        """, (combo_id,))
+        """, params)
 
         if not cur.fetchone():
-            return _fail("Combo não encontrado.", 404)
+            return _fail("Combo não encontrado para esta clínica.", 404)
 
-        _execute(conn, """
+        _execute(conn, f"""
             UPDATE financeiro_combos
             SET
                 nome = ?,
@@ -239,7 +380,7 @@ def api_editar_combo(combo_id: int):
                 preco = ?,
                 ativo = ?,
                 atualizado_em = ?
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
         """, (
             nome,
             descricao,
@@ -247,16 +388,23 @@ def api_editar_combo(combo_id: int):
             preco,
             ativo,
             _now_iso(),
-            combo_id,
+            *params,
         ))
+
+        _registrar_log(
+            conn,
+            "EDITAR_COMBO",
+            referencia_id=combo_id,
+            detalhes=f"Combo editado: {nome}",
+        )
 
         conn.commit()
 
-        cur = _execute(conn, """
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_combos
-            WHERE id = ?
-        """, (combo_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -272,17 +420,36 @@ def api_editar_combo(combo_id: int):
 
 
 @financeiro_bp.delete("/api/combos/<int:combo_id>")
+@require_permission("financeiro", "editar")
 def api_excluir_combo(combo_id: int):
     ensure_financeiro_schema()
 
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        combo_where = ["id = ?"]
+        combo_params = [combo_id]
+        _add_clinica_where(conn, "financeiro_combos", "financeiro_combos", combo_where, combo_params)
+
+        cur = _execute(conn, f"""
+            SELECT id
+            FROM financeiro_combos
+            WHERE {" AND ".join(combo_where)}
+            LIMIT 1
+        """, combo_params)
+
+        if not cur.fetchone():
+            return _fail("Combo não encontrado para esta clínica.", 404)
+
+        plano_where = ["combo_id = ?"]
+        plano_params = [combo_id]
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", plano_where, plano_params)
+
+        cur = _execute(conn, f"""
             SELECT COUNT(*) AS total
             FROM financeiro_paciente_planos
-            WHERE combo_id = ?
-        """, (combo_id,))
+            WHERE {" AND ".join(plano_where)}
+        """, plano_params)
 
         uso = _fetchone_dict(cur) or {}
 
@@ -292,10 +459,17 @@ def api_excluir_combo(combo_id: int):
                 409
             )
 
-        _execute(conn, """
+        _execute(conn, f"""
             DELETE FROM financeiro_combos
-            WHERE id = ?
-        """, (combo_id,))
+            WHERE {" AND ".join(combo_where)}
+        """, combo_params)
+
+        _registrar_log(
+            conn,
+            "EXCLUIR_COMBO",
+            referencia_id=combo_id,
+            detalhes=f"Combo excluído. id={combo_id}",
+        )
 
         conn.commit()
 
@@ -310,6 +484,7 @@ def api_excluir_combo(combo_id: int):
 
 
 @financeiro_bp.patch("/api/combos/<int:combo_id>/status")
+@require_permission("financeiro", "editar")
 def api_alterar_status_combo(combo_id: int):
     ensure_financeiro_schema()
 
@@ -319,33 +494,44 @@ def api_alterar_status_combo(combo_id: int):
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [combo_id]
+        _add_clinica_where(conn, "financeiro_combos", "financeiro_combos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT id
             FROM financeiro_combos
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
             LIMIT 1
-        """, (combo_id,))
+        """, params)
 
         if not cur.fetchone():
-            return _fail("Combo não encontrado.", 404)
+            return _fail("Combo não encontrado para esta clínica.", 404)
 
-        _execute(conn, """
+        _execute(conn, f"""
             UPDATE financeiro_combos
             SET ativo = ?, atualizado_em = ?
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
         """, (
             ativo,
             _now_iso(),
-            combo_id,
+            *params,
         ))
+
+        _registrar_log(
+            conn,
+            "ALTERAR_STATUS_COMBO",
+            referencia_id=combo_id,
+            detalhes=f"Status do combo alterado para ativo={ativo}",
+        )
 
         conn.commit()
 
-        cur = _execute(conn, """
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_combos
-            WHERE id = ?
-        """, (combo_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -361,10 +547,11 @@ def api_alterar_status_combo(combo_id: int):
 
 
 # ============================================================
-# PACIENTES x PLANOS / COMBOS - EDITAR / EXCLUIR / DESVINCULAR
+# PACIENTES x PLANOS / COMBOS
 # ============================================================
 
 @financeiro_bp.put("/api/pacientes-planos/<int:plano_id>")
+@require_permission("financeiro", "editar")
 def api_editar_paciente_plano(plano_id: int):
     ensure_financeiro_schema()
 
@@ -379,60 +566,69 @@ def api_editar_paciente_plano(plano_id: int):
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [plano_id]
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT id
             FROM financeiro_paciente_planos
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
             LIMIT 1
-        """, (plano_id,))
+        """, params)
 
         if not cur.fetchone():
-            return _fail("Plano do paciente não encontrado.", 404)
+            return _fail("Plano do paciente não encontrado para esta clínica.", 404)
 
         campos = []
-        params = []
+        update_params = []
 
         if combo_id not in (None, ""):
             campos.append("combo_id = ?")
-            params.append(_to_int(combo_id, None))
+            update_params.append(_to_int(combo_id, None))
 
         if status:
             campos.append("status = ?")
-            params.append(status)
+            update_params.append(status)
 
         if sessoes_contratadas not in (None, ""):
             campos.append("sessoes_contratadas = ?")
-            params.append(_to_int(sessoes_contratadas, 0))
+            update_params.append(_to_int(sessoes_contratadas, 0))
 
         if sessoes_usadas not in (None, ""):
             campos.append("sessoes_usadas = ?")
-            params.append(_to_int(sessoes_usadas, 0))
+            update_params.append(_to_int(sessoes_usadas, 0))
 
         if valor_total not in (None, ""):
             campos.append("valor_total = ?")
-            params.append(_to_float(valor_total, 0))
-
-        campos.append("atualizado_em = ?")
-        params.append(_now_iso())
+            update_params.append(_to_float(valor_total, 0))
 
         if not campos:
             return _fail("Nenhum campo enviado para atualizar.")
 
-        params.append(plano_id)
+        campos.append("atualizado_em = ?")
+        update_params.append(_now_iso())
 
         _execute(conn, f"""
             UPDATE financeiro_paciente_planos
             SET {", ".join(campos)}
-            WHERE id = ?
-        """, params)
+            WHERE {" AND ".join(where)}
+        """, update_params + params)
+
+        _registrar_log(
+            conn,
+            "EDITAR_PLANO_PACIENTE",
+            referencia_id=plano_id,
+            detalhes=f"Plano paciente atualizado. status={status}; combo_id={combo_id}",
+        )
 
         conn.commit()
 
-        cur = _execute(conn, """
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_paciente_planos
-            WHERE id = ?
-        """, (plano_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -448,34 +644,46 @@ def api_editar_paciente_plano(plano_id: int):
 
 
 @financeiro_bp.delete("/api/pacientes-planos/<int:plano_id>")
+@require_permission("financeiro", "editar")
 def api_excluir_paciente_plano(plano_id: int):
     ensure_financeiro_schema()
 
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [plano_id]
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_paciente_planos
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
             LIMIT 1
-        """, (plano_id,))
+        """, params)
 
         plano = _fetchone_dict(cur)
 
         if not plano:
-            return _fail("Plano do paciente não encontrado.", 404)
+            return _fail("Plano do paciente não encontrado para esta clínica.", 404)
 
         sessoes_usadas = _to_int(plano.get("sessoes_usadas"), 0)
 
         if sessoes_usadas > 0:
-            _execute(conn, """
+            _execute(conn, f"""
                 UPDATE financeiro_paciente_planos
                 SET
                     status = 'cancelado',
                     atualizado_em = ?
-                WHERE id = ?
-            """, (_now_iso(), plano_id))
+                WHERE {" AND ".join(where)}
+            """, [_now_iso()] + params)
+
+            _registrar_log(
+                conn,
+                "CANCELAR_PLANO_PACIENTE",
+                referencia_id=plano_id,
+                detalhes="Plano cancelado porque já possuía sessões usadas.",
+            )
 
             conn.commit()
 
@@ -484,10 +692,17 @@ def api_excluir_paciente_plano(plano_id: int):
                 modo="cancelado"
             )
 
-        _execute(conn, """
+        _execute(conn, f"""
             DELETE FROM financeiro_paciente_planos
-            WHERE id = ?
-        """, (plano_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
+
+        _registrar_log(
+            conn,
+            "EXCLUIR_PLANO_PACIENTE",
+            referencia_id=plano_id,
+            detalhes="Plano excluído.",
+        )
 
         conn.commit()
 
@@ -505,6 +720,7 @@ def api_excluir_paciente_plano(plano_id: int):
 
 
 @financeiro_bp.post("/api/pacientes-planos/<int:plano_id>/desvincular-atendimentos")
+@require_permission("financeiro", "editar")
 def api_desvincular_atendimentos_plano(plano_id: int):
     """
     Desvincula atendimentos do plano/combo quando existir coluna relacionada.
@@ -515,69 +731,54 @@ def api_desvincular_atendimentos_plano(plano_id: int):
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        plano_where = ["id = ?"]
+        plano_params = [plano_id]
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", plano_where, plano_params)
+
+        cur = _execute(conn, f"""
             SELECT id
             FROM financeiro_paciente_planos
-            WHERE id = ?
+            WHERE {" AND ".join(plano_where)}
             LIMIT 1
-        """, (plano_id,))
+        """, plano_params)
 
         if not cur.fetchone():
-            return _fail("Plano do paciente não encontrado.", 404)
+            return _fail("Plano do paciente não encontrado para esta clínica.", 404)
 
         atualizados = 0
 
-        # Verifica se existe tabela atendimentos
-        if _is_postgres_conn(conn):
-            cur = _execute(conn, """
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                  AND table_name = 'atendimentos'
-                LIMIT 1
-            """)
-            tem_atendimentos = cur.fetchone() is not None
-        else:
-            cur = _execute(conn, """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table'
-                  AND name = 'atendimentos'
-                LIMIT 1
-            """)
-            tem_atendimentos = cur.fetchone() is not None
-
-        if tem_atendimentos:
+        if _table_exists(conn, "atendimentos"):
             colunas_possiveis = [
                 "paciente_plano_id",
                 "plano_id",
                 "financeiro_plano_id",
-                "combo_paciente_id"
+                "combo_paciente_id",
             ]
 
-            for coluna in colunas_possiveis:
-                if _is_postgres_conn(conn):
-                    cur = _execute(conn, """
-                        SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                          AND table_name = 'atendimentos'
-                          AND column_name = ?
-                        LIMIT 1
-                    """, (coluna,))
-                    tem_coluna = cur.fetchone() is not None
-                else:
-                    cur = _execute(conn, "PRAGMA table_info(atendimentos)")
-                    cols = _fetchall_dict(cur)
-                    tem_coluna = any(c.get("name") == coluna for c in cols)
+            atend_cols = _cols(conn, "atendimentos")
 
-                if tem_coluna:
-                    cur = _execute(conn, f"""
-                        UPDATE atendimentos
-                        SET {coluna} = NULL
-                        WHERE {coluna} = ?
-                    """, (plano_id,))
-                    atualizados += cur.rowcount or 0
+            for coluna in colunas_possiveis:
+                if coluna not in atend_cols:
+                    continue
+
+                where = [f"{coluna} = ?"]
+                params = [plano_id]
+                _add_clinica_where(conn, "atendimentos", "atendimentos", where, params)
+
+                cur = _execute(conn, f"""
+                    UPDATE atendimentos
+                    SET {coluna} = NULL
+                    WHERE {" AND ".join(where)}
+                """, params)
+
+                atualizados += cur.rowcount or 0
+
+        _registrar_log(
+            conn,
+            "DESVINCULAR_ATENDIMENTOS_PLANO",
+            referencia_id=plano_id,
+            detalhes=f"Atendimentos desvinculados: {atualizados}",
+        )
 
         conn.commit()
 

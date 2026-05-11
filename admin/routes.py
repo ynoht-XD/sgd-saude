@@ -19,6 +19,7 @@ from . import users       # noqa: F401
 from . import bibliotecas # noqa: F401
 from . import modulos     # noqa: F401
 from . import backup     # noqa: F401
+from . import users_master
 
 # backup ficará por último, quando formos fechar a estratégia final
 # entre SQLite local e PostgreSQL/Render.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date
 from typing import Any
 
 from flask import session
@@ -10,6 +10,13 @@ from flask import session
 # ============================================================
 # UTILITÁRIOS GERAIS
 # ============================================================
+
+def current_clinica_id(default: int | None = None) -> int | None:
+    try:
+        return int(session.get("clinica_id"))
+    except Exception:
+        return default
+
 
 def digits(s: str | None) -> str:
     return "".join(ch for ch in (s or "") if ch.isdigit())
@@ -23,11 +30,6 @@ def _to_int(v: Any, default: int = 0) -> int:
 
 
 def _row_get(row: Any, key: str, idx: int | None = None, default: Any = None) -> Any:
-    """
-    Compatível com:
-    - psycopg2 normal: tuple/list
-    - psycopg2.extras.RealDictCursor: dict
-    """
     if row is None:
         return default
 
@@ -44,10 +46,24 @@ def _row_get(row: Any, key: str, idx: int | None = None, default: Any = None) ->
 
 
 def _valid_ident(name: str) -> bool:
-    """
-    Segurança simples para nomes de tabelas/colunas usados em SQL dinâmico.
-    """
     return bool(re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name or ""))
+
+
+def _clinica_filter_sql(conn, table: str, alias: str | None = None) -> tuple[str, list]:
+    """
+    Retorna filtro SQL por clínica se a tabela possuir clinica_id.
+    """
+    clinica_id = current_clinica_id()
+
+    if not clinica_id:
+        return "", []
+
+    if not has_column(conn, table, "clinica_id"):
+        return "", []
+
+    prefix = f"{alias}." if alias else ""
+
+    return f" AND {prefix}clinica_id = %s ", [clinica_id]
 
 
 # ============================================================
@@ -123,6 +139,11 @@ def first_existing(cols: set[str], opts: list[str]) -> str | None:
     return None
 
 
+def ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    cur = conn.cursor()
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl};")
+
+
 # ============================================================
 # SCHEMAS POSTGRESQL
 # ============================================================
@@ -134,6 +155,8 @@ def ensure_atendimentos_schema(conn) -> None:
         """
         CREATE TABLE IF NOT EXISTS atendimentos (
             id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
+
             paciente_id INTEGER,
             data_atendimento DATE,
             status TEXT,
@@ -161,25 +184,32 @@ def ensure_atendimentos_schema(conn) -> None:
         """
     )
 
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS paciente_id INTEGER")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS data_atendimento DATE")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS status TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS justificativa TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS evolucao TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS nome TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS prontuario TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS mod TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS status_paciente TEXT")
+    ensure_column(conn, "atendimentos", "clinica_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "data_atendimento", "DATE")
+    ensure_column(conn, "atendimentos", "status", "TEXT")
+    ensure_column(conn, "atendimentos", "justificativa", "TEXT")
+    ensure_column(conn, "atendimentos", "evolucao", "TEXT")
+    ensure_column(conn, "atendimentos", "nome", "TEXT")
+    ensure_column(conn, "atendimentos", "prontuario", "TEXT")
+    ensure_column(conn, "atendimentos", "mod", "TEXT")
+    ensure_column(conn, "atendimentos", "status_paciente", "TEXT")
 
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS anexo_atestado TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS profissional_id INTEGER")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS nome_profissional TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS cns_profissional TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS cbo_profissional TEXT")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS combo_plano_id INTEGER")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS contabiliza_sessao INTEGER NOT NULL DEFAULT 0")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    cur.execute("ALTER TABLE atendimentos ADD COLUMN IF NOT EXISTS atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    ensure_column(conn, "atendimentos", "anexo_atestado", "TEXT")
+    ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "nome_profissional", "TEXT")
+    ensure_column(conn, "atendimentos", "cns_profissional", "TEXT")
+    ensure_column(conn, "atendimentos", "cbo_profissional", "TEXT")
+    ensure_column(conn, "atendimentos", "combo_plano_id", "INTEGER")
+    ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "atendimentos", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    ensure_column(conn, "atendimentos", "atualizado_em", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica ON atendimentos(clinica_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_paciente ON atendimentos(clinica_id, paciente_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_data ON atendimentos(clinica_id, data_atendimento)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_prof ON atendimentos(clinica_id, profissional_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_atendimentos_combo ON atendimentos(combo_plano_id)")
 
 
 def ensure_atendimento_procedimentos_schema(conn) -> None:
@@ -189,6 +219,7 @@ def ensure_atendimento_procedimentos_schema(conn) -> None:
         """
         CREATE TABLE IF NOT EXISTS atendimento_procedimentos (
             id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
             atendimento_id INTEGER NOT NULL,
             procedimento TEXT NOT NULL,
             codigo_sigtap TEXT,
@@ -202,15 +233,13 @@ def ensure_atendimento_procedimentos_schema(conn) -> None:
         """
     )
 
-    cur.execute("ALTER TABLE atendimento_procedimentos ADD COLUMN IF NOT EXISTS codigo_sigtap TEXT")
-    cur.execute("ALTER TABLE atendimento_procedimentos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+    ensure_column(conn, "atendimento_procedimentos", "clinica_id", "INTEGER")
+    ensure_column(conn, "atendimento_procedimentos", "codigo_sigtap", "TEXT")
+    ensure_column(conn, "atendimento_procedimentos", "created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_proc_atendimento
-            ON atendimento_procedimentos (atendimento_id)
-        """
-    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_proc_atendimento ON atendimento_procedimentos(atendimento_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_proc_clinica ON atendimento_procedimentos(clinica_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_proc_clinica_atendimento ON atendimento_procedimentos(clinica_id, atendimento_id)")
 
     conn.commit()
 
@@ -222,6 +251,7 @@ def ensure_fila_table(conn) -> None:
         """
         CREATE TABLE IF NOT EXISTS fila_atendimentos (
             id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
             hora TEXT NOT NULL,
             paciente_id INTEGER,
             paciente_nome TEXT,
@@ -237,31 +267,17 @@ def ensure_fila_table(conn) -> None:
         """
     )
 
-    cur.execute("ALTER TABLE fila_atendimentos ADD COLUMN IF NOT EXISTS origem TEXT DEFAULT 'manual'")
-    cur.execute("ALTER TABLE fila_atendimentos ADD COLUMN IF NOT EXISTS agenda_id INTEGER")
-    cur.execute("ALTER TABLE fila_atendimentos ADD COLUMN IF NOT EXISTS status TEXT")
-    cur.execute("ALTER TABLE fila_atendimentos ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+    ensure_column(conn, "fila_atendimentos", "clinica_id", "INTEGER")
+    ensure_column(conn, "fila_atendimentos", "origem", "TEXT DEFAULT 'manual'")
+    ensure_column(conn, "fila_atendimentos", "agenda_id", "INTEGER")
+    ensure_column(conn, "fila_atendimentos", "status", "TEXT")
+    ensure_column(conn, "fila_atendimentos", "created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_fila_chave_dia
-            ON fila_atendimentos (hora, paciente_id, profissional_id)
-        """
-    )
-
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_fila_created_at
-            ON fila_atendimentos (created_at)
-        """
-    )
-
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_fila_status
-            ON fila_atendimentos (status)
-        """
-    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fila_clinica ON fila_atendimentos(clinica_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fila_chave_dia ON fila_atendimentos(hora, paciente_id, profissional_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fila_clinica_chave ON fila_atendimentos(clinica_id, hora, paciente_id, profissional_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fila_created_at ON fila_atendimentos(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fila_status ON fila_atendimentos(status)")
 
     conn.commit()
 
@@ -277,9 +293,17 @@ def buscar_combo_ativo_paciente(conn, paciente_id: int | str | None) -> dict | N
     if not has_table(conn, "financeiro_paciente_planos"):
         return None
 
+    clinica_id = current_clinica_id()
+    has_clinica = has_column(conn, "financeiro_paciente_planos", "clinica_id")
+
+    filtro_clinica = "AND pp.clinica_id = %s" if has_clinica and clinica_id else ""
+    params = [paciente_id]
+    if filtro_clinica:
+        params.append(clinica_id)
+
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT
             pp.id,
             COALESCE(pp.tipo, '') AS tipo,
@@ -289,11 +313,12 @@ def buscar_combo_ativo_paciente(conn, paciente_id: int | str | None) -> dict | N
             COALESCE(pp.status, 'ativo') AS status
         FROM financeiro_paciente_planos pp
         WHERE pp.paciente_id = %s
+          {filtro_clinica}
           AND COALESCE(pp.status, 'ativo') = 'ativo'
         ORDER BY pp.id DESC
         LIMIT 1
         """,
-        (paciente_id,),
+        params,
     )
 
     row = cur.fetchone()
@@ -304,14 +329,21 @@ def buscar_combo_ativo_paciente(conn, paciente_id: int | str | None) -> dict | N
 
     usadas = 0
     if has_table(conn, "atendimentos") and has_column(conn, "atendimentos", "combo_plano_id"):
+        has_at_clinica = has_column(conn, "atendimentos", "clinica_id")
+        filtro_at_clinica = "AND clinica_id = %s" if has_at_clinica and clinica_id else ""
+        params_usadas = [plano_id]
+        if filtro_at_clinica:
+            params_usadas.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT COUNT(*)
               FROM atendimentos
              WHERE combo_plano_id = %s
+               {filtro_at_clinica}
                AND COALESCE(contabiliza_sessao, 1) = 1
             """,
-            (plano_id,),
+            params_usadas,
         )
         usadas = _to_int(_row_get(cur.fetchone(), "count", 0), 0)
 
@@ -334,9 +366,15 @@ def listar_combos_ativos_para_template(conn) -> list[dict]:
     if not has_table(conn, "financeiro_paciente_planos"):
         return []
 
+    clinica_id = current_clinica_id()
+    has_clinica = has_column(conn, "financeiro_paciente_planos", "clinica_id")
+
+    filtro_clinica = "AND pp.clinica_id = %s" if has_clinica and clinica_id else ""
+    params = [clinica_id] if filtro_clinica else []
+
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT
             pp.id,
             pp.paciente_id,
@@ -348,8 +386,10 @@ def listar_combos_ativos_para_template(conn) -> list[dict]:
             COALESCE(pp.status, 'ativo') AS status
         FROM financeiro_paciente_planos pp
         WHERE COALESCE(pp.status, 'ativo') = 'ativo'
+          {filtro_clinica}
         ORDER BY LOWER(COALESCE(pp.paciente_nome, '')) ASC
-        """
+        """,
+        params,
     )
 
     rows = cur.fetchall() or []
@@ -360,14 +400,21 @@ def listar_combos_ativos_para_template(conn) -> list[dict]:
 
         usadas = 0
         if has_table(conn, "atendimentos") and has_column(conn, "atendimentos", "combo_plano_id"):
+            has_at_clinica = has_column(conn, "atendimentos", "clinica_id")
+            filtro_at_clinica = "AND clinica_id = %s" if has_at_clinica and clinica_id else ""
+            params_usadas = [plano_id]
+            if filtro_at_clinica:
+                params_usadas.append(clinica_id)
+
             cur.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                   FROM atendimentos
                  WHERE combo_plano_id = %s
+                   {filtro_at_clinica}
                    AND COALESCE(contabiliza_sessao, 1) = 1
                 """,
-                (plano_id,),
+                params_usadas,
             )
             usadas = _to_int(_row_get(cur.fetchone(), "count", 0), 0)
 
@@ -397,18 +444,26 @@ def recalcular_saldo_combo(conn, combo_plano_id: int | None) -> None:
     if not has_table(conn, "financeiro_paciente_planos"):
         return
 
-    cur = conn.cursor()
+    clinica_id = current_clinica_id()
+    has_fp_clinica = has_column(conn, "financeiro_paciente_planos", "clinica_id")
 
+    filtro_fp = "AND clinica_id = %s" if has_fp_clinica and clinica_id else ""
+    params_fp = [combo_plano_id]
+    if filtro_fp:
+        params_fp.append(clinica_id)
+
+    cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT
             COALESCE(sessoes_contratadas, 0) AS sessoes_contratadas,
             COALESCE(status, 'ativo') AS status
         FROM financeiro_paciente_planos
         WHERE id = %s
+        {filtro_fp}
         LIMIT 1
         """,
-        (combo_plano_id,),
+        params_fp,
     )
 
     row = cur.fetchone()
@@ -417,30 +472,37 @@ def recalcular_saldo_combo(conn, combo_plano_id: int | None) -> None:
 
     contratadas = _to_int(_row_get(row, "sessoes_contratadas", 0), 0)
 
+    has_at_clinica = has_table(conn, "atendimentos") and has_column(conn, "atendimentos", "clinica_id")
+    filtro_at = "AND clinica_id = %s" if has_at_clinica and clinica_id else ""
+    params_at = [combo_plano_id]
+    if filtro_at:
+        params_at.append(clinica_id)
+
     cur.execute(
-        """
+        f"""
         SELECT COUNT(*)
           FROM atendimentos
          WHERE combo_plano_id = %s
+           {filtro_at}
            AND COALESCE(contabiliza_sessao, 1) = 1
         """,
-        (combo_plano_id,),
+        params_at,
     )
 
     usadas = _to_int(_row_get(cur.fetchone(), "count", 0), 0)
     restantes = max(0, contratadas - usadas)
-
     novo_status = "encerrado" if contratadas > 0 and restantes <= 0 else "ativo"
 
     cur.execute(
-        """
+        f"""
         UPDATE financeiro_paciente_planos
            SET sessoes_usadas = %s,
                status = %s,
                atualizado_em = CURRENT_TIMESTAMP
          WHERE id = %s
+         {filtro_fp}
         """,
-        (usadas, novo_status, combo_plano_id),
+        [usadas, novo_status, *params_fp],
     )
 
     conn.commit()
@@ -475,15 +537,23 @@ def resolve_logged_profissional_id(conn) -> int | None:
     if not busca_cols:
         return None
 
-    conds = [f"TRIM(LOWER(COALESCE({c}, ''))) = TRIM(LOWER(%s))" for c in busca_cols]
+    clinica_id = current_clinica_id()
+    filtro_clinica = ""
     params = [login_like] * len(busca_cols)
+
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "AND clinica_id = %s"
+        params.append(clinica_id)
+
+    conds = [f"TRIM(LOWER(COALESCE({c}, ''))) = TRIM(LOWER(%s))" for c in busca_cols]
 
     cur = conn.cursor()
     cur.execute(
         f"""
         SELECT id
           FROM usuarios
-         WHERE {" OR ".join(conds)}
+         WHERE ({" OR ".join(conds)})
+           {filtro_clinica}
          LIMIT 1
         """,
         params,
@@ -506,6 +576,14 @@ def resolve_prof_dados(conn, profissional_id: int | None):
     cns_expr = "COALESCE(cns, '')" if "cns" in cols else "''"
     cbo_expr = "COALESCE(cbo, '')" if "cbo" in cols else "''"
 
+    clinica_id = current_clinica_id()
+    filtro_clinica = ""
+    params = [profissional_id]
+
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "AND clinica_id = %s"
+        params.append(clinica_id)
+
     cur = conn.cursor()
     cur.execute(
         f"""
@@ -516,9 +594,10 @@ def resolve_prof_dados(conn, profissional_id: int | None):
             {cbo_expr} AS cbo
         FROM usuarios
         WHERE id = %s
+        {filtro_clinica}
         LIMIT 1
         """,
-        (profissional_id,),
+        params,
     )
 
     row = cur.fetchone()
@@ -537,49 +616,35 @@ def resolve_prof_nome(conn, profissional_id: int | None) -> str:
     if not profissional_id:
         return "—"
 
+    clinica_id = current_clinica_id()
     cur = conn.cursor()
 
-    if has_table(conn, "profissionais") and has_column(conn, "profissionais", "nome"):
-        cond = ""
-        if has_column(conn, "profissionais", "ativo"):
-            cond = "AND (ativo = TRUE OR ativo IS NULL)"
-
-        cur.execute(
-            f"""
-            SELECT nome
-              FROM profissionais
-             WHERE id = %s
-               {cond}
-             LIMIT 1
-            """,
-            (profissional_id,),
-        )
-        row = cur.fetchone()
-        nome = _row_get(row, "nome", 0, "")
-        if nome:
-            return nome
-
     if has_table(conn, "usuarios") and has_column(conn, "usuarios", "nome"):
-        conds = []
+        cols = table_columns(conn, "usuarios")
 
-        if has_column(conn, "usuarios", "role"):
+        conds = ["id = %s"]
+        params = [profissional_id]
+
+        if "clinica_id" in cols and clinica_id:
+            conds.append("clinica_id = %s")
+            params.append(clinica_id)
+
+        if "role" in cols:
             conds.append("UPPER(COALESCE(role, '')) = 'PROFISSIONAL'")
 
-        if has_column(conn, "usuarios", "is_active"):
+        if "is_active" in cols:
             conds.append("(is_active IS TRUE OR is_active IS NULL)")
-
-        extra = f"AND {' AND '.join(conds)}" if conds else ""
 
         cur.execute(
             f"""
             SELECT nome
               FROM usuarios
-             WHERE id = %s
-             {extra}
+             WHERE {" AND ".join(conds)}
              LIMIT 1
             """,
-            (profissional_id,),
+            params,
         )
+
         row = cur.fetchone()
         nome = _row_get(row, "nome", 0, "")
         if nome:
@@ -597,6 +662,7 @@ def split_cids(raw: str | None) -> list[str]:
         return []
 
     s = str(raw).upper()
+
     for ch in [";", "|", "\n", "\t"]:
         s = s.replace(ch, ",")
 
@@ -612,6 +678,7 @@ def split_codes_csv(raw: str | None) -> list[str]:
         return []
 
     s = str(raw)
+
     for ch in [";", "|", "\n", "\t"]:
         s = s.replace(ch, ",")
 
@@ -620,6 +687,7 @@ def split_codes_csv(raw: str | None) -> list[str]:
 
     for part in s.split(","):
         item = cid_norm_py(part)
+
         if not item or item in vistos:
             continue
 
@@ -639,6 +707,14 @@ def get_paciente_cids(conn, paciente_id: str | int | None) -> list[str]:
     if not cid_cols:
         return []
 
+    clinica_id = current_clinica_id()
+    filtro_clinica = ""
+    params = [paciente_id]
+
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "AND clinica_id = %s"
+        params.append(clinica_id)
+
     select_parts = [f"COALESCE({c}, '') AS {c}" for c in cid_cols]
 
     cur = conn.cursor()
@@ -647,9 +723,10 @@ def get_paciente_cids(conn, paciente_id: str | int | None) -> list[str]:
         SELECT {", ".join(select_parts)}
           FROM pacientes
          WHERE id = %s
+         {filtro_clinica}
          LIMIT 1
         """,
-        (paciente_id,),
+        params,
     )
 
     row = cur.fetchone()
@@ -661,8 +738,10 @@ def get_paciente_cids(conn, paciente_id: str | int | None) -> list[str]:
 
     for idx, col in enumerate(cid_cols):
         raw = _row_get(row, col, idx, "")
+
         for cid in split_cids(raw):
             norm = cid_norm_py(cid)
+
             if not norm or norm in vistos:
                 continue
 
@@ -694,6 +773,7 @@ def get_procedimentos_competencia_vigente(conn) -> str:
 
 def procedimento_compativel(cbo_prof: str, paciente_cids: list[str], proc_row: Any) -> bool:
     cbo_norm = cid_norm_py(cbo_prof)
+
     if not cbo_norm:
         return False
 
@@ -701,23 +781,28 @@ def procedimento_compativel(cbo_prof: str, paciente_cids: list[str], proc_row: A
     cids_raw = _row_get(proc_row, "cids_codigos", 3, "")
 
     cbos_proc = split_codes_csv(cbos_raw)
+
     if not cbos_proc or cbo_norm not in cbos_proc:
         return False
 
     cids_proc = split_codes_csv(cids_raw)
+
     if not cids_proc:
         return True
 
     pac_norms = [cid_norm_py(x) for x in (paciente_cids or []) if x]
+
     if not pac_norms:
         return False
 
     proc_set = set(cids_proc)
+
     return any(cid in proc_set for cid in pac_norms)
 
 
 def listar_procedimentos_compativeis_db(conn, cbo: str, paciente_cids: list[str]) -> list[dict]:
     cbo = (cbo or "").strip()
+
     if not cbo:
         return []
 
@@ -755,8 +840,8 @@ def listar_procedimentos_compativeis_db(conn, cbo: str, paciente_cids: list[str]
     sql += " ORDER BY LOWER(descricao), codigo"
 
     cur.execute(sql, params)
-    rows = cur.fetchall() or []
 
+    rows = cur.fetchall() or []
     items = []
     vistos = set()
 
@@ -801,6 +886,14 @@ def fetch_pacientes(conn) -> list[dict]:
     col_stat = "status" if "status" in cols else "''"
     col_cpf = "cpf" if "cpf" in cols else "''"
 
+    clinica_id = current_clinica_id()
+    filtro_clinica = ""
+    params = []
+
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "WHERE clinica_id = %s"
+        params.append(clinica_id)
+
     cur = conn.cursor()
     cur.execute(
         f"""
@@ -810,10 +903,13 @@ def fetch_pacientes(conn) -> list[dict]:
             COALESCE({col_cpf}, '') AS cpf,
             COALESCE({col_pront}, '') AS prontuario,
             COALESCE({col_mod}, '') AS mod,
-            COALESCE({col_stat}, '') AS status
+            COALESCE({col_stat}, '') AS status,
+            {("clinica_id" if "clinica_id" in cols else "NULL::integer")} AS clinica_id
         FROM pacientes
+        {filtro_clinica}
         ORDER BY LOWER(COALESCE(nome, ''))
-        """
+        """,
+        params,
     )
 
     rows = cur.fetchall() or []
@@ -826,6 +922,7 @@ def fetch_pacientes(conn) -> list[dict]:
             "prontuario": _row_get(r, "prontuario", 3, "") or "",
             "mod": _row_get(r, "mod", 4, "") or "",
             "status": _row_get(r, "status", 5, "") or "",
+            "clinica_id": _row_get(r, "clinica_id", 6),
         }
         for r in rows
     ]
@@ -842,13 +939,20 @@ def listar_profissionais_usuarios(conn) -> list[dict]:
     email_expr = "COALESCE(email, '')" if "email" in cols else "''"
 
     conds = ["1=1"]
+    params = []
+
+    clinica_id = current_clinica_id()
+
+    if "clinica_id" in cols and clinica_id:
+        conds.append("clinica_id = %s")
+        params.append(clinica_id)
 
     if "role" in cols:
         conds.append("UPPER(COALESCE(role, '')) = 'PROFISSIONAL'")
 
     if "is_active" in cols:
         conds.append("(is_active IS TRUE OR is_active IS NULL)")
-        
+
     cur = conn.cursor()
     cur.execute(
         f"""
@@ -864,7 +968,8 @@ def listar_profissionais_usuarios(conn) -> list[dict]:
         FROM usuarios
         WHERE {" AND ".join(conds)}
         ORDER BY LOWER(nome)
-        """
+        """,
+        params,
     )
 
     rows = cur.fetchall() or []
@@ -883,15 +988,26 @@ def resolve_paciente_id_by_nome(conn, nome: str) -> int | None:
     if not nome or not has_table(conn, "pacientes"):
         return None
 
+    cols = table_columns(conn, "pacientes")
+    clinica_id = current_clinica_id()
+
+    filtro_clinica = ""
+    params = [nome]
+
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "AND clinica_id = %s"
+        params.append(clinica_id)
+
     cur = conn.cursor()
     cur.execute(
-        """
+        f"""
         SELECT id
           FROM pacientes
          WHERE TRIM(UPPER(nome)) = TRIM(UPPER(%s))
+         {filtro_clinica}
          LIMIT 1
         """,
-        (nome,),
+        params,
     )
 
     row = cur.fetchone()
@@ -899,46 +1015,55 @@ def resolve_paciente_id_by_nome(conn, nome: str) -> int | None:
 
 
 def resolve_prof_id_by_nome_ou_cpf(conn, nome: str | None, cpf: str | None) -> int | None:
+    clinica_id = current_clinica_id()
     cur = conn.cursor()
 
     if cpf and has_table(conn, "usuarios") and has_column(conn, "usuarios", "cpf"):
+        cols = table_columns(conn, "usuarios")
+
+        filtro_clinica = ""
+        params = [cpf]
+
+        if "clinica_id" in cols and clinica_id:
+            filtro_clinica = "AND clinica_id = %s"
+            params.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT id
               FROM usuarios
              WHERE REGEXP_REPLACE(COALESCE(cpf, ''), '\\D', '', 'g') = REGEXP_REPLACE(%s, '\\D', '', 'g')
+             {filtro_clinica}
              LIMIT 1
             """,
-            (cpf,),
+            params,
         )
+
         row = cur.fetchone()
         if row:
             return _to_int(_row_get(row, "id", 0), None)
 
     if nome and has_table(conn, "usuarios") and has_column(conn, "usuarios", "nome"):
+        cols = table_columns(conn, "usuarios")
+
+        filtro_clinica = ""
+        params = [nome]
+
+        if "clinica_id" in cols and clinica_id:
+            filtro_clinica = "AND clinica_id = %s"
+            params.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT id
               FROM usuarios
              WHERE TRIM(UPPER(nome)) = TRIM(UPPER(%s))
+             {filtro_clinica}
              LIMIT 1
             """,
-            (nome,),
+            params,
         )
-        row = cur.fetchone()
-        if row:
-            return _to_int(_row_get(row, "id", 0), None)
 
-    if nome and has_table(conn, "profissionais") and has_column(conn, "profissionais", "nome"):
-        cur.execute(
-            """
-            SELECT id
-              FROM profissionais
-             WHERE TRIM(UPPER(nome)) = TRIM(UPPER(%s))
-             LIMIT 1
-            """,
-            (nome,),
-        )
         row = cur.fetchone()
         if row:
             return _to_int(_row_get(row, "id", 0), None)
@@ -950,18 +1075,31 @@ def resolve_paciente(conn, paciente_id: str | None, paciente_texto: str | None):
     if not has_table(conn, "pacientes"):
         return None
 
+    cols = table_columns(conn, "pacientes")
+    clinica_id = current_clinica_id()
+
+    filtro_clinica = ""
+    if "clinica_id" in cols and clinica_id:
+        filtro_clinica = "AND clinica_id = %s"
+
     cur = conn.cursor()
 
     if paciente_id:
+        params = [paciente_id]
+        if filtro_clinica:
+            params.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT id, nome, COALESCE(cpf, '') AS cpf
               FROM pacientes
              WHERE id = %s
+             {filtro_clinica}
              LIMIT 1
             """,
-            (paciente_id,),
+            params,
         )
+
         row = cur.fetchone()
         if row:
             return {
@@ -978,14 +1116,19 @@ def resolve_paciente(conn, paciente_id: str | None, paciente_texto: str | None):
         cpf_str = txt.split("(")[-1].strip(") ").strip()
         cpf_digits = digits(cpf_str)
 
+        params = [cpf_digits]
+        if filtro_clinica:
+            params.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT id, nome, COALESCE(cpf, '') AS cpf
               FROM pacientes
              WHERE REGEXP_REPLACE(COALESCE(cpf, ''), '\\D', '', 'g') = %s
+             {filtro_clinica}
              LIMIT 1
             """,
-            (cpf_digits,),
+            params,
         )
 
         row = cur.fetchone()
@@ -997,16 +1140,22 @@ def resolve_paciente(conn, paciente_id: str | None, paciente_texto: str | None):
             }
 
     nome = txt.split("(")[0].strip()
+
     if nome:
+        params = [f"{nome}%"]
+        if filtro_clinica:
+            params.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT id, nome, COALESCE(cpf, '') AS cpf
               FROM pacientes
              WHERE nome ILIKE %s
+             {filtro_clinica}
              ORDER BY nome
              LIMIT 1
             """,
-            (f"{nome}%",),
+            params,
         )
 
         row = cur.fetchone()
@@ -1042,13 +1191,22 @@ def sync_today_agenda_to_fila(conn) -> None:
     ensure_fila_table(conn)
     ensure_atendimentos_schema(conn)
 
+    clinica_id = current_clinica_id()
     cur = conn.cursor()
     hoje = today_iso()
 
-    cols = table_columns(conn, "agendamentos")
-    has_prof_cpf = "profissional_cpf" in cols
+    cols_ag = table_columns(conn, "agendamentos")
+    has_prof_cpf = "profissional_cpf" in cols_ag
+    has_ag_clinica = "clinica_id" in cols_ag
 
     prof_cpf_expr = "TRIM(COALESCE(profissional_cpf, '')) AS prof_cpf" if has_prof_cpf else "'' AS prof_cpf"
+
+    filtro_ag = ""
+    params_ag = [hoje]
+
+    if has_ag_clinica and clinica_id:
+        filtro_ag = "AND clinica_id = %s"
+        params_ag.append(clinica_id)
 
     cur.execute(
         f"""
@@ -1060,9 +1218,10 @@ def sync_today_agenda_to_fila(conn) -> None:
             TO_CHAR(inicio, 'HH24:MI') AS hora_ini
         FROM agendamentos
         WHERE DATE(inicio) = %s
+        {filtro_ag}
         ORDER BY hora_ini ASC, profissional ASC, paciente ASC
         """,
-        (hoje,),
+        params_ag,
     )
 
     ag_rows = cur.fetchall() or []
@@ -1083,44 +1242,62 @@ def sync_today_agenda_to_fila(conn) -> None:
         if not pac_id or not prof_id:
             continue
 
+        filtro_at = ""
+        params_at = [pac_id, hoje]
+
+        if has_column(conn, "atendimentos", "clinica_id") and clinica_id:
+            filtro_at = "AND clinica_id = %s"
+            params_at.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT 1
               FROM atendimentos
              WHERE paciente_id = %s
                AND data_atendimento = %s
+               {filtro_at}
              LIMIT 1
             """,
-            (pac_id, hoje),
+            params_at,
         )
+
         if cur.fetchone():
             continue
 
+        filtro_fila = ""
+        params_fila = [hora, pac_id, prof_id, hoje]
+
+        if has_column(conn, "fila_atendimentos", "clinica_id") and clinica_id:
+            filtro_fila = "AND clinica_id = %s"
+            params_fila.append(clinica_id)
+
         cur.execute(
-            """
+            f"""
             SELECT 1
               FROM fila_atendimentos
              WHERE hora = %s
                AND paciente_id = %s
                AND profissional_id = %s
                AND DATE(created_at) = %s
+               {filtro_fila}
              LIMIT 1
             """,
-            (hora, pac_id, prof_id, hoje),
+            params_fila,
         )
+
         if cur.fetchone():
             continue
 
         cur.execute(
             """
             INSERT INTO fila_atendimentos
-                (hora, paciente_id, paciente_nome, profissional_id, tipo, prioridade, obs, created_at, origem, agenda_id)
-            SELECT %s, id, nome, %s, 'Individual', 'verde', '', CURRENT_TIMESTAMP, 'agenda', %s
+                (clinica_id, hora, paciente_id, paciente_nome, profissional_id, tipo, prioridade, obs, created_at, origem, agenda_id)
+            SELECT %s, %s, id, nome, %s, 'Individual', 'verde', '', CURRENT_TIMESTAMP, 'agenda', %s
               FROM pacientes
              WHERE id = %s
              LIMIT 1
             """,
-            (hora, prof_id, aid, pac_id),
+            (clinica_id, hora, prof_id, aid, pac_id),
         )
 
     conn.commit()

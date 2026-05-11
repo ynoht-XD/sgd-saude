@@ -5,10 +5,39 @@ import re
 from datetime import date
 from urllib.parse import quote_plus
 
-from flask import request, render_template, jsonify, redirect, url_for
+from flask import request, render_template, jsonify, redirect, url_for, session, abort
 
 from . import cadastro_bp
 from db import conectar_db
+
+try:
+    from admin.modulos import require_permission
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+try:
+    from log import registrar_log, log_erro
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+
+
+# =============================================================================
+# Helpers de contexto
+# =============================================================================
+
+def _clinica_id_atual() -> int:
+    clinica_id = session.get("clinica_id")
+    if not clinica_id:
+        abort(403)
+    return int(clinica_id)
+
+
+def _usuario_id_atual():
+    return session.get("usuario_id") or session.get("user_id")
 
 
 # =============================================================================
@@ -114,10 +143,7 @@ def _parse_laudos_list(raw) -> list[dict]:
             continue
         vistos.add(chave)
 
-        normalizados.append({
-            "codigo": codigo,
-            "descricao": descricao,
-        })
+        normalizados.append({"codigo": codigo, "descricao": descricao})
 
     return normalizados
 
@@ -149,6 +175,7 @@ def _coletar_laudos_form(form) -> str:
 
 def _upperize_payload(dados: dict) -> dict:
     out = {}
+
     for k, v in (dados or {}).items():
         if k in _UPPER_FIELDS:
             out[k] = _to_upper(v)
@@ -164,6 +191,8 @@ def _upperize_payload(dados: dict) -> dict:
     out["admissao"] = _normalize_admissao(out.get("admissao"))
     out["cep"] = only_digits(out.get("cep"))[:8]
     out["codigo_ibge"] = only_digits(out.get("codigo_ibge"))
+    out["cpf"] = only_digits(out.get("cpf"))[:11]
+    out["cns"] = only_digits(out.get("cns"))
     out["laudos_json"] = _parse_laudos_payload(out.get("laudos_json"))
 
     return out
@@ -181,6 +210,7 @@ def _build_redirect_url(dados: dict, last_id: int) -> str:
         return f"{base}?prontuario={quote_plus(pront)}"
     if cpf:
         return f"{base}?cpf={quote_plus(cpf)}"
+
     try:
         return url_for("pacientes.visualizar_paciente", id=last_id)
     except Exception:
@@ -188,7 +218,7 @@ def _build_redirect_url(dados: dict, last_id: int) -> str:
 
 
 # =============================================================================
-# HELPERS POSTGRES
+# Helpers PostgreSQL
 # =============================================================================
 
 def _conn():
@@ -218,6 +248,7 @@ def _fetchall_dicts(cur):
     rows = cur.fetchall() or []
     out = []
     cols = [c[0] for c in cur.description] if cur.description else []
+
     for row in rows:
         if isinstance(row, dict):
             out.append(dict(row))
@@ -226,40 +257,31 @@ def _fetchall_dicts(cur):
                 out.append(dict(row))
             except Exception:
                 out.append(dict(zip(cols, row)))
+
     return out
 
 
-# =============================================================================
-# MIGRATION / SCHEMA
-# =============================================================================
-
 def _has_table(conn, table: str) -> bool:
     cur = conn.cursor()
-    cur.execute(
-        """
+    cur.execute("""
         SELECT 1
           FROM information_schema.tables
          WHERE table_schema = 'public'
            AND table_name = %s
          LIMIT 1;
-        """,
-        (table,),
-    )
+    """, (table,))
     return cur.fetchone() is not None
 
 
 def _table_columns(conn, table: str) -> set[str]:
     cur = conn.cursor()
-    cur.execute(
-        """
+    cur.execute("""
         SELECT column_name
           FROM information_schema.columns
          WHERE table_schema = 'public'
            AND table_name = %s
          ORDER BY ordinal_position;
-        """,
-        (table,),
-    )
+    """, (table,))
     return {r["column_name"] for r in _fetchall_dicts(cur)}
 
 
@@ -269,51 +291,66 @@ def _add_col(conn, table: str, col: str, ddl: str) -> None:
     conn.commit()
 
 
+# =============================================================================
+# Migration / Schema
+# =============================================================================
+
 def ensure_paciente_laudos_schema(conn) -> None:
     cur = conn.cursor()
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS paciente_laudos (
             id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
             paciente_id INTEGER NOT NULL,
             cid_codigo TEXT NOT NULL,
             cid_descricao TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+        );
+    """)
+
+    cur.execute("ALTER TABLE paciente_laudos ADD COLUMN IF NOT EXISTS clinica_id INTEGER;")
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_paciente_laudos_clinica
+        ON paciente_laudos(clinica_id);
     """)
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_paciente_laudos_paciente_id
-        ON paciente_laudos(paciente_id)
+        ON paciente_laudos(paciente_id);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_paciente_laudos_clinica_paciente
+        ON paciente_laudos(clinica_id, paciente_id);
     """)
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_paciente_laudos_cid_codigo
-        ON paciente_laudos(cid_codigo)
+        ON paciente_laudos(cid_codigo);
     """)
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_paciente_laudos_cid_desc
-        ON paciente_laudos(cid_descricao)
+        ON paciente_laudos(cid_descricao);
     """)
 
     conn.commit()
 
 
 def ensure_pacientes_schema(conn) -> None:
-    """
-    Garante que a tabela pacientes exista e tenha todas as colunas usadas no cadastro.
-    """
     cur = conn.cursor()
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pacientes (
             id SERIAL PRIMARY KEY
-        )
+        );
     """)
     conn.commit()
 
-    # Base
+    _add_col(conn, "pacientes", "clinica_id", "INTEGER")
+
     _add_col(conn, "pacientes", "prontuario", "TEXT")
     _add_col(conn, "pacientes", "nome", "TEXT")
     _add_col(conn, "pacientes", "cns", "TEXT")
@@ -325,12 +362,10 @@ def ensure_pacientes_schema(conn) -> None:
     _add_col(conn, "pacientes", "admissao", "TEXT")
     _add_col(conn, "pacientes", "cpf", "TEXT")
 
-    # Dados pessoais
     _add_col(conn, "pacientes", "nis", "TEXT")
     _add_col(conn, "pacientes", "raca", "TEXT")
     _add_col(conn, "pacientes", "religiao", "TEXT")
 
-    # Endereço / CEP
     _add_col(conn, "pacientes", "logradouro", "TEXT")
     _add_col(conn, "pacientes", "codigo_logradouro", "TEXT")
     _add_col(conn, "pacientes", "numero_casa", "TEXT")
@@ -340,12 +375,10 @@ def ensure_pacientes_schema(conn) -> None:
     _add_col(conn, "pacientes", "cep", "TEXT")
     _add_col(conn, "pacientes", "codigo_ibge", "TEXT")
 
-    # Documentos
     _add_col(conn, "pacientes", "rg", "TEXT")
     _add_col(conn, "pacientes", "orgao_rg", "TEXT")
     _add_col(conn, "pacientes", "estado_civil", "TEXT")
 
-    # Família
     _add_col(conn, "pacientes", "mae", "TEXT")
     _add_col(conn, "pacientes", "cpf_mae", "TEXT")
     _add_col(conn, "pacientes", "rg_mae", "TEXT")
@@ -357,25 +390,24 @@ def ensure_pacientes_schema(conn) -> None:
     _add_col(conn, "pacientes", "rg_pai", "TEXT")
     _add_col(conn, "pacientes", "rg_ssp_pai", "TEXT")
 
-    # Contato
     _add_col(conn, "pacientes", "telefone1", "TEXT")
     _add_col(conn, "pacientes", "telefone2", "TEXT")
     _add_col(conn, "pacientes", "telefone3", "TEXT")
     _add_col(conn, "pacientes", "email", "TEXT")
 
-    # Responsável
     _add_col(conn, "pacientes", "responsavel", "TEXT")
     _add_col(conn, "pacientes", "cpf_responsavel", "TEXT")
     _add_col(conn, "pacientes", "rg_responsavel", "TEXT")
     _add_col(conn, "pacientes", "orgao_rg_responsavel", "TEXT")
 
-    # Laudos
     _add_col(conn, "pacientes", "laudos_json", "TEXT")
-
-    # Compatibilidade
     _add_col(conn, "pacientes", "cid", "TEXT")
     _add_col(conn, "pacientes", "cid2", "TEXT")
 
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_clinica_id ON pacientes(clinica_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_clinica_nome ON pacientes(clinica_id, nome);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_clinica_cpf ON pacientes(clinica_id, cpf);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_clinica_prontuario ON pacientes(clinica_id, prontuario);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_nome ON pacientes(nome);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_cpf ON pacientes(cpf);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pacientes_prontuario ON pacientes(prontuario);")
@@ -389,13 +421,10 @@ def ensure_pacientes_schema(conn) -> None:
 
 
 def _insert_paciente_safe(conn, dados: dict) -> int:
-    """
-    INSERT seguro:
-    - Usa apenas colunas que existem no banco.
-    """
     cols_exist = _table_columns(conn, "pacientes")
 
     desired_cols = [
+        "clinica_id",
         "prontuario", "nome", "cns", "status", "nascimento", "idade", "sexo", "mod",
         "nis", "raca", "religiao", "admissao",
         "logradouro", "codigo_logradouro", "numero_casa", "complemento",
@@ -409,6 +438,7 @@ def _insert_paciente_safe(conn, dados: dict) -> int:
     ]
 
     cols = [c for c in desired_cols if c in cols_exist]
+
     if not cols:
         raise RuntimeError("Tabela 'pacientes' sem colunas compatíveis para INSERT.")
 
@@ -421,27 +451,34 @@ def _insert_paciente_safe(conn, dados: dict) -> int:
     cur = conn.cursor()
     cur.execute(sql, vals)
     row = cur.fetchone()
+
     return int(row[0] if not isinstance(row, dict) else row["id"])
 
 
-def _sync_paciente_laudos(conn, paciente_id: int, laudos_json: str) -> None:
-    """
-    Sincroniza a tabela relacional paciente_laudos.
-    """
+def _sync_paciente_laudos(conn, paciente_id: int, laudos_json: str, clinica_id: int) -> None:
     laudos = _parse_laudos_list(laudos_json)
 
     cur = conn.cursor()
-    cur.execute("DELETE FROM paciente_laudos WHERE paciente_id = %s;", (paciente_id,))
+    cur.execute(
+        "DELETE FROM paciente_laudos WHERE paciente_id = %s AND clinica_id = %s;",
+        (paciente_id, clinica_id),
+    )
 
     if laudos:
         cur.executemany("""
-            INSERT INTO paciente_laudos (paciente_id, cid_codigo, cid_descricao)
-            VALUES (%s, %s, %s)
+            INSERT INTO paciente_laudos (
+                clinica_id,
+                paciente_id,
+                cid_codigo,
+                cid_descricao
+            )
+            VALUES (%s, %s, %s, %s);
         """, [
             (
+                clinica_id,
                 paciente_id,
                 item.get("codigo", ""),
-                item.get("descricao", "")
+                item.get("descricao", ""),
             )
             for item in laudos
             if (item.get("codigo") or "").strip() or (item.get("descricao") or "").strip()
@@ -453,12 +490,10 @@ def _sync_paciente_laudos(conn, paciente_id: int, laudos_json: str) -> None:
 # =============================================================================
 
 @cadastro_bp.route("/api/cep/buscar")
+@require_permission("cadastro", "ver")
 def buscar_cep():
-    """
-    Busca CEP exato na base local cep_ibge.
-    Retorna município e código IBGE para preencher o cadastro.
-    """
     cep = only_digits(request.args.get("cep"))[:8]
+
     if len(cep) != 8:
         return jsonify({"ok": False, "mensagem": "CEP inválido."}), 400
 
@@ -468,20 +503,23 @@ def buscar_cep():
 
             cur = conn.cursor()
             cur.execute("""
-                SELECT
-                    cep,
-                    ibge,
-                    municipio,
-                    coduf,
-                    codmunicip
+                SELECT cep, ibge, municipio, coduf, codmunicip
                   FROM cep_ibge
                  WHERE REGEXP_REPLACE(COALESCE(cep, ''), '[^0-9]', '', 'g') = %s
-                 LIMIT 1
+                 LIMIT 1;
             """, (cep,))
             row = _fetchone_dict(cur)
 
         if not row:
             return jsonify({"ok": False, "mensagem": "CEP não encontrado."}), 404
+
+        registrar_log(
+            modulo="cadastro",
+            acao="buscar_cep",
+            entidade="cep_ibge",
+            descricao="Buscou CEP no cadastro.",
+            detalhes={"cep": cep, "encontrado": True},
+        )
 
         return jsonify({
             "ok": True,
@@ -493,17 +531,17 @@ def buscar_cep():
                 "codmunicip": row["codmunicip"] or "",
             }
         })
+
     except Exception as e:
+        log_erro("cadastro", e, entidade="cep_ibge", descricao="Erro ao buscar CEP.", detalhes={"cep": cep})
         return jsonify({"ok": False, "mensagem": str(e)}), 500
 
 
 @cadastro_bp.route("/api/cids/buscar")
+@require_permission("cadastro", "ver")
 def buscar_cids():
-    """
-    Busca CIDs para o bloco 'Laudos'.
-    Pesquisa por código ou descrição.
-    """
     q = (request.args.get("q") or "").strip()
+
     if len(q) < 2:
         return jsonify({"ok": True, "items": []})
 
@@ -515,16 +553,14 @@ def buscar_cids():
 
             cur = conn.cursor()
             cur.execute("""
-                SELECT
-                    co_cid,
-                    no_cid
+                SELECT co_cid, no_cid
                   FROM cid_catalogo
                  WHERE co_cid ILIKE %s
                     OR UPPER(COALESCE(no_cid, '')) ILIKE %s
                  ORDER BY
                     CASE WHEN co_cid = %s THEN 0 ELSE 1 END,
                     co_cid ASC
-                 LIMIT 20
+                 LIMIT 20;
             """, (f"%{q_up}%", f"%{q_up}%", q_up))
             rows = _fetchall_dicts(cur)
 
@@ -532,13 +568,23 @@ def buscar_cids():
             {
                 "codigo": r["co_cid"] or "",
                 "descricao": r["no_cid"] or "",
-                "label": f"{r['co_cid']} - {r['no_cid']}"
+                "label": f"{r['co_cid']} - {r['no_cid']}",
             }
             for r in rows
         ]
 
+        registrar_log(
+            modulo="cadastro",
+            acao="buscar_cid",
+            entidade="cid_catalogo",
+            descricao="Buscou CID no cadastro.",
+            detalhes={"q": q, "total": len(items)},
+        )
+
         return jsonify({"ok": True, "items": items})
+
     except Exception as e:
+        log_erro("cadastro", e, entidade="cid_catalogo", descricao="Erro ao buscar CID.", detalhes={"q": q})
         return jsonify({"ok": False, "mensagem": str(e)}), 500
 
 
@@ -547,17 +593,35 @@ def buscar_cids():
 # =============================================================================
 
 @cadastro_bp.route("/cadastro", methods=["GET"])
+@require_permission("cadastro", "ver")
 def cadastrar_paciente():
     hoje = date.today().isoformat()
-    return render_template("cadastro.html", admissao_sugestao=hoje)
+
+    registrar_log(
+        modulo="cadastro",
+        acao="visualizar",
+        entidade="pacientes",
+        descricao="Abriu tela de cadastro de paciente.",
+        detalhes={"clinica_id": session.get("clinica_id")},
+    )
+
+    return render_template(
+        "cadastro.html",
+        admissao_sugestao=hoje,
+        clinica_id=session.get("clinica_id"),
+        clinica_nome=session.get("clinica_nome"),
+    )
 
 
 @cadastro_bp.route("/cadastro", methods=["POST"])
+@require_permission("cadastro", "editar")
 def salvar_paciente():
     is_json = request.is_json
-    dados_raw = request.get_json(silent=True) if is_json else request.form.to_dict(flat=True)
+    clinica_id = _clinica_id_atual()
 
+    dados_raw = request.get_json(silent=True) if is_json else request.form.to_dict(flat=True)
     dados = _upperize_payload(dados_raw or {})
+    dados["clinica_id"] = clinica_id
 
     if is_json:
         dados["laudos_json"] = _parse_laudos_payload((dados_raw or {}).get("laudos_json"))
@@ -566,18 +630,25 @@ def salvar_paciente():
 
     try:
         with _conn() as conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
             ensure_pacientes_schema(conn)
 
             cep = only_digits(dados.get("cep"))[:8]
+
             if cep and _has_table(conn, "cep_ibge"):
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT ibge, municipio
                       FROM cep_ibge
                      WHERE REGEXP_REPLACE(COALESCE(cep, ''), '[^0-9]', '', 'g') = %s
-                     LIMIT 1
+                     LIMIT 1;
                 """, (cep,))
                 row_cep = _fetchone_dict(cur)
+
                 if row_cep:
                     if not (dados.get("municipio") or "").strip():
                         dados["municipio"] = (row_cep["municipio"] or "").strip().upper()
@@ -588,13 +659,29 @@ def salvar_paciente():
             dados["cid"] = laudos_lista[0]["codigo"] if len(laudos_lista) > 0 else ""
             dados["cid2"] = laudos_lista[1]["codigo"] if len(laudos_lista) > 1 else ""
 
-            print("📦 Dados recebidos (normalizados):", dados)
-
             last_id = _insert_paciente_safe(conn, dados)
-
-            _sync_paciente_laudos(conn, last_id, dados.get("laudos_json"))
+            _sync_paciente_laudos(conn, last_id, dados.get("laudos_json"), clinica_id)
 
             conn.commit()
+
+        registrar_log(
+            modulo="cadastro",
+            acao="criar",
+            entidade="pacientes",
+            entidade_id=last_id,
+            descricao="Paciente cadastrado.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "paciente_id": last_id,
+                "nome": dados.get("nome"),
+                "cpf": dados.get("cpf"),
+                "cns": dados.get("cns"),
+                "prontuario": dados.get("prontuario"),
+                "mod": dados.get("mod"),
+                "cid": dados.get("cid"),
+                "cid2": dados.get("cid2"),
+            },
+        )
 
         redirect_url = _build_redirect_url(dados, last_id)
 
@@ -609,8 +696,20 @@ def salvar_paciente():
         return redirect(redirect_url, code=303)
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log_erro(
+            "cadastro",
+            e,
+            entidade="pacientes",
+            descricao="Erro ao cadastrar paciente.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "nome": dados.get("nome"),
+                "cpf": dados.get("cpf"),
+                "cns": dados.get("cns"),
+            },
+        )
+
         if is_json:
             return jsonify({"status": "erro", "mensagem": str(e)}), 500
+
         return jsonify({"status": "erro", "mensagem": str(e)}), 500

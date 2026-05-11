@@ -1,565 +1,595 @@
 /* ==========================================================
-   SGD · Pacientes — Cards + Filtros (3 cards lado a lado)
-   Cabeçalho do card em 3 linhas:
-   1) Nº + Nome
-   2) Modalidade + Status
-   3) Ações (horizontal)
+   SGD · Pacientes — Cards + Filtros
    Arquivo: pacientes.css
    ========================================================== */
 
-:root {
-  --bg: #f7f9fc;
-  --card: #ffffff;
-  --text: #0f172a;
-  --muted: #6b7280;
-  --line: #e5e7eb;
+:root{
+  --bg:#f7f9fc;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --line:#e5e7eb;
 
-  --primary: #1f6feb;
-  --primary-hover: #145cc9;
+  --primary:#2563eb;
+  --primary-hover:#1d4ed8;
 
-  --success: #28a745;
-  --success-hover: #1e7e34;
+  --green:#10b981;
+  --green-dark:#047857;
 
-  --danger: #dc3545;
-  --danger-hover: #b02a37;
+  --danger:#dc3545;
+  --warning:#ffc107;
+  --neutral:#64748b;
 
-  --warning: #ffc107;
-  --warning-hover: #e0a800;
+  --radius:18px;
+  --shadow:0 18px 45px rgba(15,23,42,.10);
+  --shadow-sm:0 8px 22px rgba(15,23,42,.07);
+  --focus:0 0 0 3px rgba(37,99,235,.18);
 
-  --neutral: #6c757d;
-  --neutral-hover: #5a6268;
-
-  --radius: 12px;
-
-  --shadow: 0 8px 26px rgba(2, 6, 23, 0.08);
-  --shadow-sm: 0 4px 14px rgba(2, 6, 23, 0.06);
-
-  --focus: 0 0 0 3px rgba(31, 111, 235, 0.18);
-
-  --chip-bg: #eef3ff;
-  --chip-text: #123a7a;
-
-  --chip-ok-bg: #e9f9ef;
-  --chip-ok-text: #166534;
+  --chip-bg:#eef3ff;
+  --chip-text:#123a7a;
+  --chip-ok-bg:#e9f9ef;
+  --chip-ok-text:#166534;
 }
 
-/* ===== Base ===== */
-body {
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+body{
+  font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  background:var(--bg);
+  color:var(--text);
 }
 
-/* container */
-.pacientes-container {
-  max-width: 1100px;
-  margin: 14px auto 22px;
-  padding: 12px;
+.pacientes-container{
+  max-width:1180px;
+  margin:14px auto 24px;
+  padding:12px;
 }
 
-/* ===== Filtros ===== */
-.filtros-form {
-  background-color: #f1f3f5;
-  padding: 12px 12px;
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
-  border: 1px solid rgba(229, 231, 235, 0.9);
+/* =========================
+   Filtros
+========================= */
+
+.filtros-form{
+  max-width:1180px;
+  margin:0 auto 14px;
+  background:rgba(255,255,255,.92);
+  padding:14px;
+  border-radius:22px;
+  box-shadow:var(--shadow-sm);
+  border:1px solid rgba(226,232,240,.95);
 }
 
-.filtros-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
+.filtros-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:9px;
+  margin-bottom:12px;
 }
 
 .filtros-grid input,
-.filtros-grid select {
-  padding: 7px 9px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 13px;
-  background: var(--card);
-  color: var(--text);
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.12s;
+.filtros-grid select{
+  padding:9px 11px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  font-size:13px;
+  background:#fff;
+  color:var(--text);
+  transition:border-color .2s,box-shadow .2s,transform .12s;
 }
 
-.filtros-grid input::placeholder {
-  color: rgba(107, 114, 128, 0.9);
+.filtros-grid input::placeholder{
+  color:rgba(100,116,139,.9);
 }
 
 .filtros-grid input:focus,
-.filtros-grid select:focus {
-  border-color: var(--primary);
-  box-shadow: var(--focus);
-  outline: none;
+.filtros-grid select:focus{
+  border-color:var(--primary);
+  box-shadow:var(--focus);
+  outline:none;
 }
 
-.filtros-botoes {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
+.filtros-botoes{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
 }
 
-.botao-filtrar {
-  background-color: var(--neutral);
-  color: #fff;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 800;
-  transition: background-color 0.2s, transform 0.12s;
+.botao-filtrar,
+.botao-exportar{
+  border:0;
+  padding:9px 14px;
+  border-radius:13px;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:900;
+  text-decoration:none;
+  transition:transform .12s,filter .2s;
 }
 
-.botao-filtrar:hover {
-  background-color: var(--neutral-hover);
+.botao-filtrar{
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  color:#fff;
 }
 
-.botao-filtrar:active {
-  transform: translateY(1px);
+.botao-exportar{
+  background:linear-gradient(135deg,#facc15,#f59e0b);
+  color:#1f2937;
 }
 
-.botao-exportar {
-  background-color: var(--warning);
-  color: #212529;
-  text-decoration: none;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 900;
-  transition: background-color 0.2s, transform 0.12s;
+.botao-filtrar:hover,
+.botao-exportar:hover{
+  filter:brightness(.96);
 }
 
-.botao-exportar:hover {
-  background-color: var(--warning-hover);
+.botao-filtrar:active,
+.botao-exportar:active{
+  transform:translateY(1px);
 }
 
-.botao-exportar:active {
-  transform: translateY(1px);
+/* =========================
+   Grid dos cards
+========================= */
+
+.cards-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+  align-items:start;
 }
 
-/* ==========================================================
-   CARDS (3 colunas)
-   ========================================================== */
+/* =========================
+   Card
+========================= */
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  align-items: start;
+.pac-card{
+  position:relative;
+  background:var(--card);
+  border:1px solid rgba(226,232,240,.95);
+  border-radius:22px;
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+  min-width:0;
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
 }
 
-/* Card base */
-.pac-card {
-  background: var(--card);
-  border: 1px solid rgba(229, 231, 235, 0.95);
-  border-radius: 14px;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
-  min-width: 0;
+.pac-card::before{
+  content:"";
+  display:block;
+  height:7px;
+  background:linear-gradient(90deg,#2563eb 0%,#06b6d4 48%,#10b981 100%);
 }
 
-.pac-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow);
-  border-color: rgba(31, 111, 235, 0.22);
+.pac-card:hover{
+  transform:translateY(-2px);
+  box-shadow:var(--shadow);
+  border-color:rgba(37,99,235,.25);
 }
 
-/* ==========================================================
-   CABEÇALHO (NOVO LAYOUT: 3 LINHAS)
-   ========================================================== */
-
-/* vira grid com 3 linhas */
-.pac-head {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: auto auto auto;
-  gap: 8px;
-  padding: 10px 12px 10px;
-  border-bottom: 1px solid rgba(229, 231, 235, 0.85);
-  background: linear-gradient(180deg, rgba(31, 111, 235, 0.05), rgba(255,255,255,0));
+.pac-card-clean{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:14px;
 }
 
-/* 1ª linha: nº + nome juntos */
-.pac-head-left {
-  display: flex;
-  align-items: center;        /* 👈 alinha nº com nome */
-  gap: 10px;
-  min-width: 0;
+/* =========================
+   Cabeçalho do card
+========================= */
+
+.pac-clean-head{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(148,163,184,.22);
 }
 
-/* badge */
-.pac-num-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 11px;
-  background: rgba(31, 111, 235, 0.12);
-  color: #123a7a;
-  font-weight: 900;
-  font-size: 12.5px;
-  border: 1px solid rgba(31, 111, 235, 0.18);
-  flex: 0 0 auto;
+.pac-clean-title{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  min-width:0;
 }
 
-/* “título” agora vira uma coluna e a gente “separa” badges em baixo */
-.pac-title {
-  display: flex;
-  flex-direction: column;
-  gap: 0;                     /* 👈 o espaçamento vai ser controlado pelo grid do head */
-  min-width: 0;
+.pac-clean-title h2{
+  margin:0;
+  font-size:1.08rem;
+  color:#0f172a;
+  line-height:1.2;
+  word-break:break-word;
 }
 
-/* nome com mais espaço */
-.pac-nome {
-  font-size: 15px;
-  font-weight: 950;
-  letter-spacing: 0.15px;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.pac-num-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:31px;
+  height:31px;
+  border-radius:12px;
+  background:linear-gradient(135deg,rgba(37,99,235,.14),rgba(16,185,129,.14));
+  color:#075985;
+  font-weight:950;
+  font-size:12px;
+  border:1px solid rgba(37,99,235,.18);
+  flex:0 0 auto;
 }
 
-/* 2ª linha: badges (modalidade + status) */
-.pac-badges {
-  grid-row: 2;
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+.pac-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  width:100%;
 }
 
-/* tira badges de dentro do fluxo do “left”, mas sem precisar mexer no HTML */
-.pac-head-left .pac-badges {
-  margin-left: 40px;          /* 👈 “alinha” badges com o começo do nome (30 badge + gap) */
+.form-inline{
+  display:inline;
+  margin:0;
 }
 
-/* 3ª linha: ações horizontal */
-.pac-actions {
-  grid-row: 3;
-  display: flex;
-  gap: 7px;
-  flex-wrap: nowrap;          /* 👈 mantém horizontal */
-  overflow-x: auto;           /* 👈 se faltar espaço, scroll suave ao invés de quebrar */
-  padding-bottom: 2px;
-  justify-content: flex-start;
+/* =========================
+   Botões
+========================= */
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 10px;
+  border-radius:13px;
+  border:1px solid transparent;
+  font-weight:950;
+  font-size:12.5px;
+  text-decoration:none;
+  cursor:pointer;
+  user-select:none;
+  transition:transform .12s,background-color .2s,border-color .2s,box-shadow .2s;
+  white-space:nowrap;
+  flex:0 0 auto;
 }
 
-/* scrollbar discreta no Chrome/Edge */
-.pac-actions::-webkit-scrollbar { height: 6px; }
-.pac-actions::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.12);
-  border-radius: 999px;
+.btn:active{
+  transform:translateY(1px);
 }
 
-/* ==========================================================
-   Chips / badges
-   ========================================================== */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 900;
-  letter-spacing: 0.2px;
-  border: 1px solid rgba(31, 111, 235, 0.16);
-  background: var(--chip-bg);
-  color: var(--chip-text);
+.btn-prontuario{
+  background:linear-gradient(135deg,#2563eb,#0891b2);
+  color:#fff;
 }
 
-.chip-status {
-  border-color: rgba(108, 117, 125, 0.25);
-  background: rgba(108, 117, 125, 0.10);
-  color: #374151;
+.btn-prontuario:hover{
+  filter:brightness(.96);
 }
 
-.chip-mod {
-  border-color: rgba(31, 111, 235, 0.22);
-  background: rgba(31, 111, 235, 0.12);
-  color: #123a7a;
+.btn-editar{
+  background:rgba(16,185,129,.12);
+  color:#065f46;
+  border-color:rgba(16,185,129,.28);
 }
 
-.chip-cbo {
-  border-color: rgba(14, 165, 233, 0.28);
-  background: rgba(14, 165, 233, 0.12);
-  color: #0b4f7a;
+.btn-editar:hover{
+  background:rgba(16,185,129,.18);
 }
 
-.muted {
-  color: var(--muted);
-  font-weight: 700;
-  margin-left: 6px;
-  font-size: 13px;
+.btn-excluir{
+  background:rgba(220,53,69,.12);
+  color:#7f1d1d;
+  border-color:rgba(220,53,69,.22);
 }
 
-/* ===== Ações ===== */
-.form-inline {
-  display: inline;
-  margin: 0;
+.btn-excluir:hover{
+  background:rgba(220,53,69,.18);
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 7px 9px;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  font-weight: 950;
-  font-size: 12.5px;
-  text-decoration: none;
-  cursor: pointer;
-  user-select: none;
-  transition: transform 0.12s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
-  white-space: nowrap;
-  flex: 0 0 auto; /* 👈 não encolhe */
+/* =========================
+   Linhas do card
+========================= */
+
+.pac-line{
+  display:grid;
+  gap:10px;
 }
 
-.btn:active {
-  transform: translateY(1px);
+.pac-line-1{
+  grid-template-columns:1fr;
 }
 
-.btn-prontuario {
-  background: var(--primary);
-  color: #fff;
-  border-color: rgba(0,0,0,0.05);
+.pac-line-2{
+  grid-template-columns:repeat(2,minmax(0,1fr));
 }
 
-.btn-prontuario:hover {
-  background: var(--primary-hover);
+.pac-line-3{
+  grid-template-columns:repeat(3,minmax(0,1fr));
 }
 
-.btn-editar {
-  background: rgba(40, 167, 69, 0.12);
-  color: #14532d;
-  border-color: rgba(40, 167, 69, 0.25);
+/* Nascimento e CID maiores; idade e sexo menores */
+.pac-line-4{
+  grid-template-columns:1.35fr .55fr .55fr 1.55fr;
 }
 
-.btn-editar:hover {
-  background: rgba(40, 167, 69, 0.18);
-  border-color: rgba(40, 167, 69, 0.35);
+.pac-line-therapy{
+  grid-template-columns:1.15fr .85fr;
 }
 
-.btn-excluir {
-  background: rgba(220, 53, 69, 0.12);
-  color: #7f1d1d;
-  border-color: rgba(220, 53, 69, 0.22);
+.kv{
+  min-width:0;
+  padding:10px 12px;
+  border-radius:15px;
+  background:#f8fafc;
+  border:1px solid rgba(226,232,240,.9);
 }
 
-.btn-excluir:hover {
-  background: rgba(220, 53, 69, 0.18);
-  border-color: rgba(220, 53, 69, 0.34);
+.kv .k{
+  display:block;
+  font-size:.68rem;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:#64748b;
+  margin-bottom:4px;
 }
 
-/* ==========================================================
-   Linhas internas
-   ========================================================== */
-
-.pac-row2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 10px 12px 8px;
+.kv .v{
+  display:block;
+  color:#0f172a;
+  font-size:.9rem;
+  font-weight:750;
+  line-height:1.25;
+  word-break:break-word;
 }
 
-.pac-col {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
+.kv-wide{
+  grid-column:1/-1;
 }
 
-.pac-row3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 0 12px 10px;
+/* =========================
+   Chips
+========================= */
+
+.chip{
+  display:inline-flex;
+  align-items:center;
+  max-width:100%;
+  padding:5px 9px;
+  border-radius:999px;
+  font-size:11.5px;
+  font-weight:900;
+  letter-spacing:.2px;
+  border:1px solid rgba(37,99,235,.16);
+  background:var(--chip-bg);
+  color:var(--chip-text);
+  line-height:1.2;
 }
 
-.pac-grid-info {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 10px;
-  padding: 10px 12px 10px;
-  border-top: 1px dashed rgba(229, 231, 235, 0.9);
+.chip-status{
+  border-color:rgba(100,116,139,.25);
+  background:rgba(100,116,139,.10);
+  color:#334155;
 }
 
-.kv {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
+.chip-mod{
+  border-color:rgba(37,99,235,.22);
+  background:rgba(37,99,235,.12);
+  color:#1e3a8a;
 }
 
-.kv .k {
-  font-size: 10.5px;
-  font-weight: 950;
-  color: rgba(107, 114, 128, 0.95);
-  text-transform: uppercase;
-  letter-spacing: 0.55px;
+.chip-prof{
+  margin:2px 3px 2px 0;
+  background:rgba(6,182,212,.12);
+  border-color:rgba(6,182,212,.28);
+  color:#155e75;
 }
 
-.kv .v {
-  font-size: 13.2px;
-  font-weight: 750;
-  color: var(--text);
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+.chip-cbo{
+  margin:2px 3px 2px 0;
+  border-color:rgba(16,185,129,.28);
+  background:rgba(16,185,129,.12);
+  color:#065f46;
 }
 
-.kv-wide {
-  grid-column: 1 / -1;
+.muted{
+  color:var(--muted);
+  font-weight:700;
+  margin-left:4px;
+  font-size:12.5px;
 }
 
-/* Inputs */
-.inp {
-  width: 100%;
-  padding: 8px 9px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--text);
-  font-size: 13.2px;
-  font-weight: 750;
-  transition: border-color 0.2s, box-shadow 0.2s;
+/* =========================
+   Inputs
+========================= */
+
+.inp{
+  width:100%;
+  padding:8px 9px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  color:var(--text);
+  font-size:13px;
+  font-weight:750;
+  transition:border-color .2s,box-shadow .2s;
 }
 
-.inp::placeholder {
-  color: rgba(107, 114, 128, 0.9);
-  font-weight: 650;
+.inp::placeholder{
+  color:rgba(100,116,139,.86);
+  font-weight:650;
 }
 
-.inp:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: var(--focus);
+.inp:focus{
+  outline:none;
+  border-color:var(--primary);
+  box-shadow:var(--focus);
 }
 
-.inp-sm {
-  padding: 7px 9px;
-  font-size: 12.8px;
+.inp-sm{
+  padding:7px 9px;
+  font-size:12.8px;
 }
 
-/* ==========================================================
-   Comorbidades / Projetos
-   ========================================================== */
-.pac-comorb {
-  padding: 10px 12px 12px;
-  border-top: 1px solid rgba(229, 231, 235, 0.85);
-  background: rgba(2, 6, 23, 0.012);
+/* =========================
+   Comorbidades colapsado
+========================= */
+
+.pac-collapse{
+  border:1px solid rgba(226,232,240,.95);
+  border-radius:17px;
+  background:#fff;
+  overflow:hidden;
 }
 
-.section-title {
-  font-weight: 1000;
-  font-size: 11px;
-  letter-spacing: 0.55px;
-  text-transform: uppercase;
-  color: rgba(107, 114, 128, 0.95);
-  margin-bottom: 8px;
+.pac-collapse summary{
+  cursor:pointer;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 14px;
+  background:linear-gradient(135deg,#f1f5f9,#ecfeff);
+  color:#0f172a;
+  font-weight:950;
 }
 
-.chips-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.pac-collapse summary::-webkit-details-marker{
+  display:none;
 }
 
-.chip-toggle {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  user-select: none;
+.pac-collapse summary::after{
+  content:"＋";
+  font-weight:950;
+  color:#2563eb;
 }
 
-.chip-check {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
+.pac-collapse[open] summary::after{
+  content:"−";
 }
 
-.chip-pick {
-  background: rgba(108, 117, 125, 0.10);
-  border-color: rgba(108, 117, 125, 0.22);
-  color: #374151;
-  transition: transform 0.12s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+.pac-collapse summary small{
+  color:#64748b;
+  font-size:.75rem;
+  font-weight:750;
 }
 
-.chip-toggle:hover .chip-pick {
-  transform: translateY(-0.5px);
+.chips-grid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  padding:12px;
 }
 
-.chip-toggle input:checked + .chip-pick {
-  background: var(--chip-ok-bg);
-  color: var(--chip-ok-text);
-  border-color: rgba(22, 101, 52, 0.28);
-  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.10);
+.chip-toggle{
+  display:inline-flex;
+  align-items:center;
+  cursor:pointer;
+  user-select:none;
 }
 
-.pac-notes {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.chip-check{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
 }
 
-/* ===== Estado vazio ===== */
-.pacientes-container p {
-  text-align: center;
-  color: var(--muted);
-  padding: 18px 0;
-  font-size: 14px;
+.chip-pick{
+  background:rgba(100,116,139,.10);
+  border-color:rgba(100,116,139,.22);
+  color:#334155;
+  transition:transform .12s,background-color .2s,border-color .2s,box-shadow .2s;
 }
 
-/* ==========================================================
-   Responsividade (grade de cards)
-   ========================================================== */
-@media (max-width: 1100px) {
-  .cards-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.chip-toggle:hover .chip-pick{
+  transform:translateY(-.5px);
+}
+
+.chip-toggle input:checked + .chip-pick{
+  background:var(--chip-ok-bg);
+  color:var(--chip-ok-text);
+  border-color:rgba(22,101,52,.28);
+  box-shadow:0 0 0 3px rgba(16,185,129,.10);
+}
+
+.pac-collapse-input{
+  margin:0 12px 12px;
+}
+
+/* =========================
+   Master
+========================= */
+
+.master-tools{
+  display:flex;
+  justify-content:flex-end;
+  margin:28px 0 8px;
+}
+
+.master-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:13px 18px;
+  border-radius:16px;
+  background:linear-gradient(135deg,#111827,#1e293b);
+  color:#fff;
+  text-decoration:none;
+  font-weight:950;
+  box-shadow:0 14px 34px rgba(15,23,42,.18);
+  transition:transform .12s,filter .2s;
+}
+
+.master-btn:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.04);
+}
+
+.pac-empty,
+.pacientes-container p{
+  padding:24px;
+  border-radius:18px;
+  background:#f8fafc;
+  color:#64748b;
+  text-align:center;
+  font-weight:750;
+}
+
+/* =========================
+   Responsividade
+========================= */
+
+@media(max-width:1100px){
+  .cards-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
 
-@media (max-width: 720px) {
-  .cards-grid {
-    grid-template-columns: 1fr;
+@media(max-width:900px){
+  .pac-line-4,
+  .pac-line-3,
+  .pac-line-2,
+  .pac-line-therapy{
+    grid-template-columns:1fr;
+  }
+
+  .master-tools{
+    justify-content:center;
+  }
+
+  .master-btn{
+    width:100%;
+    justify-content:center;
   }
 }
 
-/* ajustes internos do card */
-@media (max-width: 960px) {
-  /* mantém o cabeçalho em 3 linhas e só ajusta espaçamentos */
-  .pac-head-left .pac-badges {
-    margin-left: 0; /* no mobile não precisa alinhar com badge */
+@media(max-width:720px){
+  .cards-grid{
+    grid-template-columns:1fr;
   }
 
-  .pac-row2,
-  .pac-row3 {
-    grid-template-columns: 1fr;
-  }
-
-  .pac-grid-info {
-    grid-template-columns: 1fr;
-  }
-
-  .pac-notes {
-    grid-template-columns: 1fr;
-  }
-
-  .pac-nome {
-    white-space: normal;
+  .pacientes-container{
+    padding:10px;
   }
 }
 
-@media (max-width: 520px) {
-  .filtros-grid {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+@media(max-width:520px){
+  .filtros-grid{
+    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
   }
 }
-

@@ -1,282 +1,397 @@
 // ===========================================================
-// PTS — JS ÚNICO (Cadastro + Visualizar/Lista)
+// PTS — JS ÚNICO MODERNO
 // Arquivo: pts/static/js/pts.js
-//
-// ✅ Cadastro (pts.html)
-// - Autocomplete paciente (endpoint existente)
-// - Preenche campos e grava #paciente_id (obrigatório)
-// - Participantes (recomendado): autocomplete + chips + hidden ids
-// - Profissionais: só busca a partir do 3º caractere
-// - Mostra FUNÇÃO + CBO nas sugestões e chips
-//
-// ✅ Visualizar/Lista (pts_visualizar.html)
-// - UX: limpar filtros e ir ao topo (se existir)
-//
 // ===========================================================
-(() => {
-  // ---------------------------
-  // Helpers
-  // ---------------------------
-  const $  = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-  const on = (el, ev, fn, opts) => el && el.addEventListener(ev, fn, opts);
 
-  const debounce = (fn, ms = 220) => {
+(() => {
+  "use strict";
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  const on = (el, ev, fn, opts) => {
+    if (el) el.addEventListener(ev, fn, opts);
+  };
+
+  const safeTrim = (v) => (v ?? "").toString().trim();
+
+  const debounce = (fn, ms = 250) => {
     let t;
-    return (...a) => {
+    return (...args) => {
       clearTimeout(t);
-      t = setTimeout(() => fn(...a), ms);
+      t = setTimeout(() => fn(...args), ms);
     };
   };
 
-  function safeTrim(v) {
-    return (v ?? "").toString().trim();
-  }
+  const toast = (msg, type = "info") => {
+    let wrap = $("#ptsToastWrap");
 
-  function toISOFromBRorISO(d) {
-    const s = safeTrim(d);
-    if (!s) return { iso: "", vis: "" };
-
-    // ISO YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const [Y, M, D] = s.split("-");
-      return { iso: s, vis: `${D}/${M}/${Y}` };
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.id = "ptsToastWrap";
+      wrap.style.cssText = `
+        position:fixed;
+        right:18px;
+        bottom:18px;
+        z-index:9999;
+        display:grid;
+        gap:10px;
+        max-width:min(380px, calc(100vw - 28px));
+      `;
+      document.body.appendChild(wrap);
     }
 
-    // BR DD/MM/YYYY
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) {
-      const [, D, M, Y] = m;
-      return { iso: `${Y}-${M}-${D}`, vis: `${D}/${M}/${Y}` };
+    const el = document.createElement("div");
+    el.textContent = msg;
+    el.style.cssText = `
+      padding:12px 14px;
+      border-radius:16px;
+      font-weight:800;
+      color:#0f172a;
+      background:#fff;
+      border:1px solid #e2e8f0;
+      box-shadow:0 18px 42px rgba(15,23,42,.16);
+    `;
+
+    if (type === "success") {
+      el.style.background = "#d1fae5";
+      el.style.borderColor = "rgba(16,185,129,.35)";
+      el.style.color = "#065f46";
     }
 
-    return { iso: "", vis: s };
-  }
+    if (type === "error") {
+      el.style.background = "#fee2e2";
+      el.style.borderColor = "rgba(239,68,68,.35)";
+      el.style.color = "#991b1b";
+    }
 
-  function buildURL(base, params = {}) {
+    wrap.appendChild(el);
+
+    setTimeout(() => {
+      el.style.opacity = "0";
+      el.style.transform = "translateY(6px)";
+      el.style.transition = ".2s ease";
+      setTimeout(() => el.remove(), 220);
+    }, 2800);
+  };
+
+  const escapeHTML = (v) =>
+    safeTrim(v)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+
+  const buildURL = (base, params = {}) => {
     const u = new URL(base, window.location.origin);
     Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && String(v).trim() !== "") {
+      if (v !== undefined && v !== null && safeTrim(v) !== "") {
         u.searchParams.set(k, v);
       }
     });
     return u.toString();
-  }
+  };
 
   async function safeJSON(url) {
-    const r = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
-    if (!r.ok) return null;
+    const r = await fetch(url, {
+      headers: {
+        "X-Requested-With": "fetch",
+        "Accept": "application/json",
+      },
+    });
+
+    if (!r.ok) {
+      console.warn("[PTS] Requisição falhou:", r.status, url);
+      return null;
+    }
+
     return r.json();
   }
 
   function hideBox(box) {
     if (!box) return;
+
     box.innerHTML = "";
     box.style.display = "none";
+
+    const field = box.closest(".field");
+
+    if (field) {
+      field.classList.remove("autocomplete-open");
+    }
   }
 
-  // ---------------------------
-  // Config (data-attrs)
-  // ---------------------------
+  function showLoading(box, text = "Buscando...") {
+    if (!box) return;
+    box.innerHTML = `<div class="sugg-item"><div><div class="title">${text}</div></div></div>`;
+    box.style.display = "block";
+
+    const field = box.closest(".field");
+
+    if (field) {
+      field.classList.add("autocomplete-open");
+    }
+  }
+
+  function normalizeDate(v) {
+    const s = safeTrim(v);
+    if (!s) return { iso: "", br: "" };
+
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+      const iso = s.slice(0, 10);
+      const [y, m, d] = iso.split("-");
+      return { iso, br: `${d}/${m}/${y}` };
+    }
+
+    const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (br) {
+      const [, d, m, y] = br;
+      return { iso: `${y}-${m}-${d}`, br: `${d}/${m}/${y}` };
+    }
+
+    return { iso: "", br: s };
+  }
+
+  // ===========================================================
+  // CONFIG
+  // ===========================================================
+
   const api = $("#ptsApi");
 
-  // Pacientes (autocomplete) — endpoint atendimentos
   const urlSugestoesPaciente =
     api?.dataset?.urlSugestoes ||
-    "/atendimentos/api/sugestoes_pacientes"; // ?termo=
+    "/atendimentos/api/sugestoes_pacientes";
 
-  // Profissionais (autocomplete) — endpoint PTS
   const urlProfissionais =
     api?.dataset?.urlProfissionais ||
-    "/pts/api/profissionais"; // ?q=
+    "/pts/api/profissionais";
 
-  // Legacy (opcional)
   const urlProfissionaisLegacy =
     api?.dataset?.urlProfissionaisLegacy ||
     "/buscar_profissionais_pec";
 
-  // ---------------------------
-  // Detecta página
-  // ---------------------------
   const formCadastro = $("#formPTS");
   const isCadastro = !!formCadastro;
 
-  const formFiltros = $("#formPtsFiltros");
   const isLista =
+    !!$("#formPtsFiltros") ||
     !!$("#tblPtsLista") ||
-    !!formFiltros ||
     document.body?.classList?.contains("pts-lista");
 
   // ===========================================================
-  // 1) CADASTRO
+  // CADASTRO
   // ===========================================================
+
   if (isCadastro) {
-    // ---------------------------
-    // Paciente (campos)
-    // ---------------------------
     const nome = $("#nome_paciente");
-    const box = $("#sugestoes_paciente");
+    const boxPaciente = $("#sugestoes_paciente");
+
+    const hidPacienteId = $("#paciente_id");
 
     const iNascHidden = $("#data_nascimento");
-    const iNascVis    = $("#data_nascimento_visivel");
-    const iPront      = $("#prontuario");
-    const iCns        = $("#cns");
-    const iMae        = $("#nome_mae");
-    const iSexo       = $("#sexo");
-    const iRaca       = $("#raca");
-    const iEnd        = $("#endereco");
-    const iNum        = $("#numero");
-    const iBairro     = $("#bairro");
-    const iCep        = $("#cep");
-    const iCpf        = $("#cpf");
+    const iNascVis = $("#data_nascimento_visivel");
+    const iPront = $("#prontuario");
+    const iCns = $("#cns");
+    const iMae = $("#nome_mae");
+    const iSexo = $("#sexo");
+    const iRaca = $("#raca");
+    const iEnd = $("#endereco");
+    const iNum = $("#numero");
+    const iBairro = $("#bairro");
+    const iCep = $("#cep");
+    const iCpf = $("#cpf");
     const indicadorPaciente = $("#indicadorPaciente");
 
-    const hidPacienteId = $("#paciente_id"); // 🔥 obrigatório para salvar
-
-    const btnLimpar   = $("#btnLimpar");
+    const btnLimpar = $("#btnLimpar");
     const btnImprimir = $("#btnImprimir");
 
-    // ---------------------------
-    // Participantes (modo chips)
-    // ---------------------------
-    const inpPart   = $("#participantesInput");
-    const boxPart   = $("#participantesSugestoes");
+    const inpPart = $("#participantesInput");
+    const boxPart = $("#participantesSugestoes");
     const chipsWrap = $("#chipsParticipantes");
     const hiddenIds = $("#participantesIds");
 
-    // Fallback antigo (linhas)
-    const lista = $("#lista-participantes");
-    const btnAdd = $("#btnAddParticipante");
+    const listaLegacy = $("#lista-participantes");
+    const btnAddLegacy = $("#btnAddParticipante");
 
-    // Estado
-    let PARTICIPANTES = []; // [{id, nome, cbo, funcao}]
-    let lastProfItems = []; // cache do dropdown (pra Enter)
+    let pacienteSelecionado = null;
+    let PARTICIPANTES = [];
+    let lastProfItems = [];
+    let PROFISSIONAIS_LEGACY = [];
 
-    // ---------------------------
-    // PACIENTES
-    // ---------------------------
+    function limparPaciente() {
+      pacienteSelecionado = null;
+
+      if (hidPacienteId) hidPacienteId.value = "";
+      if (iNascHidden) iNascHidden.value = "";
+      if (iNascVis) iNascVis.value = "";
+      if (iPront) iPront.value = "";
+      if (iCns) iCns.value = "";
+      if (iMae) iMae.value = "";
+      if (iSexo) iSexo.value = "";
+      if (iRaca) iRaca.value = "";
+      if (iEnd) iEnd.value = "";
+      if (iNum) iNum.value = "";
+      if (iBairro) iBairro.value = "";
+      if (iCep) iCep.value = "";
+      if (iCpf) iCpf.value = "";
+
+      if (indicadorPaciente) {
+        indicadorPaciente.textContent = "Nenhum paciente selecionado";
+        indicadorPaciente.classList.remove("ok");
+      }
+    }
+
     async function buscarPacientes(q) {
-      const url = buildURL(urlSugestoesPaciente, { termo: q });
-      const data = await safeJSON(url);
-      // teu endpoint geralmente retorna lista direta
-      return Array.isArray(data) ? data : (data?.items || []);
+      const data = await safeJSON(buildURL(urlSugestoesPaciente, { termo: q }));
+      return Array.isArray(data) ? data : (data?.items || data?.results || []);
     }
 
     function preencherPaciente(p) {
       if (!p) return;
 
-      // texto
+      pacienteSelecionado = {
+        id: p.id ? String(p.id) : "",
+        nome: safeTrim(p.nome),
+      };
+
       if (nome) nome.value = p.nome || "";
 
-      // datas
-      const { iso, vis } = toISOFromBRorISO(p.nascimento);
-      if (iNascHidden) iNascHidden.value = iso;
-      if (iNascVis)    iNascVis.value = vis;
+      const data = normalizeDate(p.nascimento);
+      if (iNascHidden) iNascHidden.value = data.iso;
+      if (iNascVis) iNascVis.value = data.br;
 
-      // demais
-      if (iPront)  iPront.value = p.prontuario || "";
-      if (iCns)    iCns.value = p.cns || "";
-      if (iMae)    iMae.value = p.mae || p.nome_mae || "";
-      if (iSexo)   iSexo.value = p.sexo || "";
-      if (iRaca)   iRaca.value = p.raca || "";
-      if (iEnd)    iEnd.value = p.logradouro || p.endereco || "";
-      if (iNum)    iNum.value = p.numero || "";
+      if (iPront) iPront.value = p.prontuario || "";
+      if (iCns) iCns.value = p.cns || "";
+      if (iMae) iMae.value = p.mae || p.nome_mae || "";
+      if (iSexo) iSexo.value = p.sexo || "";
+      if (iRaca) iRaca.value = p.raca || "";
+      if (iEnd) iEnd.value = p.logradouro || p.endereco || "";
+      if (iNum) iNum.value = p.numero || "";
       if (iBairro) iBairro.value = p.bairro || "";
-      if (iCep)    iCep.value = p.cep || "";
-      if (iCpf)    iCpf.value = p.cpf || "";
+      if (iCep) iCep.value = p.cep || "";
+      if (iCpf) iCpf.value = p.cpf || "";
 
-      // 🔥 id do paciente (obrigatório)
       if (hidPacienteId) hidPacienteId.value = p.id ? String(p.id) : "";
 
-      // indicador
       if (indicadorPaciente) {
         indicadorPaciente.textContent = p.nome
-          ? `Paciente: ${p.nome}`
-          : "Nenhum paciente selecionado";
+          ? `Paciente selecionado: ${p.nome}`
+          : "Paciente selecionado";
+        indicadorPaciente.classList.add("ok");
       }
 
-      hideBox(box);
+      hideBox(boxPaciente);
+      toast("Paciente selecionado.", "success");
     }
 
     function renderSugestoesPaciente(items) {
-      if (!box) return;
-      box.innerHTML = "";
+      if (!boxPaciente) return;
+
+      boxPaciente.innerHTML = "";
 
       if (!items.length) {
-        box.style.display = "none";
+        hideBox(boxPaciente);
         return;
       }
 
       items.forEach((p) => {
-        const d = document.createElement("div");
-        d.className = "sugg-item";
-        d.setAttribute("role", "option");
-        d.innerHTML = `
-          <div class="title">${p.nome || ""}</div>
-          <div class="sub">
-            ${p.nascimento ? `Nasc.: ${p.nascimento}` : ""}
-            ${p.prontuario ? `&nbsp;• Pront.: ${p.prontuario}` : ""}
-            ${p.cid ? `&nbsp;• CID: ${p.cid}` : ""}
+        const div = document.createElement("div");
+        div.className = "sugg-item";
+        div.setAttribute("role", "option");
+
+        const nomeP = escapeHTML(p.nome || "Sem nome");
+        const nasc = escapeHTML(p.nascimento || "");
+        const pront = escapeHTML(p.prontuario || "");
+        const cid = escapeHTML(p.cid || "");
+        const cpf = escapeHTML(p.cpf || "");
+
+        div.innerHTML = `
+          <div>
+            <div class="title">${nomeP}</div>
+            <div class="sub">
+              ${nasc ? `Nasc.: ${nasc}` : ""}
+              ${pront ? ` • Pront.: ${pront}` : ""}
+              ${cid ? ` • CID: ${cid}` : ""}
+              ${cpf ? ` • CPF: ${cpf}` : ""}
+            </div>
           </div>
+          <span class="tag">Selecionar</span>
         `;
-        d.addEventListener("click", () => preencherPaciente(p));
-        box.appendChild(d);
+
+        div.addEventListener("click", () => preencherPaciente(p));
+        boxPaciente.appendChild(div);
       });
 
-      box.style.display = "block";
-    }
+      boxPaciente.style.display = "block";
 
-    async function onBuscaPaciente() {
-      if (!nome || !box) return;
-      const q = safeTrim(nome.value);
-      hideBox(box);
+      const field = boxPaciente.closest(".field");
 
-      // 🔥 paciente: mantém 3+ (igual estava)
-      if (q.length < 3) return;
-
-      try {
-        const items = await buscarPacientes(q);
-        renderSugestoesPaciente(items || []);
-      } catch (e) {
-        console.error("[PTS] erro buscar pacientes:", e);
+      if (field) {
+        field.classList.add("autocomplete-open");
       }
     }
 
-    on(nome, "input", debounce(onBuscaPaciente, 240));
+    const onBuscaPaciente = debounce(async () => {
+      if (!nome || !boxPaciente) return;
 
-    // se o usuário digitar algo manual e apagar, limpa o paciente_id
-    on(nome, "change", () => {
-      if (!hidPacienteId) return;
-      // se não veio de clique (id vazio), não deixa id velho “preso”
-      if (!hidPacienteId.value) return;
-      // regra simples: se texto não bater com indicador ou algo, zera
-      // (evita salvar com paciente errado)
-      // aqui a gente só mantém se tiver id
+      const q = safeTrim(nome.value);
+      hideBox(boxPaciente);
+
+      if (q.length < 3) return;
+
+      showLoading(boxPaciente, "Buscando pacientes...");
+
+      try {
+        const items = await buscarPacientes(q);
+        renderSugestoesPaciente(items);
+      } catch (e) {
+        console.error("[PTS] erro ao buscar pacientes:", e);
+        hideBox(boxPaciente);
+        toast("Erro ao buscar pacientes.", "error");
+      }
+    }, 260);
+
+    on(nome, "input", () => {
+      const digitado = safeTrim(nome.value);
+
+      if (
+        pacienteSelecionado &&
+        digitado &&
+        digitado !== pacienteSelecionado.nome
+      ) {
+        limparPaciente();
+      }
+
+      onBuscaPaciente();
     });
 
-    // fecha dropdown clicando fora
     on(document, "click", (e) => {
-      if (!box || !nome) return;
-      if (!box.contains(e.target) && e.target !== nome) hideBox(box);
+      if (!boxPaciente || !nome) return;
+      if (!boxPaciente.contains(e.target) && e.target !== nome) {
+        hideBox(boxPaciente);
+      }
     });
 
     // ===========================================================
-    // PROFISSIONAIS — CHIPS
+    // PARTICIPANTES
     // ===========================================================
+
     async function buscarProfissionais(q) {
-      const url = buildURL(urlProfissionais, { q });
-      const data = await safeJSON(url);
+      const data = await safeJSON(buildURL(urlProfissionais, { q }));
       const items = data?.items || data?.results || data;
       return Array.isArray(items) ? items : [];
     }
 
     function syncHiddenParticipantes() {
-      if (!hiddenIds) return;
-      hiddenIds.value = PARTICIPANTES.map((p) => p.id).join(",");
+      if (hiddenIds) {
+        hiddenIds.value = PARTICIPANTES.map((p) => p.id).join(",");
+      }
     }
 
     function renderChips() {
       if (!chipsWrap) return;
+
       chipsWrap.innerHTML = "";
 
       if (!PARTICIPANTES.length) {
@@ -290,16 +405,19 @@
         chip.type = "button";
         chip.className = "chip";
         chip.title = "Remover participante";
+
         chip.innerHTML = `
-          <span class="chip-name">${p.nome}</span>
-          ${p.funcao ? `<span class="chip-sub">${p.funcao}</span>` : ""}
-          ${p.cbo ? `<span class="chip-sub">CBO ${p.cbo}</span>` : ""}
+          <span class="chip-name">${escapeHTML(p.nome)}</span>
+          ${p.funcao ? `<span class="chip-sub">${escapeHTML(p.funcao)}</span>` : ""}
+          ${p.cbo ? `<span class="chip-sub">CBO ${escapeHTML(p.cbo)}</span>` : ""}
           <span class="chip-x">×</span>
         `;
+
         chip.addEventListener("click", () => {
           PARTICIPANTES = PARTICIPANTES.filter((x) => x.id !== p.id);
           renderChips();
         });
+
         chipsWrap.appendChild(chip);
       });
 
@@ -308,39 +426,49 @@
 
     function addParticipanteFromItem(item) {
       const id = Number(item?.id);
-      const nomeP = safeTrim(item?.nome || "");
-      const cboP = safeTrim(item?.cbo || "");
-      const funcP = safeTrim(item?.funcao || item?.funcao_sugerida || "");
+      const nomeP = safeTrim(item?.nome);
+      const cboP = safeTrim(item?.cbo);
+      const funcP = safeTrim(item?.ocupacao || item?.funcao || item?.funcao_sugerida);
 
       if (!id || !nomeP) return;
 
-      const already = PARTICIPANTES.some((x) => x.id === id);
-      if (already) return;
+      if (PARTICIPANTES.some((x) => x.id === id)) {
+        toast("Esse profissional já foi adicionado.", "info");
+        return;
+      }
 
-      PARTICIPANTES.push({ id, nome: nomeP, cbo: cboP, funcao: funcP });
+      PARTICIPANTES.push({
+        id,
+        nome: nomeP,
+        cbo: cboP,
+        funcao: funcP,
+      });
+
       renderChips();
 
       if (inpPart) inpPart.value = "";
       hideBox(boxPart);
       inpPart?.focus();
+
+      toast("Participante adicionado.", "success");
     }
 
     function renderSugestoesProfissionais(items) {
       if (!boxPart) return;
-      boxPart.innerHTML = "";
 
+      boxPart.innerHTML = "";
       lastProfItems = Array.isArray(items) ? items : [];
 
       if (!lastProfItems.length) {
-        boxPart.style.display = "none";
+        hideBox(boxPart);
         return;
       }
 
       lastProfItems.forEach((p) => {
         const id = Number(p.id);
-        const nomeP = safeTrim(p.nome || "");
-        const cboP = safeTrim(p.cbo || "");
-        const funcaoP = safeTrim(p.funcao || p.funcao_sugerida || "");
+        const nomeP = safeTrim(p.nome);
+        const cboP = safeTrim(p.cbo);
+        const funcaoP = safeTrim(p.ocupacao || p.funcao || p.funcao_sugerida);
 
         if (!id || !nomeP) return;
 
@@ -348,76 +476,87 @@
 
         const div = document.createElement("div");
         div.className = "sugg-item";
+
         div.innerHTML = `
-          <div class="title">${nomeP}${already ? " (já adicionado)" : ""}</div>
-          <div class="sub">
-            ${funcaoP ? `Função: ${funcaoP}` : ""}
-            ${funcaoP && cboP ? ` &nbsp;•&nbsp; ` : ""}
-            ${cboP ? `CBO: ${cboP}` : ""}
+          <div>
+            <div class="title">
+              ${escapeHTML(nomeP)} ${already ? "<small>(já adicionado)</small>" : ""}
+            </div>
+            <div class="sub">
+              ${funcaoP ? `Função: ${escapeHTML(funcaoP)}` : ""}
+              ${funcaoP && cboP ? " • " : ""}
+              ${cboP ? `CBO: ${escapeHTML(cboP)}` : ""}
+            </div>
           </div>
+          <span class="tag">${already ? "OK" : "Add"}</span>
         `;
 
         div.addEventListener("click", () => {
-          if (already) return;
-          addParticipanteFromItem(p);
+          if (!already) addParticipanteFromItem(p);
         });
 
         boxPart.appendChild(div);
       });
 
       boxPart.style.display = "block";
+
+      const field = boxPart.closest(".field");
+
+      if (field) {
+        field.classList.add("autocomplete-open");
+      }
     }
 
-    async function onBuscaProfissional() {
+    const onBuscaProfissional = debounce(async () => {
       if (!inpPart || !boxPart) return;
 
       const q = safeTrim(inpPart.value);
       hideBox(boxPart);
 
-      // 🔥 PROFISSIONAIS: somente a partir do 3º caractere
       if (q.length < 3) return;
+
+      showLoading(boxPart, "Buscando profissionais...");
 
       try {
         const items = await buscarProfissionais(q);
         renderSugestoesProfissionais(items);
       } catch (e) {
-        console.warn("[PTS] erro buscar profissionais:", e);
+        console.error("[PTS] erro ao buscar profissionais:", e);
+        hideBox(boxPart);
+        toast("Erro ao buscar profissionais.", "error");
       }
-    }
+    }, 240);
 
-    on(inpPart, "input", debounce(onBuscaProfissional, 220));
+    on(inpPart, "input", onBuscaProfissional);
 
-    // Enter adiciona o primeiro resultado
     on(inpPart, "keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        if (lastProfItems && lastProfItems.length) {
-          addParticipanteFromItem(lastProfItems[0]);
-        }
+        const first = lastProfItems.find(
+          (p) => !PARTICIPANTES.some((x) => x.id === Number(p.id))
+        );
+        if (first) addParticipanteFromItem(first);
       }
-      if (e.key === "Escape") {
-        hideBox(boxPart);
-      }
+
+      if (e.key === "Escape") hideBox(boxPart);
     });
 
     on(document, "click", (e) => {
       if (!boxPart || !inpPart) return;
-      if (!boxPart.contains(e.target) && e.target !== inpPart) hideBox(boxPart);
+      if (!boxPart.contains(e.target) && e.target !== inpPart) {
+        hideBox(boxPart);
+      }
     });
 
-    // inicia chips
-    renderChips();
-
     // ===========================================================
-    // LEGACY (opcional) — linhas
+    // LEGACY OPCIONAL
     // ===========================================================
-    let PROFISSIONAIS_LEGACY = [];
 
     async function carregarProfissionaisLegacy() {
       try {
         const data = await safeJSON(urlProfissionaisLegacy);
         PROFISSIONAIS_LEGACY = Array.isArray(data) ? data : [];
-      } catch (e) {
+      } catch {
         PROFISSIONAIS_LEGACY = [];
       }
     }
@@ -427,18 +566,20 @@
       sel.name = name;
       sel.required = true;
       sel.className = "form-select";
-      sel.innerHTML = `<option value="">${placeholder || "Selecione"}</option>`;
+      sel.innerHTML = `<option value="">${escapeHTML(placeholder || "Selecione")}</option>`;
+
       opts.forEach((o) => {
         const op = document.createElement("option");
         op.value = o.value;
         op.textContent = o.label;
         sel.appendChild(op);
       });
+
       return sel;
     }
 
     function addParticipanteRowLegacy(prefill) {
-      if (!lista) return;
+      if (!listaLegacy) return;
 
       const row = document.createElement("div");
       row.className = "participant-row";
@@ -475,85 +616,90 @@
       row.appendChild(sNome);
       row.appendChild(sFunc);
       row.appendChild(btnDel);
-      lista.appendChild(row);
+      listaLegacy.appendChild(row);
     }
 
-    on(btnAdd, "click", async () => {
-      if (!lista) return;
+    on(btnAddLegacy, "click", async () => {
+      if (!listaLegacy) return;
+
       if (!PROFISSIONAIS_LEGACY.length) {
-        alert("Lista de profissionais ainda não carregada. Tentando novamente...");
+        toast("Carregando profissionais...", "info");
         await carregarProfissionaisLegacy();
       }
+
       addParticipanteRowLegacy();
     });
 
     // ===========================================================
-    // UTILIDADES
+    // BOTÕES / VALIDAÇÃO
     // ===========================================================
+
     on(btnLimpar, "click", () => {
       formCadastro.reset();
 
-      // limpa paciente_id
-      if (hidPacienteId) hidPacienteId.value = "";
+      limparPaciente();
 
-      if (indicadorPaciente) {
-        indicadorPaciente.textContent = "Nenhum paciente selecionado";
-      }
+      if (listaLegacy) listaLegacy.innerHTML = "";
 
-      if (lista) lista.innerHTML = "";
-
-      // limpa chips
       PARTICIPANTES = [];
+      lastProfItems = [];
+
       renderChips();
 
-      // limpa dropdowns
-      hideBox(box);
+      hideBox(boxPaciente);
       hideBox(boxPart);
 
       nome?.focus();
+
+      toast("Formulário limpo.", "success");
     });
 
     on(btnImprimir, "click", () => window.print());
 
-    // 🔥 validação do paciente_id (evita “preciso do ID”)
     on(formCadastro, "submit", (e) => {
       const pid = safeTrim(hidPacienteId?.value);
+
       if (!pid) {
         e.preventDefault();
-        alert("Selecione um paciente na lista (preciso do ID).");
+        toast("Selecione um paciente na lista antes de salvar.", "error");
         nome?.focus();
         return;
       }
 
-      // valida campos obrigatórios do seu form
-      const obrig = ["nome_paciente", "localizacao_territorial", "diagnostico_funcional"];
-      const falta = obrig.filter(
-        (n) => !formCadastro.elements[n] || !safeTrim(formCadastro.elements[n].value)
-      );
-      if (falta.length) {
+      const obrigatorios = [
+        "nome_paciente",
+        "localizacao_territorial",
+        "diagnostico_funcional",
+      ];
+
+      const faltando = obrigatorios.filter((name) => {
+        const el = formCadastro.elements[name];
+        return !el || !safeTrim(el.value);
+      });
+
+      if (faltando.length) {
         e.preventDefault();
-        alert("Preencha os campos obrigatórios do PTS.");
-        formCadastro.elements[falta[0]]?.focus();
+        toast("Preencha os campos obrigatórios do PTS.", "error");
+        formCadastro.elements[faltando[0]]?.focus();
         return;
       }
 
-      // garante sync final
       syncHiddenParticipantes();
     });
 
-    // Init
     (async function initCadastro() {
-      // legacy opcional
-      if (btnAdd && lista) {
+      renderChips();
+
+      if (btnAddLegacy && listaLegacy) {
         await carregarProfissionaisLegacy();
       }
-      renderChips();
     })();
   }
 
   // ===========================================================
-  // 5) LISTA / VISUALIZAR: UX
+  // LISTA / VISUALIZAR
   // ===========================================================
+
   if (isLista) {
     const btnClear = $("#btnPtsLimparFiltros");
     const btnGoTop = $("#btnPtsTopo");
@@ -566,6 +712,20 @@
     on(btnGoTop, "click", (e) => {
       e.preventDefault();
       window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    $$("input[name='competencia']").forEach((el) => {
+      on(el, "input", () => {
+        let v = el.value.replace(/[^\d-]/g, "");
+
+        if (/^\d{6}$/.test(v)) {
+          v = `${v.slice(0, 4)}-${v.slice(4)}`;
+        }
+
+        if (v.length > 7) v = v.slice(0, 7);
+
+        el.value = v;
+      });
     });
   }
 })();

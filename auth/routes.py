@@ -16,6 +16,14 @@ try:
 except ImportError:
     conectar_db = None
 
+try:
+    from log import log_login, log_logout, log_erro, registrar_log
+except Exception:
+    def log_login(*args, **kwargs): pass
+    def log_logout(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+    def registrar_log(*args, **kwargs): pass
+
 
 # ============================================================
 # MASTER
@@ -46,11 +54,6 @@ def _db():
 
 
 def _val(row, key: str, index: int = 0):
-    """
-    Compatibilidade:
-    - psycopg com dict_row retorna dict
-    - psycopg/psycopg2 comum retorna tuple
-    """
     if not row:
         return None
 
@@ -58,26 +61,6 @@ def _val(row, key: str, index: int = 0):
         return row.get(key)
 
     return row[index]
-
-
-def _table_exists(conn, table: str) -> bool:
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-              AND table_name = %s
-        ) AS existe;
-        """,
-        (table,),
-    )
-
-    row = cur.fetchone()
-    cur.close()
-
-    return bool(_val(row, "existe", 0))
 
 
 def _table_columns(conn, table: str) -> set[str]:
@@ -113,7 +96,7 @@ def _add_col(conn, table: str, col: str, ddl: str):
         return
 
     cur = conn.cursor()
-    cur.execute(f'ALTER TABLE {table} ADD COLUMN {col} {ddl};')
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl};")
     conn.commit()
     cur.close()
 
@@ -173,7 +156,7 @@ def _ensure_schema(conn):
         "municipio": "VARCHAR(120)",
         "uf": "VARCHAR(2)",
         "permissoes_json": "JSONB DEFAULT '{}'::jsonb",
-        "clinica_id": "INTEGER",
+        "clinica_id": "INTEGER DEFAULT 1",
         "perfil_id": "INTEGER",
         "is_master": "BOOLEAN DEFAULT FALSE",
         "is_superuser": "BOOLEAN DEFAULT FALSE",
@@ -191,13 +174,14 @@ def _ensure_schema(conn):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_role ON usuarios(role);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_active ON usuarios(is_active);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_clinica ON usuarios(clinica_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_master ON usuarios(is_master);")
 
     conn.commit()
     cur.close()
 
 
 # ============================================================
-# CLÍNICA PADRÃO
+# CLÍNICA PADRÃO / MATRIZ
 # ============================================================
 
 def _ensure_clinica_padrao(conn) -> int:
@@ -207,16 +191,37 @@ def _ensure_clinica_padrao(conn) -> int:
         """
         CREATE TABLE IF NOT EXISTS clinicas (
             id SERIAL PRIMARY KEY,
-            nome VARCHAR(180) NOT NULL,
-            documento VARCHAR(30),
-            ativo BOOLEAN DEFAULT TRUE,
+            nome VARCHAR(255) NOT NULL,
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
     )
 
-    cur.execute("SELECT id FROM clinicas ORDER BY id ASC LIMIT 1;")
+    conn.commit()
+    cur.close()
+
+    colunas = {
+        "nome_fantasia": "VARCHAR(255)",
+        "razao_social": "VARCHAR(255)",
+        "cnpj": "VARCHAR(30)",
+        "cnpj_digits": "VARCHAR(20)",
+        "documento": "VARCHAR(30)",
+        "ativo": "BOOLEAN DEFAULT TRUE",
+        "ativa": "BOOLEAN DEFAULT TRUE",
+        "is_matriz": "BOOLEAN DEFAULT FALSE",
+        "telefone": "VARCHAR(40)",
+        "email": "VARCHAR(255)",
+        "criado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "atualizado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    }
+
+    for coluna, ddl in colunas.items():
+        _add_col(conn, "clinicas", coluna, ddl)
+
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM clinicas WHERE id = 1 LIMIT 1;")
     row = cur.fetchone()
 
     if row:
@@ -224,18 +229,90 @@ def _ensure_clinica_padrao(conn) -> int:
     else:
         cur.execute(
             """
-            INSERT INTO clinicas (nome, documento, ativo)
-            VALUES (%s, %s, TRUE)
+            INSERT INTO clinicas (
+                id,
+                nome,
+                nome_fantasia,
+                razao_social,
+                ativo,
+                ativa,
+                is_matriz,
+                criado_em,
+                atualizado_em
+            )
+            VALUES (
+                1,
+                %s,
+                %s,
+                %s,
+                TRUE,
+                TRUE,
+                TRUE,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (id) DO NOTHING
             RETURNING id;
             """,
-            ("Clínica Principal", None),
+            ("Minha Empresa", "Minha Empresa", "Minha Empresa"),
         )
-        clinica_id = _val(cur.fetchone(), "id", 0)
+
+        row_insert = cur.fetchone()
+
+        if row_insert:
+            clinica_id = _val(row_insert, "id", 0)
+        else:
+            clinica_id = 1
+
+    cur.execute(
+        """
+        UPDATE clinicas
+        SET is_matriz = TRUE,
+            ativo = TRUE,
+            ativa = TRUE,
+            atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = 1;
+        """
+    )
+
+    cur.execute(
+        """
+        SELECT setval(
+            pg_get_serial_sequence('clinicas', 'id'),
+            COALESCE((SELECT MAX(id) FROM clinicas), 1),
+            TRUE
+        );
+        """
+    )
 
     conn.commit()
     cur.close()
 
     return int(clinica_id)
+
+
+def _get_nome_clinica(conn, clinica_id: int | None):
+    if not clinica_id:
+        return None
+
+    cur = conn.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT nome
+            FROM clinicas
+            WHERE id = %s
+            LIMIT 1;
+            """,
+            (clinica_id,),
+        )
+
+        row = cur.fetchone()
+        return _val(row, "nome", 0)
+
+    finally:
+        cur.close()
 
 
 # ============================================================
@@ -268,6 +345,7 @@ def _ensure_admin_exists():
             "agenda": ["*"],
             "atendimentos": ["*"],
             "admin": ["*"],
+            "clinica_config": ["*"],
         }
 
         cur = conn.cursor()
@@ -398,7 +476,9 @@ def _ensure_admin_exists():
     except Exception as e:
         if conn:
             conn.rollback()
+
         print("❌ ERRO ao seedar MASTER PostgreSQL:", repr(e))
+        log_erro("auth", e, descricao="Erro ao garantir usuário MASTER no login.")
 
     finally:
         if conn:
@@ -535,11 +615,32 @@ def _salvar_sessao(u: dict):
     session["email"] = usuario["email"]
     session["role"] = usuario["role"]
     session["profissional_id"] = usuario["profissional_id"]
-    session["clinica_id"] = usuario["clinica_id"]
     session["perfil_id"] = usuario["perfil_id"]
     session["cbo"] = usuario["cbo"]
     session["is_master"] = usuario["is_master"]
     session["is_superuser"] = usuario["is_superuser"]
+
+    if usuario["is_master"] or usuario["is_superuser"]:
+        session["ambiente_definido"] = False
+        session["master_original_clinica_id"] = usuario["clinica_id"]
+        session.pop("clinica_id", None)
+        session.pop("clinica_nome", None)
+    else:
+        if not usuario["clinica_id"]:
+            raise PermissionError("Usuário sem clínica vinculada.")
+
+        session["clinica_id"] = usuario["clinica_id"]
+        session["ambiente_definido"] = True
+
+        conn = None
+        try:
+            conn = _db()
+            session["clinica_nome"] = _get_nome_clinica(conn, usuario["clinica_id"])
+        except Exception:
+            session["clinica_nome"] = None
+        finally:
+            if conn:
+                conn.close()
 
     session["usuario"] = usuario
     session["user"] = usuario
@@ -558,45 +659,144 @@ def login():
     next_url = _normalize_next(raw_next)
 
     if request.method == "POST":
-        cpf = re.sub(r"\D", "", request.form.get("cpf") or "")
-        senha = request.form.get("senha") or ""
+        try:
+            cpf = re.sub(r"\D", "", request.form.get("cpf") or "")
+            senha = request.form.get("senha") or ""
 
-        raw_next_post = request.form.get("next") or request.args.get("next")
-        next_url = _normalize_next(raw_next_post)
+            raw_next_post = request.form.get("next") or request.args.get("next")
+            next_url = _normalize_next(raw_next_post)
 
-        if not cpf or not senha:
-            flash("Informe CPF e senha.", "error")
+            if not cpf or not senha:
+                flash("Informe CPF e senha.", "error")
+                registrar_log(
+                    modulo="auth",
+                    acao="login_falhou",
+                    entidade="usuarios",
+                    descricao="Tentativa de login sem CPF ou senha.",
+                    detalhes={"cpf_digitado": cpf},
+                    sucesso=False,
+                )
+                return redirect(url_for("auth.login", next=next_url))
+
+            usuario = _get_usuario_por_cpf(cpf)
+
+            if not usuario:
+                flash("CPF ou senha inválidos.", "error")
+                registrar_log(
+                    modulo="auth",
+                    acao="login_falhou",
+                    entidade="usuarios",
+                    descricao="Tentativa de login com CPF não encontrado.",
+                    detalhes={"cpf_digitado": cpf},
+                    sucesso=False,
+                )
+                return redirect(url_for("auth.login", next=next_url))
+
+            if not _bool_pg(usuario.get("is_active")):
+                flash("Usuário inativo. Fale com o administrador.", "error")
+                registrar_log(
+                    modulo="auth",
+                    acao="login_bloqueado",
+                    entidade="usuarios",
+                    entidade_id=usuario.get("id"),
+                    descricao="Tentativa de login de usuário inativo.",
+                    detalhes={
+                        "cpf": usuario.get("cpf"),
+                        "nome": usuario.get("nome"),
+                        "role": usuario.get("role"),
+                        "clinica_id": usuario.get("clinica_id"),
+                    },
+                    sucesso=False,
+                    clinica_id=usuario.get("clinica_id"),
+                    usuario_id=usuario.get("id"),
+                    usuario_nome=usuario.get("nome"),
+                )
+                return redirect(url_for("auth.login", next=next_url))
+
+            pw_hash = usuario.get("password_hash") or usuario.get("senha_hash")
+
+            if not pw_hash or not check_password_hash(pw_hash, senha):
+                flash("CPF ou senha inválidos.", "error")
+                registrar_log(
+                    modulo="auth",
+                    acao="login_falhou",
+                    entidade="usuarios",
+                    entidade_id=usuario.get("id"),
+                    descricao="Tentativa de login com senha inválida.",
+                    detalhes={
+                        "cpf": usuario.get("cpf"),
+                        "nome": usuario.get("nome"),
+                        "role": usuario.get("role"),
+                        "clinica_id": usuario.get("clinica_id"),
+                    },
+                    sucesso=False,
+                    clinica_id=usuario.get("clinica_id"),
+                    usuario_id=usuario.get("id"),
+                    usuario_nome=usuario.get("nome"),
+                )
+                return redirect(url_for("auth.login", next=next_url))
+
+
+            role = str(usuario.get("role") or "").upper()
+            is_master = (
+                role in {"MASTER", "ROOT", "SUPERADMIN"}
+                or _bool_pg(usuario.get("is_master"))
+                or _bool_pg(usuario.get("is_superuser"))
+            )
+
+            if not is_master and not usuario.get("clinica_id"):
+                registrar_log(
+                    modulo="auth",
+                    acao="login_bloqueado",
+                    entidade="usuarios",
+                    entidade_id=usuario.get("id"),
+                    descricao="Usuário sem clínica vinculada tentou acessar o sistema.",
+                    detalhes={
+                        "nome": usuario.get("nome"),
+                        "cpf": usuario.get("cpf"),
+                        "role": usuario.get("role"),
+                        "clinica_id": usuario.get("clinica_id"),
+                    },
+                    sucesso=False,
+                    usuario_id=usuario.get("id"),
+                    usuario_nome=usuario.get("nome"),
+                )
+
+                flash("Seu usuário ainda não está vinculado a uma clínica. Fale com o administrador.", "error")
+                return redirect(url_for("auth.login", next=next_url))
+
+
+
+            _atualizar_ultimo_login(usuario["id"])
+            _salvar_sessao(usuario)
+
+            primeiro_nome = (usuario.get("nome") or "usuário").split()[0]
+            flash(f"Bem-vindo, {primeiro_nome}!", "success")
+
+            log_login(usuario)
+
+            if session.get("is_master") or session.get("is_superuser"):
+                return redirect(url_for("clinica_config.selecionar_ambiente"))
+
+            return redirect(next_url)
+
+        except Exception as e:
+            log_erro(
+                "auth",
+                e,
+                entidade="usuarios",
+                descricao="Erro inesperado durante o login.",
+                detalhes={"cpf_digitado": request.form.get("cpf")},
+            )
+            flash(f"Erro ao realizar login: {e}", "error")
             return redirect(url_for("auth.login", next=next_url))
-
-        usuario = _get_usuario_por_cpf(cpf)
-
-        if not usuario:
-            flash("CPF ou senha inválidos.", "error")
-            return redirect(url_for("auth.login", next=next_url))
-
-        if not _bool_pg(usuario.get("is_active")):
-            flash("Usuário inativo. Fale com o administrador.", "error")
-            return redirect(url_for("auth.login", next=next_url))
-
-        pw_hash = usuario.get("password_hash") or usuario.get("senha_hash")
-
-        if not pw_hash or not check_password_hash(pw_hash, senha):
-            flash("CPF ou senha inválidos.", "error")
-            return redirect(url_for("auth.login", next=next_url))
-
-        _atualizar_ultimo_login(usuario["id"])
-        _salvar_sessao(usuario)
-
-        primeiro_nome = (usuario.get("nome") or "usuário").split()[0]
-        flash(f"Bem-vindo, {primeiro_nome}!", "success")
-
-        return redirect(next_url)
 
     return render_template("login.html", next_url=next_url)
 
 
 @auth_bp.route("/logout")
 def logout():
+    log_logout()
     session.clear()
     flash("Você saiu da sua sessão.", "info")
     return redirect(url_for("auth.login"))
@@ -608,6 +808,18 @@ def logout():
 
 @auth_bp.route("/seed-master")
 def seed_master_manual():
-    _ensure_admin_exists()
-    flash("Master PostgreSQL verificado/atualizado.", "success")
+    try:
+        _ensure_admin_exists()
+        registrar_log(
+            modulo="auth",
+            acao="seed_master",
+            entidade="usuarios",
+            descricao="Seed manual do usuário MASTER executado.",
+            sucesso=True,
+        )
+        flash("Master PostgreSQL verificado/atualizado.", "success")
+    except Exception as e:
+        log_erro("auth", e, descricao="Erro ao executar seed manual do MASTER.")
+        flash(f"Erro ao verificar Master: {e}", "error")
+
     return redirect(url_for("auth.login"))

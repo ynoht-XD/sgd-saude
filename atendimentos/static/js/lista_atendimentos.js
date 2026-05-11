@@ -1,11 +1,6 @@
 (() => {
   "use strict";
 
-  // ============================================================
-  // FILA DE ATENDIMENTOS — CARDS + PAGINAÇÃO
-  // ============================================================
-
-  // ===================== Endpoints =====================
   const API = {
     filaList: "/atendimentos/api/fila",
     filaAdd: "/atendimentos/api/fila/add",
@@ -13,51 +8,92 @@
     filaDelete: (id) => `/atendimentos/api/fila/${id}`,
     filaClear: "/atendimentos/api/fila/clear",
     filaSyncHoje: "/atendimentos/api/fila/sync_hoje",
-    declaracao: (id) => `/atendimentos/declaracao/${id}`,
+    pacientes: "/atendimentos/api/pacientes",
     profissionais: "/atendimentos/api/profissionais",
-
     chamarTv: "/atendimentos/chama-na-tela/chamar",
   };
 
-  const STATUS = {
-    ATENDENDO: "atendendo",
-    FINALIZADO: "finalizado",
-  };
+  const DEBUG = true;
+  const PER_PAGE = 12;
+  const MIN_SEARCH = 3;
 
-  const PAGINACAO = {
-    ITENS_POR_PAGINA: 12, // 3 colunas x 4 linhas
-  };
-
-  // ===================== Helpers =====================
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-  const DEBUG = true;
-  const log = (...a) => DEBUG && console.log("🧪 FILA:", ...a);
+  const log = (...args) => DEBUG && console.log("🧾 LISTA_ATENDIMENTOS:", ...args);
+
+  const dom = {
+    cards: $("#cardsFila"),
+    empty: $("#emptyFila"),
+    qtd: $("#qtdFila"),
+
+    form: $("#formAdd"),
+    pacienteInput: $("#pacienteInput"),
+    pacienteId: $("#pacienteId"),
+    pacienteList: $("#listaPacientes"),
+
+    profInput: $("#profInput"),
+    profissionalId: $("#profissionalId"),
+    profList: $("#listaProfissionais"),
+
+    tipo: $("#tipoAtendimento"),
+    prioGroup: $("#prioGroup"),
+    obs: $("#obs"),
+
+    busca: $("#fBusca"),
+    profFiltro: $("#fProf"),
+    prioFilter: $("#prioFilter"),
+
+    btnImprimir: $("#btnImprimir"),
+    btnLimpar: $("#btnLimparFila"),
+
+    pagination: $("#filaPagination"),
+    prev: $("#filaPrev"),
+    next: $("#filaNext"),
+    pageInfo: $("#filaPageInfo"),
+  };
+
+  let allItems = [];
+  let filteredItems = [];
+  let currentPage = 1;
+  let filtroPrio = "";
+
+  let pacReqSeq = 0;
+  let profReqSeq = 0;
+
+  const PAC_CACHE = new Map();
+  const PROF_CACHE = new Map();
+
+  function csrfHeaders(extra = {}) {
+    const token =
+      document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
+      document.querySelector('input[name="csrf_token"]')?.value ||
+      "";
+
+    return token ? { ...extra, "X-CSRFToken": token } : extra;
+  }
 
   async function jfetch(url, opts = {}) {
-    const res = await fetch(url, opts);
-    const ctyp = (res.headers.get("content-type") || "").toLowerCase();
-    const isJson = ctyp.includes("application/json");
-    const data = isJson ? await res.json() : null;
+    const headers = csrfHeaders(opts.headers || {});
 
-    if (!res.ok) {
-      const msg = (data && (data.error || data.message || data.erro)) || `HTTP ${res.status}`;
-      throw new Error(msg);
+    const res = await fetch(url, {
+      credentials: "same-origin",
+      ...opts,
+      headers,
+    });
+
+    const contentType = (res.headers.get("content-type") || "").toLowerCase();
+    const data = contentType.includes("application/json") ? await res.json() : null;
+
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || data?.erro || data?.message || `Erro HTTP ${res.status}`);
     }
+
     return data;
   }
 
-  function toast(msg, type = "info") {
-    if (type === "error") {
-      alert(msg);
-      return;
-    }
-    console.log(`[${type}]`, msg);
-  }
-
-  function escapeHtml(s) {
-    return String(s || "").replace(/[&<>"']/g, (m) => ({
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (m) => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -66,33 +102,121 @@
     }[m]));
   }
 
-  function digits(s) {
-    return String(s || "").replace(/\D+/g, "");
+  function normalizeText(value) {
+    return String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
   }
 
-  function normalizeText(s) {
-    return String(s || "").trim().toLowerCase();
+  function safeId(value) {
+    const s = String(value ?? "").trim();
+    return /^\d+$/.test(s) ? s : "";
   }
 
-  function debounce(fn, ms) {
+  function debounce(fn, delay = 300) {
     let timer = null;
     return (...args) => {
       clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), ms);
+      timer = setTimeout(() => fn(...args), delay);
     };
   }
 
-  function badgePrio(prio) {
+  function getPayloadList(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.dados)) return data.dados;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.fila)) return data.fila;
+    return [];
+  }
+
+  function toast(msg, type = "info") {
+    if (type === "error") {
+      alert(msg);
+      return;
+    }
+
+    console.log(`[${type}] ${msg}`);
+  }
+
+  function isFromAgenda(item) {
+    return (
+      item?.from_agenda === true ||
+      item?.from_agenda === 1 ||
+      item?.origem === "agenda" ||
+      !!item?.agenda_id
+    );
+  }
+
+  function itemKey(item) {
+    if (!item) return "";
+    if (item.id) return `id:${item.id}`;
+    if (item.agenda_id) return `agenda:${item.agenda_id}`;
+    return "";
+  }
+
+  function removedStorageKey(item) {
+    const key = itemKey(item);
+    return key ? `fila_removida:${key}` : "";
+  }
+
+  function rememberRemoved(item) {
+    const k = removedStorageKey(item);
+    if (k) localStorage.setItem(k, String(Date.now()));
+  }
+
+  function wasLocallyRemoved(item) {
+    const k = removedStorageKey(item);
+    if (!k) return false;
+
+    const raw = localStorage.getItem(k);
+    if (!raw) return false;
+
+    const age = Date.now() - Number(raw || 0);
+    const maxAge = 12 * 60 * 60 * 1000;
+
+    if (age > maxAge) {
+      localStorage.removeItem(k);
+      return false;
+    }
+
+    return true;
+  }
+
+  function isOpenItem(item) {
+    const status = normalizeText(item?.status || "");
+
+    return ![
+      "finalizado",
+      "atendido",
+      "concluido",
+      "concluído",
+      "removido",
+      "cancelado",
+      "excluido",
+      "excluído",
+    ].includes(status);
+  }
+
+  function priorityLabel(prio) {
     const p = normalizeText(prio);
-    const labelMap = {
+
+    return {
       verde: "Leve",
       amarelo: "Moderado",
       vermelho: "Urgente",
-    };
-    return `<span class="badge prio ${p}">${labelMap[p] || (p ? p[0].toUpperCase() + p.slice(1) : "—")}</span>`;
+      laranja: "Alta",
+    }[p] || (p ? p[0].toUpperCase() + p.slice(1) : "—");
   }
 
-  function comboCardHtml(item) {
+  function badgePrio(prio) {
+    const p = normalizeText(prio || "verde");
+    return `<span class="badge prio ${escapeHtml(p)}">${escapeHtml(priorityLabel(p))}</span>`;
+  }
+
+  function comboHtml(item) {
     const combo = item?.combo || null;
 
     if (!combo || !combo.id) {
@@ -105,266 +229,202 @@
       `;
     }
 
-    const nome = combo.combo_nome || combo.nome_plano || "Combo/Plano";
-    const restantes = Number(combo.sessoes_restantes || 0);
+    const nome = combo.combo_nome || combo.nome_plano || combo.nome || "Combo/Plano";
+    const restantes = Number(combo.sessoes_restantes ?? combo.restantes ?? 0);
     const zero = restantes <= 0;
 
     return `
       <div class="combo-box ${zero ? "is-zero" : ""}">
         <div class="combo-meta">
           <strong>${escapeHtml(nome)}</strong>
-          <span>${zero ? "Sem saldo" : `${restantes} restante(s)`}</span>
+          <span>${zero ? "Sem saldo" : `${escapeHtml(restantes)} restante(s)`}</span>
         </div>
       </div>
     `;
   }
 
-  function pacienteCardHtml(item) {
-    const icon = item.from_agenda
-      ? `<span class="from-agenda" title="Vindo da agenda">📅</span>`
-      : "";
+  function actionButtonsHtml(pacienteNome) {
+    return `
+      <div class="fila-card-head-actions">
+        <button
+          type="button"
+          class="btn atender"
+          data-acao="atender"
+          aria-label="Atender ${escapeHtml(pacienteNome)}"
+          title="Atender"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          class="btn remover"
+          data-acao="remover"
+          aria-label="Remover ${escapeHtml(pacienteNome)}"
+          title="Remover"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    `;
+  }
+
+  function cardHtml(item) {
+    const id = safeId(item.id);
+    const pacienteId = safeId(item.paciente_id);
+    const agendaId = safeId(item.agenda_id);
+
+    const pacienteNome = item.paciente_nome || item.nome_paciente || "—";
+    const profissionalNome = item.profissional_nome || item.nome_profissional || "—";
+    const hora = item.hora || item.horario || "—";
+    const tipo = item.tipo || "Individual";
+    const obs = item.obs || item.observacao || "—";
+    const origem = item.origem || (isFromAgenda(item) ? "agenda" : "manual");
+
+    const combo = item?.combo || null;
+    const temCombo = !!(combo && combo.id);
+    const comboRestantes = Number(combo?.sessoes_restantes ?? combo?.restantes ?? 0);
+    const semSaldo = temCombo && comboRestantes <= 0;
 
     return `
-      <div class="fila-card-main" data-pid="${escapeHtml(item.paciente_id || "")}">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          ${icon}
-          <strong>${escapeHtml(item.paciente_nome || "—")}</strong>
+      <article
+        class="fila-card ${semSaldo ? "is-sem-saldo" : ""}"
+        data-id="${escapeHtml(id)}"
+        data-prof="${escapeHtml(item.profissional_id || "")}"
+        data-prio="${escapeHtml(item.prioridade || "verde")}"
+        data-origem="${escapeHtml(origem)}"
+        data-agenda-id="${escapeHtml(agendaId)}"
+        data-status="${escapeHtml(item.status || "")}"
+        data-tem-combo="${temCombo ? "1" : "0"}"
+        data-combo-restantes="${escapeHtml(comboRestantes)}"
+      >
+        <header class="fila-card-head">
+          <div class="fila-card-time">
+            <span class="fila-card-label">Hora</span>
+            <strong>${escapeHtml(hora)}</strong>
+          </div>
+
+          <div class="fila-card-top-actions">
+            ${isFromAgenda(item) ? `<span class="from-agenda" title="Vindo da agenda">📅</span>` : ""}
+            ${badgePrio(item.prioridade)}
+            ${actionButtonsHtml(pacienteNome)}
+          </div>
+        </header>
+
+        <div class="fila-card-body">
+          <section class="fila-card-group">
+            <span class="fila-card-mini-label">Paciente</span>
+            <div class="fila-card-main" data-pid="${escapeHtml(pacienteId)}">
+              <strong>${escapeHtml(pacienteNome)}</strong>
+              <span class="muted-mini">ID: ${escapeHtml(pacienteId || "—")}</span>
+            </div>
+          </section>
+
+          <section class="fila-card-group">
+            <span class="fila-card-mini-label">Combo</span>
+            ${comboHtml(item)}
+          </section>
+
+          <section class="fila-card-group">
+            <span class="fila-card-mini-label">Profissional</span>
+            <div class="fila-card-main">
+              <strong>${escapeHtml(profissionalNome)}</strong>
+              ${
+                item.profissional_cbo || item.cbo
+                  ? `<span class="muted-mini">CBO: ${escapeHtml(item.profissional_cbo || item.cbo)}</span>`
+                  : ""
+              }
+            </div>
+          </section>
+
+          <section class="fila-card-inline">
+            <div class="fila-card-group">
+              <span class="fila-card-mini-label">Tipo</span>
+              <div class="fila-card-main">
+                <strong>${escapeHtml(tipo)}</strong>
+              </div>
+            </div>
+
+            <div class="fila-card-group">
+              <span class="fila-card-mini-label">Observações</span>
+              <div class="fila-card-main">
+                <span class="obs-text">${escapeHtml(obs)}</span>
+              </div>
+            </div>
+          </section>
         </div>
-        <span class="muted-mini">ID: ${escapeHtml(item.paciente_id || "—")}</span>
-      </div>
+
+        <footer class="fila-card-actions">
+          <button
+            type="button"
+            class="btn chamar-tv"
+            data-acao="chamar-tv"
+            data-paciente-id="${escapeHtml(pacienteId)}"
+            data-paciente-nome="${escapeHtml(pacienteNome)}"
+            data-profissional-nome="${escapeHtml(profissionalNome)}"
+            data-setor="Recepção"
+            aria-label="Chamar ${escapeHtml(pacienteNome)} na TV"
+          >
+            📢 Chamar na TV
+          </button>
+        </footer>
+      </article>
     `;
   }
 
-  // ===================== DOM =====================
-  const cardsFila = $("#cardsFila");
-  const emptyFila = $("#emptyFila");
-  const qtdFilaEl = $("#qtdFila");
+  function applyFilters(items) {
+    const q = normalizeText(dom.busca?.value || "");
+    const prof = normalizeText(dom.profFiltro?.value || "");
+    const prio = normalizeText(filtroPrio);
 
-  const fBusca = $("#fBusca");
-  const fProf = $("#fProf");
-  const prioFilter = $("#prioFilter");
+    return items.filter((item) => {
+      if (!isOpenItem(item)) return false;
+      if (wasLocallyRemoved(item)) return false;
 
-  const formAdd = $("#formAdd");
-  const pacienteInput = $("#pacienteInput");
-  const pacienteIdHidden = $("#pacienteId");
-  const profInput = $("#profInput");
-  const profissionalIdHidden = $("#profissionalId");
-  const tipoSel = $("#tipoAtendimento");
-  const prioGroup = $("#prioGroup");
-  const obsEl = $("#obs");
+      if (prio && normalizeText(item.prioridade) !== prio) return false;
 
-  const btnImprimir = $("#btnImprimir");
-  const btnLimparFila = $("#btnLimparFila");
+      if (prof) {
+        const profHay = [
+          item.profissional_id,
+          item.profissional_nome,
+          item.nome_profissional,
+          item.cbo,
+          item.profissional_cbo,
+          item.funcao,
+        ].map(normalizeText).join(" ");
 
-  const filaPagination = $("#filaPagination");
-  const filaPrev = $("#filaPrev");
-  const filaNext = $("#filaNext");
-  const filaPageInfo = $("#filaPageInfo");
-
-  const pacDatalist = document.getElementById("listaPacientes");
-  const profDatalist = document.getElementById("listaProfissionais");
-
-  // ===================== Estado =====================
-  let allItems = [];
-  let filteredItems = [];
-  let filterPrio = "";
-  let paginaAtual = 1;
-
-  let PAC_OPTS = [];
-  const PROF_CACHE = new Map();
-
-  // ============================================================
-  // Captura opções do template (PACIENTES)
-  // ============================================================
-  if (pacDatalist) {
-    PAC_OPTS = Array.from(pacDatalist.options).map(op => ({
-      value: op.value || "",
-      id: op.getAttribute("data-id") || ""
-    }));
-    pacDatalist.innerHTML = "";
-    log("PAC_OPTS:", PAC_OPTS.length);
-  }
-
-  // ============================================================
-  // Datalist inteligente
-  // ============================================================
-  function preencherDatalist(inputEl, datalistEl, sourceList, minLen = 3, limit = 30) {
-    const term = (inputEl.value || "").trim().toLowerCase();
-
-    if (term.length < minLen) {
-      datalistEl.innerHTML = "";
-      return 0;
-    }
-
-    const filtrados = sourceList
-      .filter(op => (op.value || "").toLowerCase().includes(term))
-      .slice(0, limit);
-
-    datalistEl.innerHTML = "";
-    for (const op of filtrados) {
-      const el = document.createElement("option");
-      el.value = op.value;
-      if (op.id != null && op.id !== "") el.setAttribute("data-id", String(op.id));
-      datalistEl.appendChild(el);
-    }
-    return filtrados.length;
-  }
-
-  function wakeDatalist(inputEl, datalistId) {
-    try {
-      inputEl.setAttribute("list", "");
-      inputEl.offsetHeight;
-      inputEl.setAttribute("list", datalistId);
-    } catch (_) {}
-  }
-
-  function parseDatalistValue(inputEl, datalistSel) {
-    const val = (inputEl.value || "").trim();
-    const opts = $$(datalistSel + " option");
-    let id = null;
-
-    for (const op of opts) {
-      if ((op.value || "").trim() === val) {
-        const raw = op.getAttribute("data-id");
-        if (raw != null && raw !== "") id = Number(raw);
-        break;
+        if (!profHay.includes(prof)) return false;
       }
-    }
-    return { id, text: val };
-  }
-
-  // ============================================================
-  // Paciente autocomplete
-  // ============================================================
-  pacienteInput?.addEventListener("input", () => {
-    if (!pacDatalist) return;
-    const shown = preencherDatalist(pacienteInput, pacDatalist, PAC_OPTS, 3, 30);
-    if (shown > 0) wakeDatalist(pacienteInput, "listaPacientes");
-  });
-
-  pacienteInput?.addEventListener("change", () => {
-    const parsed = parseDatalistValue(pacienteInput, "#listaPacientes");
-    pacienteIdHidden.value = parsed.id ?? "";
-    log("Paciente:", parsed);
-  });
-
-  // ============================================================
-  // Profissional autocomplete
-  // ============================================================
-  let profReqSeq = 0;
-
-  function clearProfSuggestions() {
-    if (profDatalist) profDatalist.innerHTML = "";
-    PROF_CACHE.clear();
-  }
-
-  function setProfSuggestions(items) {
-    if (!profDatalist) return;
-
-    profDatalist.innerHTML = "";
-    PROF_CACHE.clear();
-
-    for (const it of items) {
-      const label = String(it.label || it.nome || "").trim();
-      const id = it.id;
-
-      if (!label || id == null) continue;
-
-      const opt = document.createElement("option");
-      opt.value = label;
-      opt.setAttribute("data-id", String(id));
-      profDatalist.appendChild(opt);
-
-      PROF_CACHE.set(label.toLowerCase(), Number(id));
-    }
-  }
-
-  async function fetchProfissionais(term) {
-    const q = (term || "").trim();
-    if (q.length < 3) return [];
-
-    const mySeq = ++profReqSeq;
-    const url = `${API.profissionais}?q=${encodeURIComponent(q)}`;
-    const data = await jfetch(url);
-
-    if (mySeq !== profReqSeq) return [];
-    return Array.isArray(data?.items) ? data.items : [];
-  }
-
-  const onProfInput = debounce(async () => {
-    if (!profInput || !profDatalist) return;
-
-    const term = (profInput.value || "").trim();
-    if (term.length < 3) {
-      clearProfSuggestions();
-      profissionalIdHidden.value = "";
-      return;
-    }
-
-    try {
-      const items = await fetchProfissionais(term);
-      setProfSuggestions(items);
-
-      if (items.length > 0) wakeDatalist(profInput, "listaProfissionais");
-      log("Profissionais:", items.length);
-    } catch (e) {
-      console.warn("Falha ao buscar profissionais:", e.message);
-      clearProfSuggestions();
-    }
-  }, 220);
-
-  profInput?.addEventListener("input", () => {
-    profissionalIdHidden.value = "";
-    onProfInput();
-  });
-
-  profInput?.addEventListener("focus", () => {
-    const term = (profInput.value || "").trim();
-    if (term.length >= 3) onProfInput();
-  });
-
-  profInput?.addEventListener("change", () => {
-    const val = (profInput.value || "").trim();
-    const lower = val.toLowerCase();
-
-    let id = null;
-    const parsed = parseDatalistValue(profInput, "#listaProfissionais");
-    if (parsed.id) id = parsed.id;
-    if (!id && PROF_CACHE.has(lower)) id = PROF_CACHE.get(lower);
-
-    profissionalIdHidden.value = id ? String(id) : "";
-    log("Profissional:", { text: val, id });
-  });
-
-  // ============================================================
-  // Filtros
-  // ============================================================
-  function applyFilters(list) {
-    const q = normalizeText(fBusca?.value || "");
-    const profId = (fProf?.value || "").trim();
-    const prio = normalizeText(filterPrio);
-
-    return list.filter(it => {
-      const status = normalizeText(it.status || "");
-
-      // Esconde quem já foi atendido/finalizado
-      if (["finalizado", "atendido", "concluido", "concluído"].includes(status)) {
-        return false;
-      }
-
-      if (profId && String(it.profissional_id) !== profId) return false;
-      if (prio && normalizeText(it.prioridade) !== prio) return false;
 
       if (q) {
-        const comboNome = it?.combo?.combo_nome || it?.combo?.nome_plano || "";
-        const comboRestantes = String(it?.combo?.sessoes_restantes ?? "");
         const hay = [
-          it.paciente_nome,
-          it.profissional_nome,
-          it.obs,
-          comboNome,
-          comboRestantes,
-          it.tipo
+          item.paciente_nome,
+          item.nome_paciente,
+          item.paciente_id,
+          item.cpf,
+          item.cns,
+          item.prontuario,
+          item.profissional_nome,
+          item.nome_profissional,
+          item.cbo,
+          item.profissional_cbo,
+          item.tipo,
+          item.prioridade,
+          item.obs,
+          item.observacao,
+          item.status,
+          item?.combo?.combo_nome,
+          item?.combo?.nome_plano,
+          item?.combo?.nome,
         ].map(normalizeText).join(" ");
 
         if (!hay.includes(q)) return false;
@@ -374,567 +434,433 @@
     });
   }
 
-  function updateCounter(total) {
-    if (qtdFilaEl) qtdFilaEl.textContent = String(total);
+  function updateCounter() {
+    if (dom.qtd) dom.qtd.textContent = String(filteredItems.length);
   }
 
-  // ============================================================
-  // Paginação
-  // ============================================================
-  function totalPaginas() {
-    return Math.max(1, Math.ceil(filteredItems.length / PAGINACAO.ITENS_POR_PAGINA));
+  function totalPages() {
+    return Math.max(1, Math.ceil(filteredItems.length / PER_PAGE));
   }
 
-  function getPaginaItems() {
-    const ini = (paginaAtual - 1) * PAGINACAO.ITENS_POR_PAGINA;
-    const fim = ini + PAGINACAO.ITENS_POR_PAGINA;
-    return filteredItems.slice(ini, fim);
+  function pageItems() {
+    const start = (currentPage - 1) * PER_PAGE;
+    return filteredItems.slice(start, start + PER_PAGE);
   }
 
-  function updatePaginationUI() {
-    const total = totalPaginas();
+  function updatePagination() {
+    const total = totalPages();
 
-    if (filaPageInfo) {
-      filaPageInfo.textContent = `Página ${paginaAtual} de ${total}`;
-    }
+    if (currentPage > total) currentPage = total;
+    if (currentPage < 1) currentPage = 1;
 
-    if (filaPrev) filaPrev.disabled = paginaAtual <= 1;
-    if (filaNext) filaNext.disabled = paginaAtual >= total;
+    if (dom.pageInfo) dom.pageInfo.textContent = `Página ${currentPage} de ${total}`;
+    if (dom.prev) dom.prev.disabled = currentPage <= 1;
+    if (dom.next) dom.next.disabled = currentPage >= total;
 
-    if (filaPagination) {
-      filaPagination.hidden = filteredItems.length === 0 || total <= 1;
+    if (dom.pagination) {
+      dom.pagination.hidden = filteredItems.length === 0 || total <= 1;
     }
   }
 
-  function resetPaginaSePreciso() {
-    const total = totalPaginas();
-    if (paginaAtual > total) paginaAtual = total;
-    if (paginaAtual < 1) paginaAtual = 1;
-  }
+  function renderCurrentPage() {
+    if (!dom.cards) return;
 
-  // ============================================================
-  // Render dos cards
-  // ============================================================
-  function cardHtml(it) {
-    const id = it.id;
-    const hora = escapeHtml(it.hora || "");
-    const tipo = escapeHtml(it.tipo || "—");
-    const obs = escapeHtml(it.obs || "—");
-    const status = normalizeText(it.status || (it.em_atendimento ? STATUS.ATENDENDO : ""));
+    updatePagination();
+    updateCounter();
 
-    const pacienteId = escapeHtml(it.paciente_id || "");
-    const pacienteNome = escapeHtml(it.paciente_nome || "");
-    const profissionalNome = escapeHtml(it.profissional_nome || "");
+    const items = pageItems();
 
-    const combo = it?.combo || null;
-    const temCombo = !!(combo && combo.id);
-    const comboRestantes = Number(combo?.sessoes_restantes || 0);
-    const semSaldo = temCombo && comboRestantes <= 0;
-
-    const menuHtml = `
-      <div class="menu">
-        <button class="btn icon only" data-menu-toggle aria-haspopup="true" aria-expanded="false" title="Opções" type="button">
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-
-        <div class="menu-pop" hidden role="menu">
-          <button class="menu-item" data-acao="atender" role="menuitem">Atender</button>
-          <button class="menu-item" data-acao="editar" role="menuitem">Editar…</button>
-          <a class="menu-item" data-acao="declaracao" target="_blank" rel="noopener" role="menuitem">Gerar declaração</a>
-          <button class="menu-item" data-acao="falta" role="menuitem">Marcar falta</button>
-          <button class="menu-item danger" data-acao="remover" role="menuitem">Remover</button>
-        </div>
-      </div>
-    `;
-
-    return `
-      <article class="fila-card ${semSaldo ? "is-sem-saldo" : ""}"
-              data-id="${id}"
-              data-prof="${escapeHtml(it.profissional_id || "")}"
-              data-prio="${escapeHtml(it.prioridade || "")}"
-              data-status="${escapeHtml(status)}"
-              data-tem-combo="${temCombo ? 1 : 0}"
-              data-combo-restantes="${comboRestantes}">
-
-        <header class="fila-card-head">
-          <div class="fila-card-time">
-            <span class="fila-card-label">Hora</span>
-            <strong>${hora}</strong>
-          </div>
-
-          <div class="fila-card-top-actions">
-            ${it.from_agenda ? `<span class="from-agenda" title="Vindo da agenda">📅</span>` : ""}
-            ${badgePrio(it.prioridade)}
-          </div>
-        </header>
-
-        <div class="fila-card-body">
-          <section class="fila-card-group">
-            <span class="fila-card-mini-label">Paciente</span>
-            ${pacienteCardHtml(it)}
-          </section>
-
-          <section class="fila-card-group">
-            <span class="fila-card-mini-label">Combo</span>
-            ${comboCardHtml(it)}
-          </section>
-
-          <section class="fila-card-group">
-            <span class="fila-card-mini-label">Profissional</span>
-            <div class="fila-card-main">
-              <strong>${profissionalNome || "—"}</strong>
-            </div>
-          </section>
-
-          <section class="fila-card-inline">
-            <div class="fila-card-group">
-              <span class="fila-card-mini-label">Tipo</span>
-              <div class="fila-card-main">
-                <strong>${tipo}</strong>
-              </div>
-            </div>
-
-            <div class="fila-card-group">
-              <span class="fila-card-mini-label">Observações</span>
-              <div class="fila-card-main">
-                <span class="obs-text">${obs}</span>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <footer class="fila-card-actions">
-          <button
-            class="btn chamar-tv"
-            title="Chamar paciente na TV"
-            data-acao="chamar-tv"
-            data-paciente-id="${pacienteId}"
-            data-paciente-nome="${pacienteNome}"
-            data-profissional-nome="${profissionalNome}"
-            data-setor="Recepção"
-            type="button">
-            📢 Chamar na TV
-          </button>
-
-          <div class="acoes-secundarias">
-            <button class="btn atender" title="Atender" data-acao="atender" aria-label="Atender" type="button">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0 2c-3 0-8 1.5-8 4v2h16v-2c0-2.5-5-4-8-4Z" fill="currentColor"/>
-              </svg>
-            </button>
-
-            <button class="btn remover" title="Excluir" data-acao="remover" aria-label="Excluir" type="button">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"
-                      stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-
-            ${menuHtml}
-          </div>
-        </footer>
-      </article>
-    `;
-  }
-
-  function renderFila(itemsRaw) {
-    filteredItems = applyFilters(itemsRaw);
-    paginaAtual = 1;
-    renderPaginaAtual();
-  }
-
-  function renderPaginaAtual() {
-    resetPaginaSePreciso();
-    const pageItems = getPaginaItems();
-    updateCounter(filteredItems.length);
-    updatePaginationUI();
-
-    if (!cardsFila) return;
-
-    if (!pageItems.length) {
-      cardsFila.innerHTML = "";
-      if (emptyFila) emptyFila.hidden = false;
+    if (!items.length) {
+      dom.cards.innerHTML = "";
+      if (dom.empty) dom.empty.hidden = false;
       return;
     }
 
-    if (emptyFila) emptyFila.hidden = true;
-    cardsFila.innerHTML = pageItems.map(cardHtml).join("");
+    if (dom.empty) dom.empty.hidden = true;
+    dom.cards.innerHTML = items.map(cardHtml).join("");
+  }
+
+  function renderFila(resetPage = true) {
+    filteredItems = applyFilters(allItems);
+
+    if (resetPage) currentPage = 1;
+
+    renderCurrentPage();
   }
 
   async function carregarFila() {
     const data = await jfetch(API.filaList);
+    const items = getPayloadList(data);
 
-    allItems = (Array.isArray(data) ? data : []).filter(it => {
-      const status = normalizeText(it.status || "");
-      return !["finalizado", "atendido", "concluido", "concluído"].includes(status);
-    });
+    allItems = items
+      .filter(isOpenItem)
+      .filter((item) => !wasLocallyRemoved(item));
 
-    renderFila(allItems);
+    renderFila(false);
+
+    log("Fila carregada:", allItems.length);
   }
 
   async function syncHoje() {
     try {
       await jfetch(API.filaSyncHoje, { method: "POST" });
-      await carregarFila();
-    } catch (e) {
-      console.warn("syncHoje falhou:", e.message);
+    } catch (err) {
+      console.warn("Falha no sync da agenda:", err.message);
+    }
+
+    await carregarFila();
+  }
+
+  function clearDatalist(listEl, cache) {
+    if (listEl) listEl.innerHTML = "";
+    cache.clear();
+  }
+
+  function setDatalist(listEl, cache, items) {
+    if (!listEl) return;
+
+    listEl.innerHTML = "";
+    cache.clear();
+
+    for (const item of items) {
+      const id = safeId(item.id);
+      const nome = String(item.label || item.nome || item.text || "").trim();
+
+      if (!id || !nome) continue;
+
+      const opt = document.createElement("option");
+      opt.value = nome;
+      opt.dataset.id = id;
+
+      listEl.appendChild(opt);
+      cache.set(normalizeText(nome), id);
     }
   }
 
-  // ============================================================
-  // Eventos de filtro / paginação
-  // ============================================================
-  fBusca?.addEventListener("input", () => renderFila(allItems));
-  fProf?.addEventListener("change", () => renderFila(allItems));
+  function parseDatalist(inputEl, listEl) {
+    const val = String(inputEl?.value || "").trim();
 
-  prioFilter?.addEventListener("click", (ev) => {
-    const btn = ev.target.closest(".pf-pill");
-    if (!btn) return;
+    if (!val || !listEl) return { id: "", label: val };
 
-    $$(".pf-pill", prioFilter).forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    filterPrio = normalizeText(btn.dataset.prio || "");
-    renderFila(allItems);
-  });
-
-  filaPrev?.addEventListener("click", () => {
-    if (paginaAtual > 1) {
-      paginaAtual--;
-      renderPaginaAtual();
-      cardsFila?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  });
-
-  filaNext?.addEventListener("click", () => {
-    if (paginaAtual < totalPaginas()) {
-      paginaAtual++;
-      renderPaginaAtual();
-      cardsFila?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  });
-
-  // ============================================================
-  // Dropdown menu portal
-  // ============================================================
-  const __menuState = new WeakMap();
-  let __justOpenedUntil = 0;
-
-  function closeAllMenus(except = null) {
-    document.querySelectorAll(".menu-pop:not([hidden])").forEach(pop => {
-      if (pop === except) return;
-      const st = __menuState.get(pop);
-
-      if (st && st.anchor) {
-        pop.classList.remove("is-portal");
-        pop.hidden = true;
-        pop.style.left = pop.style.top = pop.style.minWidth = "";
-        st.anchor.appendChild(pop);
-        __menuState.delete(pop);
-
-        const btn = st.anchor.querySelector("[data-menu-toggle]");
-        if (btn) btn.setAttribute("aria-expanded", "false");
-      } else {
-        pop.hidden = true;
-        const btn = pop.closest(".menu")?.querySelector("[data-menu-toggle]");
-        if (btn) btn.setAttribute("aria-expanded", "false");
-      }
+    const found = Array.from(listEl.options || []).find((op) => {
+      return String(op.value || "").trim() === val;
     });
-  }
 
-  function openWithPortal(pop, btn) {
-    const anchor = btn.closest(".menu");
-    __menuState.set(pop, { anchor });
-    pop.hidden = false;
-    pop.classList.add("is-portal");
-    pop.style.minWidth = "210px";
-    document.body.appendChild(pop);
-
-    const br = btn.getBoundingClientRect();
-    const pr = pop.getBoundingClientRect();
-
-    const left = Math.max(8, Math.min(br.right - pr.width, window.innerWidth - pr.width - 8));
-    const top = Math.min(br.bottom + 8, window.innerHeight - pr.height - 8);
-
-    pop.style.left = `${left}px`;
-    pop.style.top = `${top}px`;
-    btn.setAttribute("aria-expanded", "true");
-
-    const card = btn.closest(".fila-card[data-id]");
-    const id = card ? Number(card.dataset.id) : null;
-    const decl = pop.querySelector('[data-acao="declaracao"]');
-    if (decl && id) decl.setAttribute("href", API.declaracao(id));
-
-    (pop.querySelector(".menu-item, a.menu-item") || pop).focus?.();
-    __justOpenedUntil = performance.now() + 120;
-  }
-
-  function toggleMenu(pop, btn) {
-    const willOpen = pop.hidden;
-    closeAllMenus(pop);
-    if (willOpen) openWithPortal(pop, btn);
-    else closeAllMenus();
-  }
-
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-menu-toggle]");
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const pop = btn.closest(".menu")?.querySelector(".menu-pop");
-    if (!pop) return;
-    toggleMenu(pop, btn);
-  });
-
-  document.addEventListener("click", () => {
-    if (performance.now() < __justOpenedUntil) return;
-    closeAllMenus();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeAllMenus();
-  });
-
-  document.addEventListener("click", (e) => {
-    if (e.target.closest(".menu-pop")) e.stopPropagation();
-  }, true);
-// ============================================================
-// Ações dos cards
-// ============================================================
-cardsFila?.addEventListener("click", async (e) => {
-  const ac = e.target.closest("[data-acao]");
-  if (!ac) return;
-
-  closeAllMenus();
-
-  const card = ac.closest(".fila-card[data-id]");
-  const id = card ? Number(card.dataset.id) : null;
-  if (!id) return;
-
-  const acao = ac.dataset.acao;
-
-  // ============================================================
-  // CHAMAR PACIENTE NA TV
-  // ============================================================
-  if (acao === "chamar-tv") {
-    const payload = {
-      paciente_id: ac.dataset.pacienteId || "",
-      paciente_nome: ac.dataset.pacienteNome || "",
-      profissional_nome: ac.dataset.profissionalNome || "",
-      setor: ac.dataset.setor || "Recepção"
+    return {
+      id: safeId(found?.dataset?.id || ""),
+      label: val,
     };
+  }
 
-    if (!payload.paciente_nome) {
-      alert("Paciente inválido para chamada.");
+  function forceOpenDatalist(inputEl, listId) {
+    try {
+      inputEl.setAttribute("list", "");
+      inputEl.offsetHeight;
+      inputEl.setAttribute("list", listId);
+    } catch (_) {}
+  }
+
+  async function buscarPacientes(term) {
+    const q = String(term || "").trim();
+    if (q.length < MIN_SEARCH) return [];
+
+    const seq = ++pacReqSeq;
+    const data = await jfetch(`${API.pacientes}?q=${encodeURIComponent(q)}`);
+
+    if (seq !== pacReqSeq) return [];
+    return getPayloadList(data);
+  }
+
+  async function buscarProfissionais(term) {
+    const q = String(term || "").trim();
+    if (q.length < MIN_SEARCH) return [];
+
+    const seq = ++profReqSeq;
+    const data = await jfetch(`${API.profissionais}?q=${encodeURIComponent(q)}`);
+
+    if (seq !== profReqSeq) return [];
+    return getPayloadList(data);
+  }
+
+  const onPacienteInput = debounce(async () => {
+    const val = String(dom.pacienteInput?.value || "").trim();
+
+    if (dom.pacienteId) dom.pacienteId.value = "";
+
+    if (val.length < MIN_SEARCH) {
+      clearDatalist(dom.pacienteList, PAC_CACHE);
       return;
     }
 
-    const textoOriginal = ac.innerHTML;
-    ac.disabled = true;
-    ac.innerHTML = "Chamando...";
-
-    try {
-      const data = await jfetch(API.chamarTv, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!data.ok) {
-        throw new Error(data.erro || data.error || "Erro ao chamar paciente.");
-      }
-
-      ac.innerHTML = "✅ Chamado!";
-
-      setTimeout(() => {
-        ac.innerHTML = textoOriginal;
-        ac.disabled = false;
-      }, 1800);
-
-    } catch (err) {
-      console.error("Erro ao chamar na TV:", err);
-      alert(err.message || "Erro ao chamar na TV.");
-      ac.innerHTML = textoOriginal;
-      ac.disabled = false;
+    const cachedId = PAC_CACHE.get(normalizeText(val));
+    if (cachedId && dom.pacienteId) {
+      dom.pacienteId.value = cachedId;
+      return;
     }
 
-    return;
-  }
-
-  // ============================================================
-  // ATENDER
-  // ============================================================
-  if (acao === "atender") {
     try {
-      const pid = card.querySelector("[data-pid]")?.dataset.pid || "";
-      const ptxt = card.querySelector("[data-pid] strong")?.textContent.trim() || "";
+      const items = await buscarPacientes(val);
+      setDatalist(dom.pacienteList, PAC_CACHE, items);
+      if (items.length) forceOpenDatalist(dom.pacienteInput, "listaPacientes");
+    } catch (err) {
+      console.warn("Erro ao buscar pacientes:", err.message);
+      clearDatalist(dom.pacienteList, PAC_CACHE);
+    }
+  }, 250);
 
-      if (!pid) {
-        alert("Paciente não identificado para este atendimento.");
+  const onProfInput = debounce(async () => {
+    const val = String(dom.profInput?.value || "").trim();
+
+    if (dom.profissionalId) dom.profissionalId.value = "";
+
+    if (val.length < MIN_SEARCH) {
+      clearDatalist(dom.profList, PROF_CACHE);
+      return;
+    }
+
+    const cachedId = PROF_CACHE.get(normalizeText(val));
+    if (cachedId && dom.profissionalId) {
+      dom.profissionalId.value = cachedId;
+      return;
+    }
+
+    try {
+      const items = await buscarProfissionais(val);
+      setDatalist(dom.profList, PROF_CACHE, items);
+      if (items.length) forceOpenDatalist(dom.profInput, "listaProfissionais");
+    } catch (err) {
+      console.warn("Erro ao buscar profissionais:", err.message);
+      clearDatalist(dom.profList, PROF_CACHE);
+    }
+  }, 250);
+
+  dom.pacienteInput?.addEventListener("input", onPacienteInput);
+
+  dom.pacienteInput?.addEventListener("change", () => {
+    const parsed = parseDatalist(dom.pacienteInput, dom.pacienteList);
+    const cacheId = PAC_CACHE.get(normalizeText(parsed.label));
+    if (dom.pacienteId) dom.pacienteId.value = safeId(parsed.id || cacheId);
+  });
+
+  dom.profInput?.addEventListener("input", onProfInput);
+
+  dom.profInput?.addEventListener("change", () => {
+    const parsed = parseDatalist(dom.profInput, dom.profList);
+    const cacheId = PROF_CACHE.get(normalizeText(parsed.label));
+    if (dom.profissionalId) dom.profissionalId.value = safeId(parsed.id || cacheId);
+  });
+
+  dom.busca?.addEventListener("input", debounce(() => renderFila(true), 150));
+  dom.profFiltro?.addEventListener("change", () => renderFila(true));
+  dom.profFiltro?.addEventListener("input", () => renderFila(true));
+
+  dom.prioFilter?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".pf-pill");
+    if (!btn) return;
+
+    $$(".pf-pill", dom.prioFilter).forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    filtroPrio = normalizeText(btn.dataset.prio || "");
+    renderFila(true);
+  });
+
+  dom.prev?.addEventListener("click", () => {
+    if (currentPage <= 1) return;
+    currentPage--;
+    renderCurrentPage();
+  });
+
+  dom.next?.addEventListener("click", () => {
+    if (currentPage >= totalPages()) return;
+    currentPage++;
+    renderCurrentPage();
+  });
+
+  dom.cards?.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-acao]");
+    if (!btn) return;
+
+    const card = btn.closest(".fila-card");
+    if (!card) return;
+
+    const acao = btn.dataset.acao;
+    const id = safeId(card.dataset.id);
+
+    ev.preventDefault();
+
+    if (acao === "chamar-tv") {
+      const oldText = btn.innerHTML;
+
+      const payload = {
+        paciente_id: btn.dataset.pacienteId || "",
+        paciente_nome: btn.dataset.pacienteNome || "",
+        profissional_nome: btn.dataset.profissionalNome || "",
+        setor: btn.dataset.setor || "Recepção",
+      };
+
+      if (!payload.paciente_nome) {
+        alert("Paciente inválido para chamada.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = "Chamando...";
+
+      try {
+        await jfetch(API.chamarTv, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        btn.innerHTML = "✅ Chamado!";
+        setTimeout(() => {
+          btn.innerHTML = oldText;
+          btn.disabled = false;
+        }, 1500);
+      } catch (err) {
+        alert(err.message || "Falha ao chamar na TV.");
+        btn.innerHTML = oldText;
+        btn.disabled = false;
+      }
+
+      return;
+    }
+
+    if (!id) {
+      alert("Item da fila sem ID. Verifique o retorno da API.");
+      return;
+    }
+
+    if (acao === "atender") {
+      const pacienteId = card.querySelector("[data-pid]")?.dataset.pid || "";
+      const pacienteNome = card.querySelector("[data-pid] strong")?.textContent?.trim() || "";
+
+      if (!pacienteId) {
+        alert("Paciente não identificado para atendimento.");
         return;
       }
 
       try {
-        await fetch(API.filaUpdate(id), {
+        await jfetch(API.filaUpdate(id), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: STATUS.ATENDENDO })
+          body: JSON.stringify({ status: "atendendo" }),
         });
-
-        card.setAttribute("data-status", STATUS.ATENDENDO);
       } catch (err) {
-        console.warn("Não foi possível marcar como 'atendendo':", err?.message);
+        console.warn("Não conseguiu marcar como atendendo:", err.message);
       }
 
-      const url =
+      window.location.href =
         `/atendimentos/registrar?fila_id=${encodeURIComponent(id)}` +
-        `&paciente_id=${encodeURIComponent(pid)}` +
-        `&paciente_nome=${encodeURIComponent(ptxt)}`;
+        `&paciente_id=${encodeURIComponent(pacienteId)}` +
+        `&paciente_nome=${encodeURIComponent(pacienteNome)}`;
 
-      window.location.href = url;
-    } catch (err) {
-      console.error("Erro ao redirecionar:", err);
-      alert("Não foi possível iniciar o atendimento.");
+      return;
     }
 
-    return;
-  }
+    if (acao === "remover") {
+      if (!confirm("Remover este item da fila?")) return;
 
-  // ============================================================
-  // EDITAR
-  // ============================================================
-  if (acao === "editar") {
-    alert("⚙️ Edição ainda não implementada.");
-    return;
-  }
+      const item = allItems.find((x) => String(x.id) === String(id)) || {
+        id,
+        agenda_id: card.dataset.agendaId,
+      };
 
-  // ============================================================
-  // MARCAR FALTA
-  // ============================================================
-  if (acao === "falta") {
-    try {
-      await fetch(API.filaUpdate(id), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prioridade: "amarelo",
-          obs: "FALTA"
-        })
-      });
+      try {
+        await jfetch(API.filaDelete(id), {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            motivo: "Removido da lista de atendimentos.",
+            origem: card.dataset.origem || "",
+            agenda_id: card.dataset.agendaId || "",
+          }),
+        });
+      } catch (err) {
+        console.warn("DELETE falhou, aplicando remoção local:", err.message);
+      }
 
-      await carregarFila();
-    } catch (err) {
-      console.error("Erro ao marcar falta:", err);
-      alert("Falha ao marcar falta.");
+      rememberRemoved(item);
+
+      allItems = allItems.filter((x) => String(x.id) !== String(id));
+      renderFila(false);
+
+      return;
     }
+  });
 
-    return;
-  }
-
-  // ============================================================
-  // REMOVER
-  // ============================================================
-  if (acao === "remover") {
-    if (!confirm("Remover este item da fila?")) return;
-
-    try {
-      await fetch(API.filaDelete(id), {
-        method: "DELETE"
-      });
-
-      await carregarFila();
-    } catch (err) {
-      console.error("Erro ao remover:", err);
-      alert("Falha ao remover.");
-    }
-
-    return;
-  }
-});
-
-  // ============================================================
-  // Adicionar manualmente
-  // ============================================================
-  formAdd?.addEventListener("submit", async (ev) => {
+  dom.form?.addEventListener("submit", async (ev) => {
     ev.preventDefault();
 
-    const pacId = (pacienteIdHidden.value || "").trim();
-    let paciente_id = pacId ? Number(pacId) : null;
-    let paciente_texto = null;
+    let pacienteId = safeId(dom.pacienteId?.value);
+    let profissionalId = safeId(dom.profissionalId?.value);
 
-    if (!paciente_id) {
-      const parsed = parseDatalistValue(pacienteInput, "#listaPacientes");
-      paciente_id = parsed.id ?? null;
-      paciente_texto = parsed.id ? null : parsed.text;
+    if (!pacienteId) {
+      const parsed = parseDatalist(dom.pacienteInput, dom.pacienteList);
+      pacienteId = safeId(parsed.id || PAC_CACHE.get(normalizeText(parsed.label)));
     }
 
-    const profId = (profissionalIdHidden.value || "").trim();
-    let profissional_id = profId ? Number(profId) : null;
-
-    if (!profissional_id) {
-      const label = (profInput.value || "").trim().toLowerCase();
-      if (PROF_CACHE.has(label)) profissional_id = PROF_CACHE.get(label);
-
-      if (!profissional_id) {
-        toast("Selecione um profissional válido (use a lista).", "error");
-        return;
-      }
+    if (!profissionalId) {
+      const parsed = parseDatalist(dom.profInput, dom.profList);
+      profissionalId = safeId(parsed.id || PROF_CACHE.get(normalizeText(parsed.label)));
     }
 
-    const tipo = (tipoSel?.value || "Individual").trim();
-    const prioSel = prioGroup?.querySelector('input[name="prioridade"]:checked');
-    const prioridade = (prioSel?.value || "verde").trim();
-    const obs = (obsEl?.value || "").trim();
+    if (!pacienteId) {
+      toast(`Digite pelo menos ${MIN_SEARCH} letras e selecione um paciente da lista.`, "error");
+      return;
+    }
+
+    if (!profissionalId) {
+      toast(`Digite pelo menos ${MIN_SEARCH} letras e selecione um profissional da lista.`, "error");
+      return;
+    }
+
+    const payload = {
+      paciente_id: pacienteId,
+      profissional_id: profissionalId,
+      tipo: dom.tipo?.value || "Individual",
+      prioridade:
+        dom.prioGroup?.querySelector('input[name="prioridade"]:checked')?.value || "verde",
+      obs: dom.obs?.value || "",
+    };
 
     try {
       await jfetch(API.filaAdd, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paciente_id,
-          paciente_texto,
-          profissional_id,
-          tipo,
-          prioridade,
-          obs
-        })
+        body: JSON.stringify(payload),
       });
 
-      pacienteInput.value = "";
-      pacienteIdHidden.value = "";
-      profInput.value = "";
-      profissionalIdHidden.value = "";
-      obsEl.value = "";
-      clearProfSuggestions();
+      dom.form.reset();
+
+      if (dom.pacienteId) dom.pacienteId.value = "";
+      if (dom.profissionalId) dom.profissionalId.value = "";
+
+      clearDatalist(dom.pacienteList, PAC_CACHE);
+      clearDatalist(dom.profList, PROF_CACHE);
 
       await carregarFila();
-    } catch (e) {
-      toast(e.message || "Falha ao adicionar.", "error");
+    } catch (err) {
+      toast(err.message || "Falha ao adicionar paciente à fila.", "error");
     }
   });
 
-  // ============================================================
-  // Ações do topo
-  // ============================================================
-  btnImprimir?.addEventListener("click", () => window.print());
+  dom.btnImprimir?.addEventListener("click", () => window.print());
 
-  btnLimparFila?.addEventListener("click", async () => {
+  dom.btnLimpar?.addEventListener("click", async () => {
     if (!confirm("Limpar completamente a fila?")) return;
+
     try {
       await jfetch(API.filaClear, { method: "POST" });
-      await carregarFila();
-    } catch (e) {
-      toast(e.message || "Falha ao limpar a fila.", "error");
+      allItems = [];
+      renderFila(true);
+    } catch (err) {
+      toast(err.message || "Falha ao limpar fila.", "error");
     }
   });
 
-  // ============================================================
-  // Atalhos
-  // ============================================================
   document.addEventListener("keydown", (ev) => {
     if (ev.ctrlKey && ev.key.toLowerCase() === "p") {
       ev.preventDefault();
@@ -942,31 +868,31 @@ cardsFila?.addEventListener("click", async (e) => {
     }
   });
 
-  // ============================================================
-  // Sync cross-tab
-  // ============================================================
-  window.addEventListener("storage", async (ev) => {
-    if (!ev.key || !ev.key.startsWith("fila:removida:")) return;
-    await carregarFila();
+  window.addEventListener("storage", (ev) => {
+    if (ev.key && ev.key.startsWith("fila_removida:")) {
+      carregarFila().catch(console.warn);
+    }
   });
 
-  // ============================================================
-  // Boot
-  // ============================================================
-  (async function boot() {
-    log("Sanity DOM:", {
-      cardsFila: !!cardsFila,
-      filaPrev: !!filaPrev,
-      filaNext: !!filaNext,
-      filaPageInfo: !!filaPageInfo,
-      profInput: !!profInput,
-      pacienteInput: !!pacienteInput,
+  async function boot() {
+    log("DOM OK:", {
+      cards: !!dom.cards,
+      form: !!dom.form,
+      pacienteInput: !!dom.pacienteInput,
+      profInput: !!dom.profInput,
+      busca: !!dom.busca,
+      profFiltro: !!dom.profFiltro,
     });
 
     await syncHoje();
 
-    setInterval(async () => {
-      await syncHoje();
+    setInterval(() => {
+      syncHoje().catch((err) => console.warn("Erro no sync automático:", err.message));
     }, 60_000);
-  })();
+  }
+
+  boot().catch((err) => {
+    console.error("Erro ao iniciar lista de atendimentos:", err);
+    toast("Erro ao carregar a lista de atendimentos.", "error");
+  });
 })();

@@ -1,0 +1,350 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<section class="pm-page">
+
+  <div class="pm-hero">
+    <div>
+      <span class="pm-kicker">Painel Master</span>
+      <h1>Pacientes por clínica</h1>
+      <p>Revise pacientes sem clínica e vincule cada um ao ambiente correto.</p>
+    </div>
+
+    <div class="pm-stats">
+      <div><b id="st-total">{{ pacientes|length }}</b><span>listados</span></div>
+      <div><b id="st-sem">0</b><span>sem clínica</span></div>
+      <div><b id="st-com">0</b><span>com clínica</span></div>
+    </div>
+  </div>
+
+  <form class="pm-filters" method="get">
+    <input type="search" name="q" value="{{ q or '' }}" placeholder="Buscar por nome, CPF, CNS ou prontuário">
+
+    <select name="status_vinculo">
+      <option value="">Todos</option>
+      <option value="sem_clinica" {% if status_vinculo == 'sem_clinica' %}selected{% endif %}>Sem clínica</option>
+      <option value="com_clinica" {% if status_vinculo == 'com_clinica' %}selected{% endif %}>Com clínica</option>
+    </select>
+
+    <button type="submit">Pesquisar</button>
+    <a href="{{ url_for('pacientes.pacientes_master_listar') }}">Limpar</a>
+  </form>
+
+  <div class="pm-card">
+    <div class="pm-table-wrap">
+      <table class="pm-table" id="pmTable">
+        <thead>
+          <tr>
+            <th>Paciente</th>
+            <th>Idade</th>
+            <th>Telefone</th>
+            <th>CPF / CNS</th>
+            <th>Clínica atual</th>
+            <th>Nova clínica</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for p in pacientes %}
+          <tr data-clinica="{{ p.clinica_id or '' }}">
+            <td>
+              <strong>{{ p.nome or '—' }}</strong>
+              <small>Prontuário: {{ p.prontuario or '—' }}</small>
+            </td>
+
+            <td>{{ p.idade or '—' }}</td>
+            <td>{{ p.telefone or '—' }}</td>
+
+            <td>
+              <span>{{ p.cpf or '—' }}</span>
+              <small>CNS: {{ p.cns or '—' }}</small>
+            </td>
+
+            <td>
+              {% if p.clinica_id %}
+                <span class="badge ok">#{{ p.clinica_id }} · {{ p.clinica_nome or 'Clínica sem nome' }}</span>
+              {% else %}
+                <span class="badge warn">Sem clínica</span>
+              {% endif %}
+            </td>
+
+            <td>
+              <form method="post"
+                    class="bind-form"
+                    action="{{ url_for('pacientes.pacientes_master_vincular_clinica', paciente_id=p.id) }}">
+                <select name="clinica_id" required>
+                  <option value="">Selecionar clínica</option>
+                  {% for c in clinicas %}
+                    <option value="{{ c.id }}" {% if p.clinica_id == c.id %}selected{% endif %}>
+                      #{{ c.id }} · {{ c.nome }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </form>
+            </td>
+
+            <td>
+              <button class="btn-bind" type="button">Salvar</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="empty">Nenhum paciente encontrado.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
+<style>
+.pm-page{
+  padding:24px;
+  background:#f8fafc;
+  min-height:calc(100vh - 70px);
+}
+
+.pm-hero{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:26px;
+  border-radius:28px;
+  background:linear-gradient(135deg,#0f172a,#1e293b);
+  color:white;
+  box-shadow:0 22px 50px rgba(15,23,42,.22);
+  margin-bottom:18px;
+}
+
+.pm-kicker{
+  font-size:.75rem;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  color:#93c5fd;
+  font-weight:900;
+}
+
+.pm-hero h1{
+  margin:6px 0;
+  font-size:clamp(1.8rem,3vw,2.5rem);
+}
+
+.pm-hero p{
+  margin:0;
+  color:#cbd5e1;
+}
+
+.pm-stats{
+  display:flex;
+  gap:12px;
+}
+
+.pm-stats div{
+  min-width:110px;
+  padding:14px;
+  border-radius:20px;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.12);
+  text-align:center;
+}
+
+.pm-stats b{
+  display:block;
+  font-size:1.55rem;
+}
+
+.pm-stats span{
+  font-size:.78rem;
+  color:#cbd5e1;
+}
+
+.pm-filters{
+  display:grid;
+  grid-template-columns:1fr 220px auto auto;
+  gap:12px;
+  background:white;
+  padding:14px;
+  border-radius:22px;
+  box-shadow:0 14px 34px rgba(15,23,42,.07);
+  margin-bottom:18px;
+}
+
+.pm-filters input,
+.pm-filters select,
+.bind-form select{
+  width:100%;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  padding:12px 14px;
+  outline:none;
+  background:white;
+}
+
+.pm-filters button,
+.pm-filters a,
+.btn-bind{
+  border:0;
+  border-radius:14px;
+  padding:12px 16px;
+  font-weight:900;
+  cursor:pointer;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.pm-filters button,
+.btn-bind{
+  background:#2563eb;
+  color:white;
+}
+
+.pm-filters a{
+  background:#f1f5f9;
+  color:#334155;
+}
+
+.pm-card{
+  background:white;
+  border-radius:26px;
+  box-shadow:0 18px 45px rgba(15,23,42,.08);
+  overflow:hidden;
+}
+
+.pm-table-wrap{
+  overflow:auto;
+}
+
+.pm-table{
+  width:100%;
+  border-collapse:collapse;
+  min-width:1050px;
+}
+
+.pm-table th{
+  position:sticky;
+  top:0;
+  background:#f8fafc;
+  color:#475569;
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  padding:14px;
+  text-align:left;
+  border-bottom:1px solid #e2e8f0;
+}
+
+.pm-table td{
+  padding:14px;
+  border-bottom:1px solid #eef2f7;
+  vertical-align:middle;
+}
+
+.pm-table strong{
+  display:block;
+  color:#0f172a;
+}
+
+.pm-table small{
+  display:block;
+  color:#64748b;
+  margin-top:4px;
+}
+
+.badge{
+  display:inline-flex;
+  padding:7px 10px;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:900;
+}
+
+.badge.ok{
+  color:#065f46;
+  background:#d1fae5;
+}
+
+.badge.warn{
+  color:#92400e;
+  background:#fef3c7;
+}
+
+.empty{
+  text-align:center;
+  color:#64748b;
+  padding:28px !important;
+}
+
+tr[data-clinica=""]{
+  background:#fffbeb;
+}
+
+@media(max-width:900px){
+  .pm-hero{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .pm-stats{
+    width:100%;
+    flex-wrap:wrap;
+  }
+
+  .pm-stats div{
+    flex:1;
+  }
+
+  .pm-filters{
+    grid-template-columns:1fr;
+  }
+}
+</style>
+
+<script>
+(function(){
+  const rows = [...document.querySelectorAll("#pmTable tbody tr[data-clinica]")];
+
+  const total = rows.length;
+  const sem = rows.filter(r => !r.dataset.clinica).length;
+  const com = rows.filter(r => !!r.dataset.clinica).length;
+
+  const stTotal = document.getElementById("st-total");
+  const stSem = document.getElementById("st-sem");
+  const stCom = document.getElementById("st-com");
+
+  if(stTotal) stTotal.textContent = total;
+  if(stSem) stSem.textContent = sem;
+  if(stCom) stCom.textContent = com;
+
+  document.querySelectorAll(".btn-bind").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tr = btn.closest("tr");
+      const form = tr?.querySelector(".bind-form");
+      const select = form?.querySelector("select[name='clinica_id']");
+
+      if(!select || !select.value){
+        alert("Selecione uma clínica antes de salvar.");
+        return;
+      }
+
+      const nome = tr?.querySelector("strong")?.textContent?.trim() || "paciente";
+
+      if(!confirm(`Vincular ${nome} à clínica selecionada?`)){
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      form.submit();
+    });
+  });
+})();
+</script>
+
+{% endblock %}

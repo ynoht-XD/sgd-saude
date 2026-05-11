@@ -6,6 +6,10 @@
 
 {% block content %}
 
+{% set usuario = session.get('usuario') or session.get('user') or session.get('auth_user') or {} %}
+{% set role = (session.get('role') or usuario.get('role') or '')|upper %}
+{% set is_master = session.get('is_master') or session.get('is_superuser') or usuario.get('is_master') or usuario.get('is_superuser') or role in ['MASTER', 'ROOT', 'SUPERADMIN'] %}
+
 <form method="get" class="filtros-form" autocomplete="off">
   <div class="filtros-grid">
     <input type="text" name="prontuario" placeholder="Prontuário" value="{{ request.args.get('prontuario', '') }}">
@@ -19,7 +23,6 @@
       {% endif %}
     </datalist>
 
-    <!-- Terapeuta -->
     <input type="text" name="terapeuta" placeholder="Terapeuta" value="{{ request.args.get('terapeuta','') }}" list="dl-terapeutas">
     <datalist id="dl-terapeutas">
       {% if sugestoes_terapeutas %}
@@ -29,7 +32,6 @@
       {% endif %}
     </datalist>
 
-    <!-- CBO -->
     <input type="text" name="cbo" placeholder="CBO" value="{{ request.args.get('cbo','') }}" list="dl-cbos" inputmode="numeric">
     <datalist id="dl-cbos">
       {% if sugestoes_cbos %}
@@ -39,10 +41,8 @@
       {% endif %}
     </datalist>
 
-    <!-- Rua -->
     <input type="text" name="rua" placeholder="Rua" value="{{ request.args.get('rua','') }}">
 
-    <!-- ✅ Agendamento (dia) — agora bate com o backend: name="ag_dia" -->
     <select name="ag_dia">
       <option value="">Agendamento (dia)</option>
       {% set ds = (request.args.get('ag_dia') or '') %}
@@ -114,35 +114,22 @@
   </div>
 </form>
 
-
 <div class="pacientes-container">
 
   {% if pacientes %}
     <div class="cards-grid">
 
       {% for p in pacientes %}
-      <article class="pac-card" data-id="{{ p.id }}">
+      <article class="pac-card pac-card-clean" data-id="{{ p.id }}">
 
-        <!-- =======================
-             CABEÇALHO DO CARD
-             ======================= -->
-        <header class="pac-head">
-
-          <!-- LINHA 1 -->
-          <div class="pac-head-top">
-            <div class="pac-nome">{{ p.nome }}</div>
-            <span class="pac-num-badge" title="Nº da linha">{{ loop.index }}</span>
+        <header class="pac-clean-head">
+          <div class="pac-clean-title">
+            <span class="pac-num-badge">{{ loop.index }}</span>
+            <h2>{{ p.nome or 'Paciente sem nome' }}</h2>
           </div>
 
-          <!-- LINHA 2 -->
-          <div class="pac-badges">
-            {% if p.mod %}<span class="chip chip-mod">{{ p.mod }}</span>{% endif %}
-            {% if p.status %}<span class="chip chip-status">{{ p.status }}</span>{% endif %}
-          </div>
-
-          <!-- LINHA 3 -->
-          <div class="pac-actions" aria-label="Ações do paciente">
-            <a class="btn btn-prontuario" href="{{ url_for('pacientes.visualizar_paciente', id=p.id) }}" title="Abrir prontuário">
+          <div class="pac-actions">
+            <a class="btn btn-prontuario" href="{{ url_for('pacientes.visualizar_paciente', id=p.id) }}">
               PRONTUÁRIO
             </a>
 
@@ -157,75 +144,20 @@
               <button type="submit" class="btn btn-excluir" title="Excluir paciente">🗑️</button>
             </form>
           </div>
-
         </header>
 
-
-        <!-- =======================
-             LINHA 2 (DIVIDIDA)
-             ======================= -->
-        <section class="pac-row2">
-
-          <!-- Coluna A: Prontuário + Idade -->
-          <div class="pac-col">
-            <div class="kv">
-              <span class="k">Prontuário</span>
-              <span class="v">{{ p.prontuario or '—' }}</span>
-            </div>
-
-            <div class="kv">
-              <span class="k">Idade</span>
-              <span class="v">
-                {% if p.idade is not none %}{{ p.idade }}{% else %}—{% endif %}
-              </span>
-            </div>
+        <!-- 2. Prontuário, modalidade e status -->
+        <section class="pac-line pac-line-3">
+          <div class="kv">
+            <span class="k">Prontuário</span>
+            <span class="v">{{ p.prontuario or '—' }}</span>
           </div>
-
-          <!-- Coluna B: END (autosave) + Sexo -->
-          <div class="pac-col">
-            <label class="kv kv-input">
-              <span class="k">END (Prontuário físico)</span>
-              <input
-                type="text"
-                class="inp inp-sm"
-                name="end_prontuario"
-                value="{{ p.end_prontuario or '' }}"
-                placeholder="Ex.: Armário 2 • Pasta 14"
-                data-autosave="end_prontuario"
-                data-id="{{ p.id }}"
-                autocomplete="off">
-            </label>
-
-            <div class="kv">
-              <span class="k">Sexo</span>
-              <span class="v">{{ p.sexo or '—' }}</span>
-            </div>
-          </div>
-
-        </section>
-
-
-        <!-- =======================
-             TERAPEUTA | CBO (chips)
-             ======================= -->
-        <section class="pac-row3">
 
           <div class="kv">
-            <span class="k">Terapeuta</span>
+            <span class="k">Modalidade</span>
             <span class="v">
-              {% if p.terapeuta %}
-                {% set raw = p.terapeuta
-                  |replace(' / ', ',')
-                  |replace('/', ',')
-                  |replace(';', ',')
-                %}
-                {% set parts = raw.split(',') %}
-                {% for t in parts %}
-                  {% set t2 = t.strip() %}
-                  {% if t2 %}
-                    <span class="chip chip-prof">{{ t2 }}</span>
-                  {% endif %}
-                {% endfor %}
+              {% if p.mod %}
+                <span class="chip chip-mod">{{ p.mod }}</span>
               {% else %}
                 —
               {% endif %}
@@ -233,65 +165,74 @@
           </div>
 
           <div class="kv">
-            <span class="k">CBO</span>
+            <span class="k">Status</span>
             <span class="v">
-              {% if p.cbo or p.cbo_nome %}
-                <span class="chip chip-cbo">{{ p.cbo or '—' }}</span>
-                <span class="muted">{{ p.cbo_nome or '' }}</span>
+              {% if p.status %}
+                <span class="chip chip-status">{{ p.status }}</span>
               {% else %}
                 —
               {% endif %}
             </span>
           </div>
-
         </section>
 
-
-        <!-- =======================
-             DADOS PRINCIPAIS
-             ======================= -->
-        <section class="pac-grid-info">
-
+        <!-- 3. Nascimento, idade, sexo e CID -->
+        <section class="pac-line pac-line-4">
           <div class="kv">
             <span class="k">Nascimento</span>
             <span class="v">{{ p.nascimento or '—' }}</span>
           </div>
 
           <div class="kv">
+            <span class="k">Idade</span>
+            <span class="v">{% if p.idade is not none %}{{ p.idade }}{% else %}—{% endif %}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">Sexo</span>
+            <span class="v">{{ p.sexo or '—' }}</span>
+          </div>
+
+          <div class="kv">
+            <span class="k">CID</span>
+            <span class="v">
+              {% if p.cid %}
+                {{ p.cid }}
+                {% if p.cid2 %}<span class="muted">/ {{ p.cid2 }}</span>{% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+        </section>
+
+        <!-- 4. Telefone e CPF -->
+        <section class="pac-line pac-line-2">
+          <div class="kv">
+            <span class="k">Telefone</span>
+            <span class="v">{{ p.telefone or p.telefone1 or '—' }}</span>
+          </div>
+
+          <div class="kv">
             <span class="k">CPF</span>
             <span class="v">{{ p.cpf or '—' }}</span>
           </div>
+        </section>
 
-          <div class="kv">
-            <span class="k">CNS</span>
-            <span class="v">{{ p.cns or '—' }}</span>
-          </div>
-
-          <div class="kv">
-            <span class="k">Telefone</span>
-            <span class="v">{{ p.telefone or '—' }}</span>
-          </div>
-
-          <div class="kv">
-            <span class="k">Nome da mãe</span>
-            <span class="v">{{ p.nome_mae or '—' }}</span>
-          </div>
-
-          <div class="kv">
-            <span class="k">Nome do pai</span>
-            <span class="v">{{ p.nome_pai or '—' }}</span>
-          </div>
-
-          <!-- Logradouro -->
+        <!-- 5. Logradouro -->
+        <section class="pac-line pac-line-1">
           <div class="kv kv-wide">
             <span class="k">Logradouro</span>
             <span class="v">
               {% set parts = [] %}
               {% if p.rua %}{% set _ = parts.append(p.rua) %}{% endif %}
-              {% if p.numero %}{% set _ = parts.append(p.numero) %}{% endif %}
+              {% if p.logradouro and not p.rua %}{% set _ = parts.append(p.logradouro) %}{% endif %}
+              {% if p.numero %}{% set _ = parts.append('Nº ' ~ p.numero) %}{% endif %}
+              {% if p.numero_casa and not p.numero %}{% set _ = parts.append('Nº ' ~ p.numero_casa) %}{% endif %}
               {% if p.bairro %}{% set _ = parts.append(p.bairro) %}{% endif %}
-              {% if p.cep %}{% set _ = parts.append(p.cep) %}{% endif %}
+              {% if p.cep %}{% set _ = parts.append('CEP ' ~ p.cep) %}{% endif %}
               {% if p.cidade %}{% set _ = parts.append(p.cidade) %}{% endif %}
+              {% if p.municipio and not p.cidade %}{% set _ = parts.append(p.municipio) %}{% endif %}
               {% if p.uf %}{% set _ = parts.append(p.uf) %}{% endif %}
 
               {% if parts|length %}
@@ -301,36 +242,47 @@
               {% endif %}
             </span>
           </div>
+        </section>
 
-          <!-- ✅ Agendamento (corrigido: usa ag_hora_ini/ag_hora_fim e opcional ag_resumo) -->
-          <div class="kv kv-wide">
-            <span class="k">Agendamento</span>
+        <!-- 6. Terapeuta, CBO e agendamento -->
+        <section class="pac-line pac-line-therapy">
+          <div class="kv">
+            <span class="k">Terapeuta / CBO</span>
             <span class="v">
-              {% if p.ag_resumo %}
-                {{ p.ag_resumo }}
+              {% if p.terapeuta %}
+                {% set raw = p.terapeuta|replace(' / ', ',')|replace('/', ',')|replace(';', ',') %}
+                {% set parts = raw.split(',') %}
+                {% for t in parts %}
+                  {% set t2 = t.strip() %}
+                  {% if t2 %}
+                    <span class="chip chip-prof">{{ t2 }}</span>
+                  {% endif %}
+                {% endfor %}
               {% else %}
-                —
+                <span class="muted">Sem terapeuta</span>
+              {% endif %}
+
+              {% if p.cbo or p.cbo_nome %}
+                <span class="chip chip-cbo">{{ p.cbo or 'CBO' }}</span>
+                {% if p.cbo_nome %}<span class="muted">{{ p.cbo_nome }}</span>{% endif %}
               {% endif %}
             </span>
           </div>
 
-
-          <div class="kv kv-wide">
-            <span class="k">CID</span>
-            <span class="v">{{ p.cid or '—' }}</span>
+          <div class="kv">
+            <span class="k">Agendamento</span>
+            <span class="v">{{ p.ag_resumo or '—' }}</span>
           </div>
-
         </section>
 
+        <!-- 7. Comorbidades colapsado -->
+        <details class="pac-collapse">
+          <summary>
+            <span>Comorbidades / Projetos / Alergias</span>
+            <small>Clique para abrir</small>
+          </summary>
 
-        <!-- =======================
-             COMORBIDADES / PROJETOS (autosave)
-             ======================= -->
-        <section class="pac-comorb">
-
-          <div class="section-title">Comorbidades / Projetos</div>
-
-          <div class="chips-grid" role="group" aria-label="Comorbidades e projetos">
+          <div class="chips-grid">
             {% set tags = [
               ('diabetico','Diabético'),
               ('bpc','BPC'),
@@ -356,36 +308,47 @@
             {% endfor %}
           </div>
 
-          <div class="pac-notes">
+          <label class="kv kv-input pac-collapse-input">
+            <span class="k">Alergias</span>
+            <input
+              type="text"
+              class="inp inp-sm"
+              name="alergias"
+              value="{{ p.alergias or '' }}"
+              placeholder="Ex.: Dipirona"
+              data-autosave="alergias"
+              data-id="{{ p.id }}"
+              autocomplete="off">
+          </label>
+        </details>
 
-            <label class="kv kv-input">
-              <span class="k">Alergias</span>
-              <input
-                type="text"
-                class="inp inp-sm"
-                name="alergias"
-                value="{{ p.alergias or '' }}"
-                placeholder="Ex.: Dipirona"
-                data-autosave="alergias"
-                data-id="{{ p.id }}"
-                autocomplete="off">
-            </label>
+        <!-- 8. END, aviso e situação -->
+        <section class="pac-line pac-line-2">
+          <label class="kv kv-input">
+            <span class="k">END (Prontuário físico)</span>
+            <input
+              type="text"
+              class="inp inp-sm"
+              name="end_prontuario"
+              value="{{ p.end_prontuario or '' }}"
+              placeholder="Ex.: Armário 2 • Pasta 14"
+              data-autosave="end_prontuario"
+              data-id="{{ p.id }}"
+              autocomplete="off">
+          </label>
 
-            <label class="kv kv-input">
-              <span class="k">Aviso / Situação</span>
-              <input
-                type="text"
-                class="inp inp-sm"
-                name="aviso"
-                value="{{ p.aviso or '' }}"
-                placeholder="Ex.: precisa de acompanhante"
-                data-autosave="aviso"
-                data-id="{{ p.id }}"
-                autocomplete="off">
-            </label>
-
-          </div>
-
+          <label class="kv kv-input">
+            <span class="k">Aviso / Situação</span>
+            <input
+              type="text"
+              class="inp inp-sm"
+              name="aviso"
+              value="{{ p.aviso or '' }}"
+              placeholder="Ex.: precisa de acompanhante"
+              data-autosave="aviso"
+              data-id="{{ p.id }}"
+              autocomplete="off">
+          </label>
         </section>
 
       </article>
@@ -393,10 +356,20 @@
 
     </div>
   {% else %}
-    <p>Nenhum paciente cadastrado.</p>
+    <p class="pac-empty">Nenhum paciente cadastrado.</p>
+  {% endif %}
+
+  {% if is_master %}
+    <div class="master-tools">
+      <a href="{{ url_for('pacientes.pacientes_master_listar') }}" class="master-btn">
+        👑 Painel Master de Pacientes
+      </a>
+    </div>
   {% endif %}
 
 </div>
+
+
 
 {% endblock %}
 

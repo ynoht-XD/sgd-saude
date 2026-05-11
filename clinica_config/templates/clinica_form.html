@@ -1,0 +1,706 @@
+{% extends "layout.html" %}
+
+{% block title %}
+  {% if modo == "editar" %}Editar Clínica{% else %}Nova Clínica{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% set is_matriz = clinica.is_matriz or clinica.id == 1 %}
+{% set clinica_id_atual = clinica.id or clinica_id or 1 %}
+
+<section class="clinica-form-page">
+
+  <div class="page-hero">
+    <div>
+      <span class="eyebrow">
+        {% if is_matriz %}Matriz administrativa{% else %}Acesso Master{% endif %}
+      </span>
+
+      <h1>
+        {% if modo == "editar" %}
+          Editar Clínica
+        {% else %}
+          Nova Clínica
+        {% endif %}
+      </h1>
+
+      <p>
+        Cadastre os dados da clínica, configure cobrança e defina o timbre/imagens próprios desta unidade.
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      <a class="btn ghost" href="{{ url_for('clinica_config.index', clinica_id=clinica_id_atual) }}">
+        Voltar
+      </a>
+    </div>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="flash-wrap">
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" enctype="multipart/form-data" class="form-shell" id="formClinica">
+
+    <input type="hidden" name="clinica_id" value="{{ clinica_id_atual }}">
+
+    <section class="form-card">
+
+      <div class="section-title">
+        <div>
+          <span class="eyebrow dark">Cadastro</span>
+          <h2>
+            {% if is_matriz %}Dados da empresa principal{% else %}Dados da clínica{% endif %}
+          </h2>
+          <p>Informações principais usadas no sistema, relatórios e identificação.</p>
+        </div>
+
+        <button class="btn primary" type="submit">
+          Salvar clínica
+        </button>
+      </div>
+
+      <div class="form-grid">
+
+        <label>
+          {% if is_matriz %}Nome da empresa *{% else %}Nome da clínica *{% endif %}
+          <input type="text" name="nome" value="{{ clinica.nome or '' }}" required>
+        </label>
+
+        <label>
+          Nome fantasia
+          <input type="text" name="nome_fantasia" value="{{ clinica.nome_fantasia or '' }}">
+        </label>
+
+        <label>
+          Razão social
+          <input type="text" name="razao_social" value="{{ clinica.razao_social or '' }}">
+        </label>
+
+        <label>
+          CNPJ
+          <input type="text" name="cnpj" value="{{ clinica.cnpj or '' }}">
+        </label>
+
+        <label>
+          Telefone
+          <input type="text" name="telefone" value="{{ clinica.telefone or '' }}">
+        </label>
+
+        <label>
+          WhatsApp
+          <input type="text" name="whatsapp" value="{{ clinica.whatsapp or '' }}">
+        </label>
+
+        <label>
+          E-mail
+          <input type="email" name="email" value="{{ clinica.email or '' }}">
+        </label>
+
+        <label>
+          CNES
+          <input type="text" name="cnes" value="{{ clinica.cnes or '' }}">
+        </label>
+
+        <label>
+          Tipo
+          <input type="text" name="tipo_clinica" value="{{ clinica.tipo_clinica or '' }}" placeholder="Ex: Reabilitação, Clínica médica...">
+        </label>
+
+        <label>
+          CEP
+          <input type="text" name="cep" value="{{ clinica.cep or '' }}">
+        </label>
+
+        <label>
+          Logradouro
+          <input type="text" name="logradouro" value="{{ clinica.logradouro or '' }}">
+        </label>
+
+        <label>
+          Número
+          <input type="text" name="numero" value="{{ clinica.numero or '' }}">
+        </label>
+
+        <label>
+          Complemento
+          <input type="text" name="complemento" value="{{ clinica.complemento or '' }}">
+        </label>
+
+        <label>
+          Bairro
+          <input type="text" name="bairro" value="{{ clinica.bairro or '' }}">
+        </label>
+
+        <label>
+          Município
+          <input type="text" name="municipio" value="{{ clinica.municipio or '' }}">
+        </label>
+
+        <label>
+          UF
+          <input type="text" name="uf" value="{{ clinica.uf or '' }}" maxlength="2">
+        </label>
+
+        <label class="full">
+          Endereço completo
+          <input type="text" name="endereco" value="{{ clinica.endereco or '' }}">
+        </label>
+
+      </div>
+
+    </section>
+
+    {% if is_matriz %}
+    <section class="form-card payment-card">
+
+      <div class="section-title">
+        <div>
+          <span class="eyebrow dark">Pix e cobrança</span>
+          <h2>Dados de pagamento da matriz</h2>
+          <p>Esses dados serão usados para pagamentos das clínicas clientes.</p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+
+        <label>
+          Tipo da chave Pix
+          <select name="tipo_chave_pix">
+            <option value="">Selecione</option>
+            <option value="cnpj" {% if clinica.tipo_chave_pix == 'cnpj' %}selected{% endif %}>CNPJ</option>
+            <option value="cpf" {% if clinica.tipo_chave_pix == 'cpf' %}selected{% endif %}>CPF</option>
+            <option value="email" {% if clinica.tipo_chave_pix == 'email' %}selected{% endif %}>E-mail</option>
+            <option value="telefone" {% if clinica.tipo_chave_pix == 'telefone' %}selected{% endif %}>Telefone</option>
+            <option value="aleatoria" {% if clinica.tipo_chave_pix == 'aleatoria' %}selected{% endif %}>Chave aleatória</option>
+          </select>
+        </label>
+
+        <label>
+          Chave Pix
+          <input type="text" name="chave_pix" value="{{ clinica.chave_pix or '' }}">
+        </label>
+
+        <label>
+          Favorecido
+          <input type="text" name="favorecido_pix" value="{{ clinica.favorecido_pix or '' }}">
+        </label>
+
+        <label>
+          Documento do favorecido
+          <input type="text" name="documento_favorecido_pix" value="{{ clinica.documento_favorecido_pix or '' }}">
+        </label>
+
+        <label>
+          Banco
+          <input type="text" name="banco_pix" value="{{ clinica.banco_pix or '' }}">
+        </label>
+
+        <label>
+          Agência
+          <input type="text" name="agencia_pix" value="{{ clinica.agencia_pix or '' }}">
+        </label>
+
+        <label>
+          Conta
+          <input type="text" name="conta_pix" value="{{ clinica.conta_pix or '' }}">
+        </label>
+
+        <label class="full">
+          Observação de pagamento
+          <textarea name="observacao_pagamento" rows="3">{{ clinica.observacao_pagamento or '' }}</textarea>
+        </label>
+
+      </div>
+
+    </section>
+    {% else %}
+    <section class="form-card payment-card">
+
+      <div class="section-title">
+        <div>
+          <span class="eyebrow dark">Contrato</span>
+          <h2>Plano e cobrança da clínica</h2>
+          <p>Controle interno da mensalidade e situação financeira desta clínica.</p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+
+        <label>
+          Plano contratado
+          <input type="text" name="plano_contratado" value="{{ clinica.plano_contratado or '' }}">
+        </label>
+
+        <label>
+          Valor mensalidade
+          <input type="number" step="0.01" min="0" name="valor_mensalidade" value="{{ clinica.valor_mensalidade or '' }}">
+        </label>
+
+        <label>
+          Dia vencimento
+          <input type="number" min="1" max="31" name="dia_vencimento" value="{{ clinica.dia_vencimento or '' }}">
+        </label>
+
+        <label>
+          Status pagamento
+          <select name="status_pagamento">
+            <option value="ativo" {% if clinica.status_pagamento == 'ativo' %}selected{% endif %}>Ativo</option>
+            <option value="pendente" {% if clinica.status_pagamento == 'pendente' %}selected{% endif %}>Pendente</option>
+            <option value="atrasado" {% if clinica.status_pagamento == 'atrasado' %}selected{% endif %}>Atrasado</option>
+            <option value="suspenso" {% if clinica.status_pagamento == 'suspenso' %}selected{% endif %}>Suspenso</option>
+          </select>
+        </label>
+
+      </div>
+
+    </section>
+    {% endif %}
+
+    <section class="form-card">
+
+      <div class="section-title">
+        <div>
+          <span class="eyebrow dark">Responsável</span>
+          <h2>Dados administrativos</h2>
+          <p>Informações opcionais do responsável pela clínica.</p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+
+        <label>
+          Nome do responsável
+          <input type="text" name="responsavel_nome" value="{{ clinica.responsavel_nome or '' }}">
+        </label>
+
+        <label>
+          CPF do responsável
+          <input type="text" name="responsavel_cpf" value="{{ clinica.responsavel_cpf or '' }}">
+        </label>
+
+        <label>
+          Telefone do responsável
+          <input type="text" name="responsavel_telefone" value="{{ clinica.responsavel_telefone or '' }}">
+        </label>
+
+        <label>
+          E-mail do responsável
+          <input type="email" name="responsavel_email" value="{{ clinica.responsavel_email or '' }}">
+        </label>
+
+        <label class="full">
+          Observações
+          <textarea name="observacoes" rows="4">{{ clinica.observacoes or '' }}</textarea>
+        </label>
+
+        <label class="check-line full">
+          <input
+            type="checkbox"
+            name="ativa"
+            {% if clinica.ativa is not sameas false %}checked{% endif %}
+            {% if is_matriz %}disabled{% endif %}
+          >
+          Clínica ativa
+        </label>
+
+        {% if is_matriz %}
+          <input type="hidden" name="ativa" value="on">
+        {% endif %}
+
+      </div>
+
+    </section>
+
+    <section class="form-card timbre-card timbre-shortcut-card">
+
+      <div class="section-title">
+        <div>
+          <span class="eyebrow dark">Papel timbrado</span>
+          <h2>Configuração visual dos documentos</h2>
+          <p>
+            Configure o cabeçalho, marca d’água, rodapé, imagens e aparência dos relatórios
+            em uma tela própria com prévia A4.
+          </p>
+        </div>
+
+        <a
+          class="btn primary"
+          href="{{ url_for('clinica_config.timbre', clinica_id=clinica_id_atual) }}"
+        >
+          Abrir editor de timbre
+        </a>
+      </div>
+
+      <div class="timbre-help-grid">
+        <div class="timbre-help-item">
+          <strong>Cabeçalho</strong>
+          <span>Use uma imagem horizontal para aparecer no topo dos relatórios.</span>
+        </div>
+
+        <div class="timbre-help-item">
+          <strong>Marca d’água</strong>
+          <span>Use uma logo transparente para ficar ao fundo dos documentos.</span>
+        </div>
+
+        <div class="timbre-help-item">
+          <strong>Rodapé</strong>
+          <span>Configure texto institucional e até três imagens inferiores.</span>
+        </div>
+      </div>
+
+    </section>
+
+    <div class="bottom-actions">
+      <a class="btn ghost-dark" href="{{ url_for('clinica_config.index', clinica_id=clinica_id_atual) }}">
+        Cancelar
+      </a>
+
+      <button class="btn primary" type="submit">
+        Salvar tudo
+      </button>
+    </div>
+
+  </form>
+
+</section>
+
+<style>
+.clinica-form-page {
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(20,184,166,.16), transparent 34%),
+    linear-gradient(135deg, #f8fafc, #eef6f6);
+}
+
+.page-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  color: white;
+  border-radius: 28px;
+  padding: 30px;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  box-shadow: 0 20px 45px rgba(15,118,110,.25);
+}
+
+.page-hero h1 {
+  margin: 6px 0;
+}
+
+.page-hero p {
+  margin: 0;
+  opacity: .92;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: .72rem;
+  font-weight: 900;
+}
+
+.eyebrow.dark {
+  color: #0f766e;
+}
+
+.btn {
+  border: none;
+  border-radius: 16px;
+  padding: 12px 17px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn.primary {
+  background: #0f766e;
+  color: white;
+  box-shadow: 0 12px 24px rgba(15,118,110,.2);
+}
+
+.btn.ghost {
+  background: rgba(255,255,255,.16);
+  color: white;
+  border: 1px solid rgba(255,255,255,.38);
+}
+
+.btn.ghost-dark {
+  background: white;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.flash-wrap {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.flash {
+  padding: 13px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.flash.success {
+  color: #065f46;
+  background: rgba(16,185,129,.12);
+}
+
+.flash.error {
+  color: #991b1b;
+  background: rgba(239,68,68,.12);
+}
+
+.form-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.form-card {
+  background: rgba(255,255,255,.96);
+  border-radius: 26px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 15px 38px rgba(15,23,42,.07);
+}
+
+.payment-card {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+.timbre-card {
+  background: linear-gradient(135deg, #ffffff, #f0fdfa);
+  border-color: #99f6e4;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.section-title p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.form-grid,
+.timbre-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #334155;
+  font-weight: 900;
+}
+
+label.full {
+  grid-column: 1 / -1;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 15px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  outline: none;
+}
+
+input[type="color"] {
+  min-height: 46px;
+  padding: 4px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  background: white;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20,184,166,.14);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.check-line {
+  flex-direction: row;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  padding: 12px 14px;
+}
+
+.check-line input {
+  width: auto;
+}
+
+.upload-card {
+  background: white;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.upload-preview {
+  min-height: 115px;
+  border: 1px dashed #99f6e4;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: #f8fafc;
+  padding: 10px;
+  overflow: hidden;
+}
+
+.upload-preview img {
+  max-width: 100%;
+  max-height: 82px;
+  object-fit: contain;
+  display: block;
+}
+
+.upload-preview img:not([src]),
+.upload-preview img[src=""] {
+  display: none;
+}
+
+.upload-preview small {
+  color: #64748b;
+  font-weight: 800;
+}
+
+.bottom-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: rgba(255,255,255,.86);
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  padding: 16px;
+}
+
+@media (max-width: 1000px) {
+  .page-hero,
+  .section-title {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-grid,
+  .timbre-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .clinica-form-page {
+    padding: 14px;
+  }
+
+  .page-hero,
+  .form-card {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .form-grid,
+  .timbre-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bottom-actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+}
+</style>
+
+<script>
+(() => {
+  const form = document.getElementById("formClinica");
+  const rodapeEditavel = document.getElementById("rodapeTextoEditavel");
+  const rodapeHidden = document.getElementById("rodapeTextoHidden");
+  const colorListra = document.getElementById("colorListra");
+  const corListraTopo = document.getElementById("corListraTopo");
+
+  const previewMap = {
+    cabecalho: document.getElementById("previewCabecalho"),
+    logo: document.getElementById("previewLogo"),
+    rodape1: document.getElementById("previewRodape1"),
+    rodape2: document.getElementById("previewRodape2"),
+    rodape3: document.getElementById("previewRodape3")
+  };
+
+  document.querySelectorAll("[data-preview-file]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.previewFile;
+      const img = previewMap[key];
+      const file = input.files && input.files[0];
+
+      if (!img || !file || !file.type.startsWith("image/")) return;
+
+      img.src = URL.createObjectURL(file);
+    });
+  });
+
+  colorListra?.addEventListener("input", () => {
+    if (corListraTopo) {
+      corListraTopo.value = colorListra.value;
+    }
+  });
+
+  form?.addEventListener("submit", () => {
+    if (rodapeEditavel && rodapeHidden) {
+      rodapeHidden.value = rodapeEditavel.value.trim();
+    }
+
+    if (colorListra && corListraTopo) {
+      corListraTopo.value = colorListra.value;
+    }
+  });
+})();
+</script>
+
+{% endblock %}

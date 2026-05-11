@@ -1,0 +1,861 @@
+{% extends "layout.html" %}
+
+{% block title %}Usuários Master{% endblock %}
+
+{% block content %}
+<style>
+  .master-wrap {
+    padding: 24px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+
+  .master-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0f172a, #1d4ed8);
+    color: #fff;
+    border-radius: 28px;
+    padding: 30px;
+    box-shadow: 0 22px 60px rgba(15, 23, 42, .24);
+    margin-bottom: 22px;
+  }
+
+  .master-hero h1 {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 900;
+    letter-spacing: -.03em;
+  }
+
+  .master-hero p {
+    margin: 10px 0 0;
+    color: rgba(255,255,255,.82);
+    max-width: 800px;
+    line-height: 1.6;
+  }
+
+  .master-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .06);
+  }
+
+  .stat-card small {
+    color: #64748b;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: .72rem;
+    letter-spacing: .04em;
+  }
+
+  .stat-card strong {
+    display: block;
+    margin-top: 8px;
+    font-size: 1.8rem;
+    color: #0f172a;
+  }
+
+  .master-toolbar {
+    display: grid;
+    grid-template-columns: 1.5fr repeat(3, minmax(150px, .5fr));
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    padding: 14px;
+    margin-bottom: 18px;
+    box-shadow: 0 10px 32px rgba(15, 23, 42, .05);
+  }
+
+  .master-toolbar input,
+  .master-toolbar select,
+  .field input,
+  .field select {
+    width: 100%;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    padding: 12px 13px;
+    outline: none;
+    font-size: .94rem;
+    background: #f8fafc;
+  }
+
+  .master-toolbar input:focus,
+  .master-toolbar select:focus,
+  .field input:focus,
+  .field select:focus {
+    border-color: #2563eb;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
+  }
+
+  .users-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .user-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 24px;
+    padding: 18px;
+    box-shadow: 0 12px 34px rgba(15, 23, 42, .06);
+    transition: .18s ease;
+  }
+
+  .user-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 46px rgba(15, 23, 42, .10);
+  }
+
+  .user-card.limbo {
+    border-color: #f59e0b;
+    background: linear-gradient(180deg, #fffbeb, #fff);
+  }
+
+  .user-card.is-master-user {
+    display: none;
+  }
+
+  .user-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .user-name {
+    font-weight: 900;
+    color: #0f172a;
+    font-size: 1.02rem;
+    line-height: 1.25;
+  }
+
+  .user-sub {
+    color: #64748b;
+    font-size: .83rem;
+    margin-top: 4px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: .72rem;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .badge-master { background: #ede9fe; color: #5b21b6; }
+  .badge-admin { background: #dbeafe; color: #1d4ed8; }
+  .badge-prof { background: #dcfce7; color: #166534; }
+  .badge-rec { background: #fef3c7; color: #92400e; }
+  .badge-off { background: #fee2e2; color: #991b1b; }
+  .badge-on { background: #dcfce7; color: #166534; }
+  .badge-limbo { background: #ffedd5; color: #9a3412; }
+
+  .user-meta {
+    margin-top: 14px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .meta-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: .86rem;
+    border-top: 1px dashed #e5e7eb;
+    padding-top: 8px;
+  }
+
+  .meta-line span:first-child {
+    color: #64748b;
+  }
+
+  .meta-line span:last-child {
+    color: #0f172a;
+    font-weight: 750;
+    text-align: right;
+  }
+
+  .user-actions {
+    margin-top: 15px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .btn-master {
+    border: 0;
+    border-radius: 13px;
+    padding: 10px 13px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: .15s ease;
+  }
+
+  .btn-primary {
+    background: #2563eb;
+    color: #fff;
+  }
+
+  .btn-soft {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+
+  .btn-master:hover {
+    filter: brightness(.96);
+    transform: translateY(-1px);
+  }
+
+  .empty-state {
+    display: none;
+    text-align: center;
+    padding: 35px;
+    background: #fff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 22px;
+    color: #64748b;
+    margin-bottom: 16px;
+  }
+
+  .pagination-wrap {
+    margin-top: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .05);
+  }
+
+  .pagination-info {
+    color: #64748b;
+    font-weight: 800;
+    font-size: .9rem;
+  }
+
+  .pagination-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .page-btn {
+    border: 1px solid #dbe3ef;
+    background: #f8fafc;
+    color: #0f172a;
+    border-radius: 12px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font-weight: 900;
+  }
+
+  .page-btn.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .58);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    z-index: 9999;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-box {
+    width: min(720px, 100%);
+    background: #fff;
+    border-radius: 26px;
+    box-shadow: 0 28px 90px rgba(15, 23, 42, .36);
+    overflow: hidden;
+  }
+
+  .modal-head {
+    padding: 22px;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: #fff;
+  }
+
+  .modal-head h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 900;
+  }
+
+  .modal-body {
+    padding: 22px;
+    display: grid;
+    gap: 14px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .field label {
+    display: block;
+    font-size: .78rem;
+    color: #475569;
+    font-weight: 900;
+    margin-bottom: 6px;
+  }
+
+  .modal-actions {
+    padding: 16px 22px 22px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  @media (max-width: 1100px) {
+    .users-grid,
+    .master-stats {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .master-toolbar {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .master-wrap {
+      padding: 14px;
+    }
+
+    .users-grid,
+    .master-stats,
+    .master-toolbar,
+    .form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="master-wrap">
+
+  <section class="master-hero">
+    <h1>Central Master de Usuários</h1>
+    <p>
+      Visualize usuários de todas as clínicas, corrija vínculos no limbo e designe permissões sem precisar abrir o banco.
+    </p>
+  </section>
+
+  <section class="master-stats">
+    <div class="stat-card">
+      <small>Total de usuários</small>
+      <strong id="statTotal">{{ usuarios|length }}</strong>
+    </div>
+
+    <div class="stat-card">
+      <small>No limbo</small>
+      <strong id="statLimbo">0</strong>
+    </div>
+
+    <div class="stat-card">
+      <small>Ativos</small>
+      <strong id="statAtivos">0</strong>
+    </div>
+
+    <div class="stat-card">
+      <small>Usuários ocultos Master</small>
+      <strong id="statMasters">0</strong>
+    </div>
+  </section>
+
+  <section class="master-toolbar">
+    <input id="fBusca" type="search" placeholder="Buscar por nome, CPF, clínica, CBO ou nível...">
+
+    <select id="fRole">
+      <option value="">Nível: todos</option>
+      <option value="ADMIN">Administrador</option>
+      <option value="RECEPCAO">Recepção</option>
+      <option value="PROFISSIONAL">Profissional</option>
+    </select>
+
+    <select id="fLimbo">
+      <option value="">Vínculo: todos</option>
+      <option value="limbo">Somente limbo</option>
+      <option value="vinculado">Somente vinculados</option>
+    </select>
+
+    <select id="fClinica">
+      <option value="">Clínica: todas</option>
+      {% for c in clinicas %}
+        <option value="{{ c.id }}">{{ c.nome }}</option>
+      {% endfor %}
+    </select>
+  </section>
+
+  <div id="emptyState" class="empty-state">
+    Nenhum usuário encontrado com os filtros atuais.
+  </div>
+
+  <section
+    id="usersGrid"
+    class="users-grid"
+    data-page-size="9"
+  >
+    {% for u in usuarios %}
+      {% set role = (u.role or '')|upper %}
+      {% set is_master = u.is_master or u.is_superuser or role in ['MASTER', 'ROOT', 'SUPERADMIN'] %}
+      {% set ativo = u.is_active %}
+      {% set limbo = not u.clinica_id or not u.clinica_nome %}
+
+      <article
+        class="user-card {% if limbo %}limbo{% endif %} {% if is_master %}is-master-user{% endif %}"
+        data-id="{{ u.id }}"
+        data-nome="{{ u.nome or '' }}"
+        data-email="{{ u.email or '' }}"
+        data-cpf="{{ u.cpf or '' }}"
+        data-role="{{ role }}"
+        data-status="{% if ativo %}ativo{% else %}inativo{% endif %}"
+        data-clinica-id="{{ u.clinica_id or '' }}"
+        data-clinica="{{ u.clinica_nome or '' }}"
+        data-limbo="{% if limbo %}1{% else %}0{% endif %}"
+        data-master="{% if is_master %}1{% else %}0{% endif %}"
+        data-cbo="{{ u.cbo or '' }}"
+        data-cbo-desc="{{ u.cbo_descricao or '' }}"
+      >
+        <div class="user-top">
+          <div>
+            <div class="user-name">{{ u.nome or 'Usuário sem nome' }}</div>
+            <div class="user-sub">
+              ID {{ u.id }}
+              {% if u.cpf %}
+                · CPF {{ u.cpf }}
+              {% endif %}
+            </div>
+          </div>
+
+          {% if role == 'ADMIN' %}
+            <span class="badge badge-admin">ADMIN</span>
+          {% elif role == 'PROFISSIONAL' %}
+            <span class="badge badge-prof">PROF.</span>
+          {% else %}
+            <span class="badge badge-rec">RECEPÇÃO</span>
+          {% endif %}
+        </div>
+
+        <div class="user-meta">
+          <div class="meta-line">
+            <span>Status</span>
+            <span>
+              {% if ativo %}
+                <span class="badge badge-on">Ativo</span>
+              {% else %}
+                <span class="badge badge-off">Inativo</span>
+              {% endif %}
+            </span>
+          </div>
+
+          <div class="meta-line">
+            <span>Clínica</span>
+            <span>
+              {% if limbo %}
+                <span class="badge badge-limbo">No limbo</span>
+              {% else %}
+                {{ u.clinica_nome }}
+              {% endif %}
+            </span>
+          </div>
+
+          <div class="meta-line">
+            <span>CBO</span>
+            <span>
+              {% if u.cbo %}
+                {{ u.cbo }}{% if u.cbo_descricao %} — {{ u.cbo_descricao }}{% endif %}
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </div>
+        </div>
+
+        <div class="user-actions">
+          <button type="button" class="btn-master btn-primary" data-action="open-edit">
+            Designar
+          </button>
+
+          {% if limbo %}
+            <button type="button" class="btn-master btn-soft" data-action="highlight">
+              Resolver limbo
+            </button>
+          {% endif %}
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="pagination-wrap" id="paginationWrap">
+    <div class="pagination-info" id="paginationInfo">
+      Mostrando 0 de 0 usuários
+    </div>
+
+    <div class="pagination-actions" id="paginationActions">
+      <button type="button" class="page-btn" data-page-action="prev">Anterior</button>
+      <span id="paginationNumbers"></span>
+      <button type="button" class="page-btn" data-page-action="next">Próxima</button>
+    </div>
+  </section>
+</div>
+
+<div id="modalUserMaster" class="modal-backdrop" aria-hidden="true">
+  <div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h2>Designar usuário</h2>
+      <p id="modalSub" style="margin: 6px 0 0; color: rgba(255,255,255,.75);"></p>
+    </div>
+
+    <form id="formUserMaster" method="POST" action="">
+      <div class="modal-body">
+        <input type="hidden" name="usuario_id" id="mUsuarioId">
+
+        <div class="form-grid">
+          <div class="field">
+            <label>Nome</label>
+            <input id="mNome" type="text" disabled>
+          </div>
+
+          <div class="field">
+            <label>CPF</label>
+            <input id="mCpf" type="text" disabled>
+          </div>
+
+          <div class="field">
+            <label>Clínica</label>
+            <select name="clinica_id" id="mClinicaId" required>
+              <option value="">Selecione uma clínica</option>
+              {% for c in clinicas %}
+                <option value="{{ c.id }}">{{ c.nome }}{% if c.cnpj %} · {{ c.cnpj }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Nível</label>
+            <select name="role" id="mRole" required>
+              <option value="RECEPCAO">Recepção</option>
+              <option value="PROFISSIONAL">Profissional</option>
+              <option value="ADMIN">Administrador</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Observação do Master</label>
+          <input name="observacao" type="text" placeholder="Ex: vinculado manualmente após cadastro sem clínica">
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-master btn-soft" data-close-modal>
+          Cancelar
+        </button>
+
+        <button type="submit" class="btn-master btn-primary">
+          Salvar designação
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<script>
+(() => {
+  "use strict";
+
+  const qs = (s, r = document) => r.querySelector(s);
+  const qsa = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  const grid = qs("#usersGrid");
+  const emptyState = qs("#emptyState");
+
+  const fBusca = qs("#fBusca");
+  const fRole = qs("#fRole");
+  const fLimbo = qs("#fLimbo");
+  const fClinica = qs("#fClinica");
+
+  const statTotal = qs("#statTotal");
+  const statLimbo = qs("#statLimbo");
+  const statAtivos = qs("#statAtivos");
+  const statMasters = qs("#statMasters");
+
+  const paginationWrap = qs("#paginationWrap");
+  const paginationInfo = qs("#paginationInfo");
+  const paginationNumbers = qs("#paginationNumbers");
+
+  const modal = qs("#modalUserMaster");
+  const form = qs("#formUserMaster");
+
+  const pageSize = Number(grid?.dataset?.pageSize || 9);
+
+  let currentPage = 1;
+  let filteredCards = [];
+
+  const cards = qsa(".user-card");
+
+  function text(v) {
+    return String(v || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+  }
+
+  function isMasterCard(card) {
+    return card.dataset.master === "1" || card.classList.contains("is-master-user");
+  }
+
+  function isVisibleUser(card) {
+    return !isMasterCard(card);
+  }
+
+  function getSearchText(card) {
+    return text([
+      card.dataset.nome,
+      card.dataset.email,
+      card.dataset.cpf,
+      card.dataset.role,
+      card.dataset.clinica,
+      card.dataset.cbo,
+      card.dataset.cboDesc
+    ].join(" "));
+  }
+
+  function updateStats() {
+    const normalCards = cards.filter(isVisibleUser);
+
+    const total = normalCards.length;
+    const limbo = normalCards.filter(c => c.dataset.limbo === "1").length;
+    const ativos = normalCards.filter(c => c.dataset.status === "ativo").length;
+    const masters = cards.filter(isMasterCard).length;
+
+    if (statTotal) statTotal.textContent = total;
+    if (statLimbo) statLimbo.textContent = limbo;
+    if (statAtivos) statAtivos.textContent = ativos;
+    if (statMasters) statMasters.textContent = masters;
+  }
+
+  function getFilteredCards() {
+    const busca = text(fBusca?.value);
+    const role = fRole?.value || "";
+    const limbo = fLimbo?.value || "";
+    const clinica = fClinica?.value || "";
+
+    return cards.filter(card => {
+      if (isMasterCard(card)) return false;
+
+      const matchBusca = !busca || getSearchText(card).includes(busca);
+      const matchRole = !role || card.dataset.role === role;
+      const matchClinica = !clinica || card.dataset.clinicaId === clinica;
+
+      let matchLimbo = true;
+
+      if (limbo === "limbo") {
+        matchLimbo = card.dataset.limbo === "1";
+      }
+
+      if (limbo === "vinculado") {
+        matchLimbo = card.dataset.limbo !== "1";
+      }
+
+      return matchBusca && matchRole && matchClinica && matchLimbo;
+    });
+  }
+
+  function hideAllCards() {
+    cards.forEach(card => {
+      card.style.display = "none";
+    });
+  }
+
+  function renderPagination() {
+    if (!paginationWrap || !paginationNumbers || !paginationInfo) return;
+
+    const total = filteredCards.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    paginationNumbers.innerHTML = "";
+
+    for (let page = 1; page <= totalPages; page++) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "page-btn";
+      btn.dataset.page = String(page);
+      btn.textContent = page;
+
+      if (page === currentPage) {
+        btn.classList.add("active");
+      }
+
+      paginationNumbers.appendChild(btn);
+    }
+
+    const start = total === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
+    const end = Math.min(currentPage * pageSize, total);
+
+    paginationInfo.textContent = total
+      ? `Mostrando ${start}–${end} de ${total} usuários`
+      : "Nenhum usuário encontrado";
+
+    paginationWrap.style.display = total > pageSize ? "flex" : "none";
+  }
+
+  function renderCards() {
+    hideAllCards();
+
+    const total = filteredCards.length;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+
+    const pageCards = filteredCards.slice(start, end);
+
+    pageCards.forEach(card => {
+      card.style.display = "";
+    });
+
+    if (emptyState) {
+      emptyState.style.display = total ? "none" : "block";
+    }
+
+    if (grid) {
+      grid.style.display = total ? "grid" : "none";
+    }
+
+    renderPagination();
+  }
+
+  function applyFilters(resetPage = true) {
+    if (resetPage) currentPage = 1;
+
+    filteredCards = getFilteredCards();
+    renderCards();
+  }
+
+  function openModal(card) {
+    if (!card || !modal || !form) return;
+
+    const id = card.dataset.id || "";
+    const nome = card.dataset.nome || "Usuário";
+    const cpf = card.dataset.cpf || "";
+    const role = card.dataset.role || "RECEPCAO";
+    const clinicaId = card.dataset.clinicaId || "";
+
+    const mUsuarioId = qs("#mUsuarioId");
+    const mNome = qs("#mNome");
+    const mCpf = qs("#mCpf");
+    const mClinicaId = qs("#mClinicaId");
+    const mRole = qs("#mRole");
+    const modalSub = qs("#modalSub");
+
+    if (mUsuarioId) mUsuarioId.value = id;
+    if (mNome) mNome.value = nome;
+    if (mCpf) mCpf.value = cpf;
+    if (mClinicaId) mClinicaId.value = clinicaId;
+    if (mRole) mRole.value = role;
+    if (modalSub) modalSub.textContent = `${nome} • ID ${id}`;
+
+    form.action = `/admin/usuarios/master/${id}/designar`;
+
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeModal() {
+    if (!modal) return;
+
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+  }
+
+  document.addEventListener("click", e => {
+    const actionBtn = e.target.closest("[data-action]");
+
+    if (actionBtn) {
+      const card = actionBtn.closest(".user-card");
+      const action = actionBtn.dataset.action;
+
+      if (action === "open-edit" || action === "highlight") {
+        openModal(card);
+      }
+    }
+
+    const pageBtn = e.target.closest(".page-btn");
+
+    if (pageBtn) {
+      const action = pageBtn.dataset.pageAction;
+      const page = Number(pageBtn.dataset.page || 0);
+      const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
+
+      if (action === "prev") {
+        currentPage = Math.max(1, currentPage - 1);
+      } else if (action === "next") {
+        currentPage = Math.min(totalPages, currentPage + 1);
+      } else if (page) {
+        currentPage = page;
+      }
+
+      renderCards();
+
+      window.scrollTo({
+        top: grid.offsetTop - 120,
+        behavior: "smooth"
+      });
+    }
+
+    if (e.target.matches("[data-close-modal]") || e.target === modal) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeModal();
+  });
+
+  [fBusca, fRole, fLimbo, fClinica].forEach(el => {
+    if (!el) return;
+
+    el.addEventListener("input", () => applyFilters(true));
+    el.addEventListener("change", () => applyFilters(true));
+  });
+
+  updateStats();
+  applyFilters(true);
+})();
+</script>
+{% endblock %}

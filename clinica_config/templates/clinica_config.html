@@ -1,0 +1,924 @@
+{% extends "layout.html" %}
+
+{% block title %}Matriz de Clínicas{% endblock %}
+
+{% block content %}
+
+{% set is_matriz = clinica.is_matriz or clinica.id == 1 %}
+
+<section class="clinica-matriz-page">
+
+  <div class="page-hero">
+    <div>
+      <span class="eyebrow">
+        {% if is_matriz %}Matriz administrativa{% else %}Clínica cliente{% endif %}
+      </span>
+
+      <h1>
+        {% if is_matriz %}
+          Minha Empresa / Matriz
+        {% else %}
+          Matriz de Clínicas
+        {% endif %}
+      </h1>
+
+      <p>
+        {% if is_matriz %}
+          Configure os dados da empresa principal, dados Pix e informações usadas para cobrança das clínicas.
+        {% else %}
+          Gerencie os dados gerais desta clínica, acesse o timbre e prepare futuros formulários.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="hero-actions">
+      <a class="btn ghost" href="{{ url_for('clinica_config.timbre', clinica_id=clinica_id) }}">
+        Editar timbre
+      </a>
+
+      {% if is_master %}
+        <a class="btn primary" href="{{ url_for('clinica_config.nova_clinica') }}">
+          Nova clínica
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="flash-wrap">
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if is_master %}
+  <div class="master-panel">
+    <div>
+      <span class="eyebrow dark">Acesso Master</span>
+      <h2>Selecionar clínica</h2>
+      <p>Escolha qual clínica deseja visualizar e administrar.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('clinica_config.selecionar_clinica') }}" class="master-select">
+      <select name="clinica_id" required>
+        {% for c in clinicas %}
+          <option value="{{ c.id }}" {% if c.id == clinica_id %}selected{% endif %}>
+            {% if c.is_matriz or c.id == 1 %}★ {% endif %}
+            {{ c.nome }}
+            {% if not c.ativa %}(inativa){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+
+      <button class="btn primary" type="submit">
+        Acessar
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="matrix-grid">
+
+    <aside class="clinic-card">
+      <div class="clinic-avatar">
+        {% if is_matriz %}★{% else %}{{ (clinica.nome or 'C')[:1]|upper }}{% endif %}
+      </div>
+
+      <h2>{{ clinica.nome or 'Clínica não identificada' }}</h2>
+
+      <p class="clinic-subtitle">
+        {% if is_matriz %}
+          Empresa principal do sistema
+        {% else %}
+          {{ clinica.nome_fantasia or clinica.razao_social or 'Clínica cliente' }}
+        {% endif %}
+      </p>
+
+      <div class="clinic-info-list">
+        <div>
+          <span>CNPJ</span>
+          <strong>{{ clinica.cnpj or 'Não informado' }}</strong>
+        </div>
+
+        <div>
+          <span>Telefone</span>
+          <strong>{{ clinica.telefone or 'Não informado' }}</strong>
+        </div>
+
+        <div>
+          <span>E-mail</span>
+          <strong>{{ clinica.email or 'Não informado' }}</strong>
+        </div>
+
+        <div>
+          <span>Tipo</span>
+          <strong>
+            {% if is_matriz %}
+              Matriz administrativa
+            {% else %}
+              {{ clinica.tipo_clinica or 'Clínica cliente' }}
+            {% endif %}
+          </strong>
+        </div>
+
+        <div>
+          <span>Status</span>
+          {% if clinica.ativa %}
+            <strong class="status ok">Ativa</strong>
+          {% else %}
+            <strong class="status off">Inativa</strong>
+          {% endif %}
+        </div>
+
+        {% if is_matriz and is_master %}
+        <div>
+          <span>Pix</span>
+          <strong>{{ clinica.chave_pix or 'Não informado' }}</strong>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="quick-actions">
+        <a href="{{ url_for('clinica_config.timbre', clinica_id=clinica_id) }}">
+          Timbre
+        </a>
+
+        <button type="button" disabled>
+          Formulários
+        </button>
+
+        <button type="button" disabled>
+          Documentos
+        </button>
+      </div>
+    </aside>
+
+    <main class="content-panel">
+
+      <form method="POST" class="form-card">
+
+        <div class="section-title">
+          <div>
+            <span class="eyebrow dark">Cadastro base</span>
+            <h2>
+              {% if is_matriz %}
+                Dados da empresa principal
+              {% else %}
+                Dados gerais da clínica
+              {% endif %}
+            </h2>
+            <p>
+              {% if is_matriz %}
+                Essas informações representam sua empresa administradora do sistema.
+              {% else %}
+                Essas informações serão usadas no sistema, relatórios e documentos.
+              {% endif %}
+            </p>
+          </div>
+
+          <button class="btn primary" type="submit">
+            Salvar dados
+          </button>
+        </div>
+
+        <div class="form-grid">
+
+          <label>
+            {% if is_matriz %}Nome da empresa *{% else %}Nome da clínica *{% endif %}
+            <input type="text" name="nome" value="{{ clinica.nome or '' }}" required>
+          </label>
+
+          <label>
+            Nome fantasia
+            <input type="text" name="nome_fantasia" value="{{ clinica.nome_fantasia or '' }}">
+          </label>
+
+          <label>
+            Razão social
+            <input type="text" name="razao_social" value="{{ clinica.razao_social or '' }}">
+          </label>
+
+          <label>
+            CNPJ
+            <input type="text" name="cnpj" value="{{ clinica.cnpj or '' }}" placeholder="00.000.000/0000-00">
+          </label>
+
+          <label>
+            Telefone
+            <input type="text" name="telefone" value="{{ clinica.telefone or '' }}">
+          </label>
+
+          <label>
+            WhatsApp
+            <input type="text" name="whatsapp" value="{{ clinica.whatsapp or '' }}">
+          </label>
+
+          <label>
+            E-mail
+            <input type="email" name="email" value="{{ clinica.email or '' }}">
+          </label>
+
+          <label>
+            CNES
+            <input type="text" name="cnes" value="{{ clinica.cnes or '' }}">
+          </label>
+
+          <label>
+            Tipo
+            <input type="text" name="tipo_clinica" value="{{ clinica.tipo_clinica or '' }}" placeholder="Ex: Reabilitação, Clínica médica...">
+          </label>
+
+          <label>
+            CEP
+            <input type="text" name="cep" value="{{ clinica.cep or '' }}">
+          </label>
+
+          <label>
+            Logradouro
+            <input type="text" name="logradouro" value="{{ clinica.logradouro or '' }}">
+          </label>
+
+          <label>
+            Número
+            <input type="text" name="numero" value="{{ clinica.numero or '' }}">
+          </label>
+
+          <label>
+            Complemento
+            <input type="text" name="complemento" value="{{ clinica.complemento or '' }}">
+          </label>
+
+          <label>
+            Bairro
+            <input type="text" name="bairro" value="{{ clinica.bairro or '' }}">
+          </label>
+
+          <label>
+            Município
+            <input type="text" name="municipio" value="{{ clinica.municipio or '' }}">
+          </label>
+
+          <label>
+            UF
+            <input type="text" name="uf" value="{{ clinica.uf or '' }}" maxlength="2">
+          </label>
+
+          <label class="full">
+            Endereço completo
+            <input type="text" name="endereco" value="{{ clinica.endereco or '' }}">
+          </label>
+
+        </div>
+
+        {% if is_matriz and is_master %}
+        <details class="extra-box payment-box" open>
+          <summary>
+            <strong>Dados Pix e cobrança da matriz</strong>
+            <span>Usado para receber pagamentos das clínicas</span>
+          </summary>
+
+          <div class="form-grid extra">
+
+            <label>
+              Tipo da chave Pix
+              <select name="tipo_chave_pix">
+                <option value="">Selecione</option>
+                <option value="cnpj" {% if clinica.tipo_chave_pix == 'cnpj' %}selected{% endif %}>CNPJ</option>
+                <option value="cpf" {% if clinica.tipo_chave_pix == 'cpf' %}selected{% endif %}>CPF</option>
+                <option value="email" {% if clinica.tipo_chave_pix == 'email' %}selected{% endif %}>E-mail</option>
+                <option value="telefone" {% if clinica.tipo_chave_pix == 'telefone' %}selected{% endif %}>Telefone</option>
+                <option value="aleatoria" {% if clinica.tipo_chave_pix == 'aleatoria' %}selected{% endif %}>Chave aleatória</option>
+              </select>
+            </label>
+
+            <label>
+              Chave Pix
+              <input type="text" name="chave_pix" value="{{ clinica.chave_pix or '' }}">
+            </label>
+
+            <label>
+              Favorecido
+              <input type="text" name="favorecido_pix" value="{{ clinica.favorecido_pix or '' }}">
+            </label>
+
+            <label>
+              Documento do favorecido
+              <input type="text" name="documento_favorecido_pix" value="{{ clinica.documento_favorecido_pix or '' }}">
+            </label>
+
+            <label>
+              Banco
+              <input type="text" name="banco_pix" value="{{ clinica.banco_pix or '' }}">
+            </label>
+
+            <label>
+              Agência
+              <input type="text" name="agencia_pix" value="{{ clinica.agencia_pix or '' }}">
+            </label>
+
+            <label>
+              Conta
+              <input type="text" name="conta_pix" value="{{ clinica.conta_pix or '' }}">
+            </label>
+
+            <label class="full">
+              Observação de pagamento
+              <textarea name="observacao_pagamento" rows="3">{{ clinica.observacao_pagamento or '' }}</textarea>
+            </label>
+
+          </div>
+        </details>
+        {% endif %}
+
+        {% if not is_matriz and is_master %}
+        <details class="extra-box payment-box" open>
+          <summary>
+            <strong>Contrato e cobrança da clínica</strong>
+            <span>Controle interno da mensalidade e plano contratado</span>
+          </summary>
+
+          <div class="form-grid extra">
+
+            <label>
+              Plano contratado
+              <input type="text" name="plano_contratado" value="{{ clinica.plano_contratado or '' }}" placeholder="Ex: Básico, Profissional, Premium">
+            </label>
+
+            <label>
+              Valor da mensalidade
+              <input type="number" step="0.01" min="0" name="valor_mensalidade" value="{{ clinica.valor_mensalidade or '' }}">
+            </label>
+
+            <label>
+              Dia de vencimento
+              <input type="number" min="1" max="31" name="dia_vencimento" value="{{ clinica.dia_vencimento or '' }}">
+            </label>
+
+            <label>
+              Status do pagamento
+              <select name="status_pagamento">
+                <option value="ativo" {% if clinica.status_pagamento == 'ativo' %}selected{% endif %}>Ativo</option>
+                <option value="pendente" {% if clinica.status_pagamento == 'pendente' %}selected{% endif %}>Pendente</option>
+                <option value="atrasado" {% if clinica.status_pagamento == 'atrasado' %}selected{% endif %}>Atrasado</option>
+                <option value="suspenso" {% if clinica.status_pagamento == 'suspenso' %}selected{% endif %}>Suspenso</option>
+              </select>
+            </label>
+
+          </div>
+        </details>
+        {% endif %}
+
+        <details class="extra-box">
+          <summary>
+            <strong>Responsável</strong>
+            <span>Dados administrativos opcionais</span>
+          </summary>
+
+          <div class="form-grid extra">
+
+            <label>
+              Nome do responsável
+              <input type="text" name="responsavel_nome" value="{{ clinica.responsavel_nome or '' }}">
+            </label>
+
+            <label>
+              CPF do responsável
+              <input type="text" name="responsavel_cpf" value="{{ clinica.responsavel_cpf or '' }}">
+            </label>
+
+            <label>
+              Telefone do responsável
+              <input type="text" name="responsavel_telefone" value="{{ clinica.responsavel_telefone or '' }}">
+            </label>
+
+            <label>
+              E-mail do responsável
+              <input type="email" name="responsavel_email" value="{{ clinica.responsavel_email or '' }}">
+            </label>
+
+            <label class="full">
+              Observações
+              <textarea name="observacoes" rows="4">{{ clinica.observacoes or '' }}</textarea>
+            </label>
+
+            <label class="check-line">
+              <input
+                type="checkbox"
+                name="ativa"
+                {% if clinica.ativa is not sameas false %}checked{% endif %}
+                {% if is_matriz %}disabled{% endif %}
+              >
+              Clínica ativa
+            </label>
+
+            {% if is_matriz %}
+              <input type="hidden" name="ativa" value="on">
+            {% endif %}
+
+          </div>
+        </details>
+
+      </form>
+
+      <section class="modules-card">
+
+        <div class="section-title no-margin">
+          <div>
+            <span class="eyebrow dark">Central</span>
+            <h2>Configurações rápidas</h2>
+            <p>Atalhos para áreas específicas desta configuração.</p>
+          </div>
+        </div>
+
+        <div class="module-grid">
+
+          <a class="module-card active" href="{{ url_for('clinica_config.timbre', clinica_id=clinica_id) }}">
+            <div class="module-icon">A4</div>
+            <div>
+              <h3>Timbre</h3>
+              <p>Logo, cabeçalho, rodapé e visual dos relatórios.</p>
+            </div>
+          </a>
+
+          <div class="module-card disabled">
+            <div class="module-icon">FR</div>
+            <div>
+              <h3>Formulários</h3>
+              <p>Espaço preparado para modelos futuros.</p>
+            </div>
+          </div>
+
+          <div class="module-card disabled">
+            <div class="module-icon">DOC</div>
+            <div>
+              <h3>Documentos</h3>
+              <p>Modelos, declarações e termos.</p>
+            </div>
+          </div>
+
+          <div class="module-card disabled">
+            <div class="module-icon">R$</div>
+            <div>
+              <h3>Cobranças</h3>
+              <p>Futuro painel financeiro das clínicas.</p>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+</section>
+
+<style>
+.clinica-matriz-page {
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(20,184,166,.18), transparent 34%),
+    linear-gradient(135deg, #f8fafc 0%, #eef6f6 100%);
+}
+
+.page-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  color: white;
+  border-radius: 28px;
+  padding: 30px;
+  margin-bottom: 20px;
+  background:
+    linear-gradient(135deg, rgba(15,118,110,.96), rgba(20,184,166,.92)),
+    linear-gradient(45deg, #0f766e, #14b8a6);
+  box-shadow: 0 20px 45px rgba(15,118,110,.25);
+}
+
+.page-hero h1 {
+  margin: 6px 0;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+}
+
+.page-hero p {
+  max-width: 760px;
+  margin: 0;
+  opacity: .92;
+}
+
+.eyebrow {
+  display: inline-flex;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: .72rem;
+  font-weight: 900;
+  opacity: .86;
+}
+
+.eyebrow.dark {
+  color: #0f766e;
+}
+
+.hero-actions,
+.master-select,
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  border-radius: 16px;
+  padding: 12px 17px;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn.primary {
+  background: #0f766e;
+  color: white;
+  box-shadow: 0 12px 24px rgba(15,118,110,.22);
+}
+
+.page-hero .btn.primary {
+  background: white;
+  color: #0f766e;
+}
+
+.btn.ghost {
+  background: rgba(255,255,255,.16);
+  color: white;
+  border: 1px solid rgba(255,255,255,.38);
+}
+
+.flash-wrap {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.flash {
+  padding: 13px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.flash.success {
+  color: #065f46;
+  background: rgba(16,185,129,.12);
+  border: 1px solid rgba(16,185,129,.22);
+}
+
+.flash.error {
+  color: #991b1b;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.22);
+}
+
+.master-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  background: rgba(255,255,255,.94);
+  border: 1px solid rgba(203,213,225,.85);
+  border-radius: 24px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 14px 35px rgba(15,23,42,.06);
+}
+
+.master-panel h2,
+.section-title h2,
+.clinic-card h2,
+.module-card h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.master-panel p,
+.section-title p,
+.clinic-subtitle,
+.module-card p {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.master-select select {
+  min-width: min(420px, 100%);
+  border: 1px solid #cbd5e1;
+  border-radius: 15px;
+  padding: 12px 14px;
+  font-weight: 800;
+  outline: none;
+  background: #f8fafc;
+}
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.clinic-card,
+.form-card,
+.modules-card {
+  background: rgba(255,255,255,.96);
+  border: 1px solid rgba(203,213,225,.8);
+  border-radius: 26px;
+  box-shadow: 0 15px 38px rgba(15,23,42,.07);
+}
+
+.clinic-card {
+  position: sticky;
+  top: 18px;
+  padding: 22px;
+  text-align: center;
+}
+
+.clinic-avatar {
+  width: 82px;
+  height: 82px;
+  margin: 0 auto 14px;
+  border-radius: 26px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: white;
+  font-size: 2rem;
+  font-weight: 1000;
+  box-shadow: 0 14px 28px rgba(15,118,110,.22);
+}
+
+.clinic-info-list {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+  text-align: left;
+}
+
+.clinic-info-list div {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.clinic-info-list span {
+  display: block;
+  color: #64748b;
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.clinic-info-list strong {
+  display: block;
+  margin-top: 4px;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.status.ok {
+  color: #047857;
+}
+
+.status.off {
+  color: #b91c1c;
+}
+
+.quick-actions {
+  justify-content: center;
+}
+
+.quick-actions a,
+.quick-actions button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 13px;
+  background: #ecfeff;
+  color: #0f766e;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.quick-actions button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.content-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.form-card,
+.modules-card {
+  padding: 24px;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.section-title.no-margin {
+  margin-bottom: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #334155;
+  font-weight: 900;
+}
+
+label.full {
+  grid-column: 1 / -1;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 15px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  outline: none;
+  font-size: .95rem;
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  background: white;
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20,184,166,.14);
+}
+
+.extra-box {
+  margin-top: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.payment-box {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+.extra-box summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 17px 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.extra-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.extra-box summary span {
+  color: #64748b;
+}
+
+.form-grid.extra {
+  padding: 18px;
+}
+
+.check-line {
+  flex-direction: row;
+  align-items: center;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 15px;
+  padding: 12px 14px;
+}
+
+.check-line input {
+  width: auto;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.module-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  text-decoration: none;
+}
+
+.module-card.active {
+  background: linear-gradient(135deg, #ecfeff, #f0fdfa);
+  border-color: #99f6e4;
+}
+
+.module-card.disabled {
+  opacity: .62;
+}
+
+.module-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: #0f766e;
+  color: white;
+  font-weight: 1000;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .matrix-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clinic-card {
+    position: static;
+  }
+
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .master-panel,
+  .page-hero,
+  .section-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .clinica-matriz-page {
+    padding: 14px;
+  }
+
+  .page-hero,
+  .form-card,
+  .modules-card,
+  .clinic-card,
+  .master-panel {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .form-grid,
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions,
+  .master-select {
+    flex-direction: column;
+  }
+
+  .btn,
+  .master-select select {
+    width: 100%;
+  }
+}
+</style>
+
+{% endblock %}

@@ -1078,3 +1078,56 @@ td{
     padding:12px;
   }
 }
+.user-block-inline{
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+
+  max-width:520px;
+
+  overflow:hidden;
+  white-space:nowrap;
+}
+
+.user-name{
+  font-weight:700;
+  color:#ffffff;
+
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.user-role{
+  font-size:.78rem;
+  font-weight:700;
+
+  color:#ffffff;
+
+  flex-shrink:0;
+}
+
+.user-clinica-inline{
+  display:flex;
+  align-items:center;
+  gap:.28rem;
+
+  font-size:.76rem;
+  font-weight:600;
+
+  color:#ffffff;
+
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.user-divider{
+  color:#ffffff;
+  font-weight:700;
+  flex-shrink:0;
+}
+
+.modern-user-info{
+  display:flex;
+  align-items:center;
+  gap:.75rem;
+}

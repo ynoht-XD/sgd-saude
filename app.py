@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 from datetime import date
 
-from flask import Flask, render_template, session, request, redirect, url_for
+from flask import (
+    Flask, render_template, session, request,
+    redirect, url_for, g
+)
 
 # Blueprints principais
 from agenda import agenda_bp
@@ -22,16 +26,19 @@ from meus_atendimentos import meus_atendimentos_bp
 from procedimentos import procedimentos_bp
 from avaliacoes import avaliacoes_bp
 from agenda_medica import agenda_medica_bp
+from clinica_config import clinica_config_bp
+from logs import logs_bp
 
 from db import conectar_db
 
+
 app = Flask(__name__)
-app.secret_key = "uma_chave_ultra_secreta_123"
+app.secret_key = os.getenv("SECRET_KEY", "uma_chave_ultra_secreta_123")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 
 # ============================================================
-#  REGISTRO DOS BLUEPRINTS
+# REGISTRO DOS BLUEPRINTS
 # ============================================================
 
 app.register_blueprint(agenda_bp, url_prefix="/agenda")
@@ -51,10 +58,11 @@ app.register_blueprint(pts_bp)
 app.register_blueprint(meus_atendimentos_bp)
 app.register_blueprint(avaliacoes_bp)
 app.register_blueprint(agenda_medica_bp)
-
+app.register_blueprint(clinica_config_bp)
+app.register_blueprint(logs_bp)
 
 # ============================================================
-#  ENDPOINTS PÚBLICOS
+# ENDPOINTS PÚBLICOS
 # ============================================================
 
 PUBLIC_ENDPOINTS = {
@@ -64,32 +72,16 @@ PUBLIC_ENDPOINTS = {
 }
 
 
-@app.before_request
-def require_login_globally():
-    ep = request.endpoint or ""
-
-    if ep.startswith("auth.") or ep in PUBLIC_ENDPOINTS or ep.endswith(".static"):
-        return
-
-    if not session.get("user_id"):
-        return redirect(url_for("auth.login", next=request.path))
-
-
 # ============================================================
-#  HELPERS POSTGRES
+# HELPERS POSTGRES / GERAIS
 # ============================================================
 
 def _val(row, key: str, index: int = 0, default=None):
-    """
-    Compatibilidade:
-    - psycopg com dict_row retorna dict
-    - cursor comum retorna tuple/list
-    """
     if not row:
         return default
 
-    if isinstance(row, dict):
-        return row.get(key, default)
+    if isinstance(row, dict) or hasattr(row, "keys"):
+        return dict(row).get(key, default)
 
     try:
         return row[index]
@@ -103,7 +95,7 @@ def _dict_fetchall(cur):
     if not rows:
         return []
 
-    if isinstance(rows[0], dict):
+    if isinstance(rows[0], dict) or hasattr(rows[0], "keys"):
         return [dict(r) for r in rows]
 
     cols = [c[0] for c in cur.description] if cur.description else []
@@ -116,7 +108,7 @@ def _dict_fetchone(cur):
     if not row:
         return None
 
-    if isinstance(row, dict):
+    if isinstance(row, dict) or hasattr(row, "keys"):
         return dict(row)
 
     cols = [c[0] for c in cur.description] if cur.description else []
@@ -125,44 +117,39 @@ def _dict_fetchone(cur):
 
 def _has_table(conn, name: str) -> bool:
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT 1 AS existe
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name = %s
-        LIMIT 1;
-        """,
-        (name,),
-    )
-
-    row = cur.fetchone()
-    cur.close()
-
-    return row is not None
+    try:
+        cur.execute("""
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            LIMIT 1;
+        """, (name,))
+        return cur.fetchone() is not None
+    finally:
+        cur.close()
 
 
 def _cols(conn, table: str) -> set[str]:
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = %s
-        ORDER BY ordinal_position;
-        """,
-        (table,),
-    )
+    try:
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+            ORDER BY ordinal_position;
+        """, (table,))
 
-    rows = cur.fetchall() or []
-    cur.close()
+        rows = cur.fetchall() or []
 
-    return {
-        _val(r, "column_name", 0)
-        for r in rows
-        if _val(r, "column_name", 0)
-    }
+        return {
+            _val(r, "column_name", 0)
+            for r in rows
+            if _val(r, "column_name", 0)
+        }
+    finally:
+        cur.close()
 
 
 def _first_existing(cols: set[str], options: list[str]) -> str | None:
@@ -193,8 +180,125 @@ def _today_dow_dom() -> int:
     return 0 if wd == 6 else wd + 1
 
 
+def _session_user_id():
+    return session.get("user_id") or session.get("usuario_id")
+
+
+def _session_clinica_id(default: int | None = 1) -> int | None:
+    val = session.get("clinica_id") or session.get("clinic_id") or default
+
+    try:
+        return int(val) if val is not None else None
+    except Exception:
+        return default
+
+
+def _add_clinica_filter(conn, table: str, alias: str, where: list[str], params: list, clinica_id: int | None):
+    if not clinica_id:
+        return
+
+    if not _has_table(conn, table):
+        return
+
+    cols = _cols(conn, table)
+
+    if "clinica_id" in cols:
+        where.append(f"{alias}.clinica_id = %s")
+        params.append(int(clinica_id))
+
+
+def _registrar_log_app(acao: str, modulo: str = "app", detalhes: str = "", sucesso: bool = True):
+    try:
+        conn = conectar_db()
+
+        if not _has_table(conn, "logs"):
+            conn.close()
+            return
+
+        cols = _cols(conn, "logs")
+        cur = conn.cursor()
+
+        campos = []
+        valores = []
+        params = []
+
+        def add(campo, valor):
+            if campo in cols:
+                campos.append(campo)
+                valores.append("%s")
+                params.append(valor)
+
+        add("usuario_id", _session_user_id())
+        add("clinica_id", _session_clinica_id(None))
+        add("modulo", modulo)
+        add("acao", acao)
+        add("detalhes", detalhes)
+        add("sucesso", sucesso)
+
+        if "created_at" in cols:
+            campos.append("created_at")
+            valores.append("CURRENT_TIMESTAMP")
+        elif "criado_em" in cols:
+            campos.append("criado_em")
+            valores.append("CURRENT_TIMESTAMP")
+
+        if campos:
+            cur.execute(
+                f"""
+                INSERT INTO logs ({", ".join(campos)})
+                VALUES ({", ".join(valores)})
+                """,
+                params,
+            )
+            conn.commit()
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print("⚠️ Erro ao registrar log app:", e)
+
+
 # ============================================================
-#  HOME
+# BEFORE REQUEST · LOGIN / CLÍNICA / MÓDULOS
+# ============================================================
+
+@app.before_request
+def setup_request_context():
+    ep = request.endpoint or ""
+
+    if ep.startswith("auth.") or ep in PUBLIC_ENDPOINTS or ep.endswith(".static"):
+        return
+
+    if not _session_user_id():
+        return redirect(url_for("auth.login", next=request.full_path or request.path))
+
+    # Garante contexto mínimo de clínica.
+    # Se teu login já coloca session["clinica_id"], isso só reaproveita.
+    if not session.get("clinica_id"):
+        session["clinica_id"] = 1
+
+    g.usuario_id = _session_user_id()
+    g.clinica_id = _session_clinica_id(1)
+
+    # Prepara módulos, se disponível.
+    try:
+        from admin.modulos import preparar_modulos
+        preparar_modulos()
+    except Exception as e:
+        print("⚠️ Não foi possível preparar módulos:", e)
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
+# ============================================================
+# HOME
 # ============================================================
 
 @app.route("/")
@@ -204,8 +308,16 @@ def index():
     hoje_dia = _today_dow_pt()
     hoje_dow_dom = _today_dow_dom()
 
+    clinica_id = _session_clinica_id(1)
+
     conn = conectar_db()
     cur = conn.cursor()
+
+    ativos = 0
+    espera = 0
+    procedimentos_comp = 0
+    atend_por_prof = []
+    agendados_hoje = []
 
     try:
         # ------------------------------
@@ -217,36 +329,48 @@ def index():
             else ("pacinetes" if _has_table(conn, "pacinetes") else None)
         )
 
-        ativos = 0
-        espera = 0
-
         if pacientes_table:
             pc = _cols(conn, pacientes_table)
             col_status = _first_existing(pc, ["status", "situacao", "situacao_status"])
 
             if col_status:
-                cur.execute(
-                    f"""
-                    SELECT COUNT(*) AS total
-                    FROM {pacientes_table}
-                    WHERE UPPER(TRIM(COALESCE({col_status}, ''))) IN ('ATIVO', 'ATIVOS')
-                    """
-                )
-                ativos = int(_val(cur.fetchone(), "total", 0, 0) or 0)
+                where = [
+                    f"UPPER(TRIM(COALESCE({col_status}, ''))) IN ('ATIVO', 'ATIVOS')"
+                ]
+                params = []
+
+                _add_clinica_filter(conn, pacientes_table, pacientes_table, where, params, clinica_id)
 
                 cur.execute(
                     f"""
                     SELECT COUNT(*) AS total
                     FROM {pacientes_table}
-                    WHERE UPPER(TRIM(COALESCE({col_status}, ''))) LIKE 'ESPERA%%'
-                    """
+                    WHERE {" AND ".join(where)}
+                    """,
+                    params,
+                )
+                ativos = int(_val(cur.fetchone(), "total", 0, 0) or 0)
+
+                where = [
+                    f"UPPER(TRIM(COALESCE({col_status}, ''))) LIKE 'ESPERA%%'"
+                ]
+                params = []
+
+                _add_clinica_filter(conn, pacientes_table, pacientes_table, where, params, clinica_id)
+
+                cur.execute(
+                    f"""
+                    SELECT COUNT(*) AS total
+                    FROM {pacientes_table}
+                    WHERE {" AND ".join(where)}
+                    """,
+                    params,
                 )
                 espera = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
         # ------------------------------------------
         # 2) PROCEDIMENTOS REALIZADOS NA COMPETÊNCIA
         # ------------------------------------------
-        procedimentos_comp = 0
         has_atend = _has_table(conn, "atendimentos")
         has_aproc = (
             _has_table(conn, "atendimento_procedimentos")
@@ -264,33 +388,39 @@ def index():
             col_data_at = _first_existing(ac, ["data_atendimento", "criado_em", "created_at", "data"])
 
             if has_aproc and col_data_at:
+                where = [_where_competencia_sql(f"a.{col_data_at}")]
+                params = [comp]
+                _add_clinica_filter(conn, "atendimentos", "a", where, params, clinica_id)
+
                 cur.execute(
                     f"""
                     SELECT COUNT(*) AS total
                     FROM {aproc_table} ap
                     JOIN atendimentos a ON a.id = ap.atendimento_id
-                    WHERE {_where_competencia_sql(f"a.{col_data_at}")}
+                    WHERE {" AND ".join(where)}
                     """,
-                    (comp,),
+                    params,
                 )
                 procedimentos_comp = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             if procedimentos_comp == 0 and col_data_at:
+                where = [_where_competencia_sql(f"a.{col_data_at}")]
+                params = [comp]
+                _add_clinica_filter(conn, "atendimentos", "a", where, params, clinica_id)
+
                 cur.execute(
                     f"""
                     SELECT COUNT(*) AS total
                     FROM atendimentos a
-                    WHERE {_where_competencia_sql(f"a.{col_data_at}")}
+                    WHERE {" AND ".join(where)}
                     """,
-                    (comp,),
+                    params,
                 )
                 procedimentos_comp = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
         # ------------------------------------------
         # 3) ATENDIMENTOS POR PROFISSIONAL
         # ------------------------------------------
-        atend_por_prof = []
-
         if has_atend and _has_table(conn, "usuarios"):
             ac = _cols(conn, "atendimentos")
             uc = _cols(conn, "usuarios")
@@ -325,6 +455,10 @@ def index():
                 elif has_nome_prof_atend:
                     profissional_expr = "COALESCE(NULLIF(TRIM(a.nome_profissional), ''), '—')"
 
+                where = [_where_competencia_sql(f"a.{col_data_at}")]
+                params = [comp]
+                _add_clinica_filter(conn, "atendimentos", "a", where, params, clinica_id)
+
                 cur.execute(
                     f"""
                     SELECT
@@ -332,12 +466,12 @@ def index():
                         COUNT(*) AS qtd
                     FROM atendimentos a
                     {join_usuarios}
-                    WHERE {_where_competencia_sql(f"a.{col_data_at}")}
+                    WHERE {" AND ".join(where)}
                     GROUP BY profissional
                     ORDER BY qtd DESC, profissional ASC
                     LIMIT 50
                     """,
-                    (comp,),
+                    params,
                 )
 
                 atend_por_prof = [
@@ -351,8 +485,6 @@ def index():
         # ------------------------------------------
         # 4) AGENDADOS DE HOJE
         # ------------------------------------------
-        agendados_hoje = []
-
         if _has_table(conn, "agendamentos"):
             gc = _cols(conn, "agendamentos")
 
@@ -362,26 +494,27 @@ def index():
             has_dia_txt = "dia" in gc
             has_dow_dom = "dow_dom" in gc
 
-            where_parts = []
+            day_parts = []
             params = []
 
             if has_inicio:
-                where_parts.append("DATE(a.inicio::timestamp) = %s")
+                day_parts.append("DATE(a.inicio::timestamp) = %s")
                 params.append(hoje_iso)
 
             if has_dia_txt:
-                where_parts.append("LOWER(TRIM(COALESCE(a.dia, ''))) = %s")
+                day_parts.append("LOWER(TRIM(COALESCE(a.dia, ''))) = %s")
                 params.append(hoje_dia)
 
             if has_dow_dom:
-                where_parts.append("a.dow_dom = %s")
+                day_parts.append("a.dow_dom = %s")
                 params.append(hoje_dow_dom)
 
-            status_sql = ""
-            if has_status:
-                status_sql = " AND (a.status IS NULL OR LOWER(TRIM(a.status)) = 'ativo') "
+            where = [f"({' OR '.join(day_parts)})" if day_parts else "FALSE"]
 
-            where_sql = " OR ".join([f"({w})" for w in where_parts]) if where_parts else "FALSE"
+            if has_status:
+                where.append("(a.status IS NULL OR LOWER(TRIM(a.status)) = 'ativo')")
+
+            _add_clinica_filter(conn, "agendamentos", "a", where, params, clinica_id)
 
             join_usuarios = ""
             select_prof_nome = "TRIM(COALESCE(a.profissional, '')) AS profissional_nome"
@@ -407,8 +540,7 @@ def index():
                        TRIM(COALESCE(a.status, '')) AS status
                 FROM agendamentos a
                 {join_usuarios}
-                WHERE ({where_sql})
-                {status_sql}
+                WHERE {" AND ".join(where)}
                 ORDER BY hora_ini ASC, profissional_nome ASC, paciente ASC
                 LIMIT 200
                 """,
@@ -430,6 +562,21 @@ def index():
                 for r in cur.fetchall()
             ]
 
+        _registrar_log_app(
+            acao="VISUALIZAR_DASHBOARD",
+            modulo="dashboard",
+            detalhes=f"Dashboard visualizado. clinica_id={clinica_id}",
+        )
+
+    except Exception as e:
+        _registrar_log_app(
+            acao="ERRO_DASHBOARD",
+            modulo="dashboard",
+            detalhes=str(e),
+            sucesso=False,
+        )
+        raise
+
     finally:
         cur.close()
         conn.close()
@@ -439,6 +586,7 @@ def index():
         competencia=comp,
         hoje_iso=hoje_iso,
         hoje_dia=hoje_dia,
+        clinica_id=clinica_id,
         kpi_ativos=ativos,
         kpi_espera=espera,
         kpi_procedimentos=procedimentos_comp,
@@ -448,18 +596,8 @@ def index():
 
 
 # ============================================================
-#  HANDLERS DE ERROS
+# CONTEXT PROCESSOR · MÓDULOS / CLÍNICA
 # ============================================================
-
-@app.errorhandler(403)
-def forbidden(_e):
-    return "Acesso negado (403). Faça login com um usuário autorizado para acessar esta área.", 403
-
-
-@app.errorhandler(404)
-def not_found(_e):
-    return "Página não encontrada (404).", 404
-
 
 @app.context_processor
 def inject_permissions():
@@ -470,10 +608,10 @@ def inject_permissions():
             if usuario_eh_master():
                 return True
 
-            usuario_id = session.get("user_id") or session.get("usuario_id")
-            clinica_id = session.get("clinica_id") or 1
+            usuario_id = _session_user_id()
+            clinica_id = _session_clinica_id(1)
 
-            if not usuario_id:
+            if not usuario_id or not clinica_id:
                 return False
 
             return usuario_tem_permissao(
@@ -487,11 +625,46 @@ def inject_permissions():
             print("⚠️ Erro no can_modulo:", e)
             return False
 
-    return {"can_modulo": can_modulo}
+    return {
+        "can_modulo": can_modulo,
+        "clinica_id_atual": _session_clinica_id(1),
+        "usuario_id_atual": _session_user_id(),
+    }
 
 
 # ============================================================
-#  MAIN
+# HANDLERS DE ERROS
+# ============================================================
+
+@app.errorhandler(403)
+def forbidden(e):
+    _registrar_log_app(
+        acao="ERRO_403",
+        modulo="app",
+        detalhes=f"endpoint={request.endpoint}; path={request.path}",
+        sucesso=False,
+    )
+    return "Acesso negado (403). Faça login com um usuário autorizado para acessar esta área.", 403
+
+
+@app.errorhandler(404)
+def not_found(e):
+    return "Página não encontrada (404).", 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    _registrar_log_app(
+        acao="ERRO_500",
+        modulo="app",
+        detalhes=f"endpoint={request.endpoint}; path={request.path}; erro={e}",
+        sucesso=False,
+    )
+    return "Erro interno no servidor (500).", 500
+
+
+# ============================================================
+# MAIN
 # ============================================================
 
 if __name__ == "__main__":

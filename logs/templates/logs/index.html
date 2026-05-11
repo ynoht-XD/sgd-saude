@@ -1,0 +1,611 @@
+{% extends "layout.html" %}
+
+{% block title %}Central de Logs{% endblock %}
+
+{% block content %}
+<style>
+  .logs-page {
+    padding: 22px;
+    color: #172033;
+  }
+
+  .logs-hero {
+    background: linear-gradient(135deg, #101828, #1d4ed8);
+    color: white;
+    border-radius: 24px;
+    padding: 26px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    margin-bottom: 22px;
+  }
+
+  .logs-hero h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 800;
+  }
+
+  .logs-hero p {
+    margin: 8px 0 0;
+    opacity: .88;
+  }
+
+  .logs-filters {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, .08);
+    margin-bottom: 18px;
+  }
+
+  .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(130px, 1fr));
+    gap: 12px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    color: #475569;
+    margin-bottom: 6px;
+  }
+
+  .field input,
+  .field select {
+    width: 100%;
+    height: 42px;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    padding: 0 12px;
+    outline: none;
+    background: #f8fafc;
+    color: #0f172a;
+  }
+
+  .field input:focus,
+  .field select:focus {
+    border-color: #2563eb;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
+  }
+
+  .filters-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .btn-log {
+    border: 0;
+    border-radius: 14px;
+    padding: 11px 16px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: .2s ease;
+  }
+
+  .btn-primary-log {
+    background: #2563eb;
+    color: white;
+  }
+
+  .btn-primary-log:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+  }
+
+  .btn-soft-log {
+    background: #eef2ff;
+    color: #1e40af;
+  }
+
+  .logs-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, .08);
+  }
+
+  .logs-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 1px solid #e5e7eb;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .logs-counter {
+    font-weight: 800;
+    color: #334155;
+  }
+
+  .logs-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .logs-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1100px;
+  }
+
+  .logs-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    text-align: left;
+    padding: 13px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .logs-table td {
+    padding: 13px 14px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 14px;
+    vertical-align: top;
+  }
+
+  .logs-table tr:hover td {
+    background: #f8fbff;
+  }
+
+  .badge-log {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    background: #eef2ff;
+    color: #1e40af;
+    white-space: nowrap;
+  }
+
+  .badge-export {
+    background: #ecfdf5;
+    color: #047857;
+  }
+
+  .badge-danger {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+
+  .muted {
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .details-cell {
+    max-width: 280px;
+    color: #334155;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .page-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .page-buttons button {
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    border-radius: 12px;
+    padding: 9px 12px;
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .page-buttons button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+
+  .empty-log {
+    padding: 34px;
+    text-align: center;
+    color: #64748b;
+    font-weight: 700;
+  }
+
+  .loading-row {
+    padding: 28px;
+    text-align: center;
+    color: #2563eb;
+    font-weight: 800;
+  }
+
+  @media (max-width: 1100px) {
+    .filters-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media (max-width: 720px) {
+    .logs-page {
+      padding: 14px;
+    }
+
+    .filters-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .logs-hero h1 {
+      font-size: 23px;
+    }
+  }
+</style>
+
+<div class="logs-page">
+  <section class="logs-hero">
+    <h1>Central de Controle de Logs</h1>
+    <p>Acompanhamento geral das ações do sistema: acessos, alterações, exportações e movimentações por usuário, clínica e paciente.</p>
+  </section>
+
+  <section class="logs-filters">
+    <div class="filters-grid">
+      <div class="field">
+        <label>Profissional / Usuário</label>
+        <input id="fProfissional" type="text" placeholder="Nome do usuário">
+      </div>
+
+      <div class="field">
+        <label>Clínica</label>
+        <input id="fClinica" type="text" placeholder="Nome ou ID">
+      </div>
+
+      <div class="field">
+        <label>Paciente</label>
+        <input id="fPaciente" type="text" placeholder="Nome, CPF ou CNS">
+      </div>
+
+      <div class="field">
+        <label>Módulo</label>
+        <input id="fModulo" type="text" placeholder="Ex: registros">
+      </div>
+
+      <div class="field">
+        <label>Ação</label>
+        <select id="fAcao">
+          <option value="">Todas</option>
+          <option value="acesso">Acesso</option>
+          <option value="criou">Criação</option>
+          <option value="editou">Edição</option>
+          <option value="excluiu">Exclusão</option>
+          <option value="exportou">Exportação</option>
+          <option value="erro">Erro</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Somente exportações</label>
+        <select id="fExportacao">
+          <option value="">Não</option>
+          <option value="exportou">Sim</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Data inicial</label>
+        <input id="fDataIni" type="date">
+      </div>
+
+      <div class="field">
+        <label>Data final</label>
+        <input id="fDataFim" type="date">
+      </div>
+    </div>
+
+    <div class="filters-actions">
+      <button class="btn-log btn-soft-log" id="btnLimpar" type="button">Limpar filtros</button>
+      <button class="btn-log btn-primary-log" id="btnBuscar" type="button">Buscar logs</button>
+    </div>
+  </section>
+
+  <section class="logs-card">
+    <div class="logs-toolbar">
+      <div class="logs-counter" id="logsCounter">Carregando logs...</div>
+      <div class="muted">Máximo de 20 registros por página</div>
+    </div>
+
+    <div class="logs-table-wrap">
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Ação</th>
+            <th>Módulo</th>
+            <th>Usuário</th>
+            <th>Clínica</th>
+            <th>Paciente</th>
+            <th>IP</th>
+            <th>Detalhes</th>
+          </tr>
+        </thead>
+        <tbody id="logsBody">
+          <tr>
+            <td colspan="8" class="loading-row">Carregando...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <div class="muted" id="pageInfo">Página 1</div>
+
+      <div class="page-buttons">
+        <button id="btnPrev" type="button">Anterior</button>
+        <button id="btnNext" type="button">Próxima</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const qs = (sel) => document.querySelector(sel);
+
+  const state = {
+    page: 1,
+    pages: 1,
+    total: 0,
+    perPage: 20,
+  };
+
+  const els = {
+    profissional: qs("#fProfissional"),
+    clinica: qs("#fClinica"),
+    paciente: qs("#fPaciente"),
+    modulo: qs("#fModulo"),
+    acao: qs("#fAcao"),
+    exportacao: qs("#fExportacao"),
+    dataIni: qs("#fDataIni"),
+    dataFim: qs("#fDataFim"),
+    buscar: qs("#btnBuscar"),
+    limpar: qs("#btnLimpar"),
+    prev: qs("#btnPrev"),
+    next: qs("#btnNext"),
+    body: qs("#logsBody"),
+    counter: qs("#logsCounter"),
+    pageInfo: qs("#pageInfo"),
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function formatDate(value) {
+    if (!value) return "-";
+
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return escapeHtml(value);
+
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function getAcaoFiltro() {
+    return els.exportacao.value || els.acao.value || "";
+  }
+
+  function buildParams() {
+    const params = new URLSearchParams();
+
+    params.set("page", state.page);
+
+    if (els.profissional.value.trim()) params.set("profissional", els.profissional.value.trim());
+    if (els.clinica.value.trim()) params.set("clinica", els.clinica.value.trim());
+    if (els.paciente.value.trim()) params.set("paciente", els.paciente.value.trim());
+    if (els.modulo.value.trim()) params.set("modulo", els.modulo.value.trim());
+    if (getAcaoFiltro()) params.set("acao", getAcaoFiltro());
+    if (els.dataIni.value) params.set("data_ini", els.dataIni.value);
+    if (els.dataFim.value) params.set("data_fim", els.dataFim.value);
+
+    return params;
+  }
+
+  function badgeClass(acao) {
+    const a = String(acao || "").toLowerCase();
+
+    if (a.includes("export")) return "badge-log badge-export";
+    if (a.includes("erro") || a.includes("exclu")) return "badge-log badge-danger";
+
+    return "badge-log";
+  }
+
+  function getValue(row, keys, fallback = "-") {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== null && row[key] !== "") {
+        return row[key];
+      }
+    }
+
+    return fallback;
+  }
+
+  function renderRows(rows) {
+    if (!rows || !rows.length) {
+      els.body.innerHTML = `
+        <tr>
+          <td colspan="8" class="empty-log">
+            Nenhum log encontrado com os filtros selecionados.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    els.body.innerHTML = rows.map(row => {
+      const criadoEm = getValue(row, ["criado_em", "created_at", "data_hora", "timestamp"]);
+      const acao = getValue(row, ["acao", "action", "tipo"]);
+      const modulo = getValue(row, ["modulo", "module"]);
+      const usuario = getValue(row, ["usuario_nome", "profissional_nome", "user_nome", "usuario", "user_name"]);
+      const clinica = getValue(row, ["clinica_nome", "clinica", "clinic_name"]);
+      const paciente = getValue(row, ["paciente_nome", "paciente", "patient_name"]);
+      const ip = getValue(row, ["ip", "ip_address", "remote_addr"]);
+      const detalhes = getValue(row, ["detalhes", "descricao", "description", "metadata", "extra", "dados"]);
+
+      return `
+        <tr>
+          <td>
+            <strong>${formatDate(criadoEm)}</strong>
+            <div class="muted">ID: ${escapeHtml(row.id || "-")}</div>
+          </td>
+          <td><span class="${badgeClass(acao)}">${escapeHtml(acao)}</span></td>
+          <td>${escapeHtml(modulo)}</td>
+          <td>${escapeHtml(usuario)}</td>
+          <td>
+            ${escapeHtml(clinica)}
+            ${row.clinica_id ? `<div class="muted">ID: ${escapeHtml(row.clinica_id)}</div>` : ""}
+          </td>
+          <td>${escapeHtml(paciente)}</td>
+          <td>${escapeHtml(ip)}</td>
+          <td class="details-cell" title="${escapeHtml(detalhes)}">${escapeHtml(detalhes)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function updatePagination() {
+    els.counter.textContent = `${state.total} log(s) encontrado(s)`;
+    els.pageInfo.textContent = `Página ${state.page} de ${state.pages}`;
+    els.prev.disabled = state.page <= 1;
+    els.next.disabled = state.page >= state.pages;
+  }
+
+  async function carregarLogs() {
+    els.body.innerHTML = `
+      <tr>
+        <td colspan="8" class="loading-row">Carregando logs...</td>
+      </tr>
+    `;
+
+    try {
+      const params = buildParams();
+      const resp = await fetch(`/logs/api/listar?${params.toString()}`);
+
+      if (!resp.ok) {
+        throw new Error("Falha ao carregar logs.");
+      }
+
+      const data = await resp.json();
+
+      if (!data.ok) {
+        throw new Error(data.erro || "Erro ao buscar logs.");
+      }
+
+      state.total = data.total || 0;
+      state.pages = data.pages || 1;
+      state.perPage = data.per_page || 20;
+
+      renderRows(data.rows || []);
+      updatePagination();
+
+    } catch (err) {
+      console.error(err);
+      els.counter.textContent = "Erro ao carregar logs";
+      els.body.innerHTML = `
+        <tr>
+          <td colspan="8" class="empty-log">
+            Não foi possível carregar os logs agora.
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  function buscar() {
+    state.page = 1;
+    carregarLogs();
+  }
+
+  function limpar() {
+    els.profissional.value = "";
+    els.clinica.value = "";
+    els.paciente.value = "";
+    els.modulo.value = "";
+    els.acao.value = "";
+    els.exportacao.value = "";
+    els.dataIni.value = "";
+    els.dataFim.value = "";
+
+    state.page = 1;
+    carregarLogs();
+  }
+
+  els.buscar.addEventListener("click", buscar);
+  els.limpar.addEventListener("click", limpar);
+
+  els.prev.addEventListener("click", () => {
+    if (state.page > 1) {
+      state.page--;
+      carregarLogs();
+    }
+  });
+
+  els.next.addEventListener("click", () => {
+    if (state.page < state.pages) {
+      state.page++;
+      carregarLogs();
+    }
+  });
+
+  [
+    els.profissional,
+    els.clinica,
+    els.paciente,
+    els.modulo,
+  ].forEach(input => {
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") buscar();
+    });
+  });
+
+  els.acao.addEventListener("change", () => {
+    if (els.acao.value && els.exportacao.value) {
+      els.exportacao.value = "";
+    }
+  });
+
+  els.exportacao.addEventListener("change", () => {
+    if (els.exportacao.value) {
+      els.acao.value = "";
+    }
+  });
+
+  carregarLogs();
+})();
+</script>
+{% endblock %}

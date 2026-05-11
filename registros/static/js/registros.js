@@ -1,5 +1,7 @@
 // registros/static/js/registros.js
 (function () {
+  "use strict";
+
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
@@ -19,6 +21,9 @@
   const btnFiltrar = $("#btnFiltrar");
   const btnLimpar = $("#btnLimpar");
   const btnExportar = $("#btnExportar");
+  const btnExportBPAI = $("#btnExportBPAI");
+  const btnEvoGeral = $("#btnExportarEvoGeralPdf");
+  const btnEvoPaciente = $("#btnExportarEvoPacientePdf");
 
   const tbl = $("#tblRegistros");
   const tbody = $("#tblRegistros tbody");
@@ -32,10 +37,8 @@
   const btnPagNext = $("#pagNext");
   const btnPagLast = $("#pagLast");
 
-  const PAGE_SIZE = 15;
-  let allRows = [];
-  let currentPage = 1;
-  let lastModalRowObj = null;
+  const cardsWrap = $("#cardsRegistros");
+  const selOrdem = $("#f_ordem");
 
   const dlg = $("#modal-registro");
 
@@ -78,14 +81,11 @@
   const mrOcultaVisivel = $("#mr_oculta_visivel");
   const mrEvolucaoOculta = $("#mr_evolucao_oculta");
 
-  let cardsWrap = $("#cardsRegistros");
-  let selOrdem = $("#f_ordem");
+  const PAGE_SIZE = 15;
 
-  const PROFISSIONAIS = {
-    "101": "Dr. João (Clínico)",
-    "102": "Dra. Maria (Psicologia)",
-    "103": "Fisio Pedro (Fisioterapia)",
-  };
+  let allRows = [];
+  let currentPage = 1;
+  let lastModalRowObj = null;
 
   const safe = (v, alt = "—") =>
     v === undefined || v === null || String(v).trim() === "" ? alt : String(v);
@@ -105,10 +105,13 @@
 
   function valFiltro(v) {
     if (v == null) return "";
+
     const s = String(v).trim();
     if (!s) return "";
+
     const low = s.toLowerCase();
     if (["todos", "todo", "-", "*"].includes(low)) return "";
+
     return s;
   }
 
@@ -134,6 +137,7 @@
 
   function fmtDataBR(d) {
     if (!d) return "—";
+
     const s = String(d).trim();
     if (!s) return "—";
 
@@ -157,6 +161,7 @@
     for (const k of keys) {
       if (k in obj && obj[k] != null && obj[k] !== "") return obj[k];
     }
+
     return fallback;
   }
 
@@ -165,9 +170,36 @@
     el.textContent = safe(value, fallback);
   }
 
+  function debounce(fn, wait = 220) {
+    let t = null;
+
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  function isSelect(el) {
+    return !!el && String(el.tagName || "").toUpperCase() === "SELECT";
+  }
+
+  function isInput(el) {
+    const tag = String(el?.tagName || "").toUpperCase();
+    return tag === "INPUT" || tag === "TEXTAREA";
+  }
+
+  function decodeDataRow(raw) {
+    try {
+      return JSON.parse(String(raw || "{}").replaceAll("&quot;", '"'));
+    } catch {
+      return {};
+    }
+  }
+
   function normalizeStatusLabel(s) {
     const v = String(s || "").trim();
     if (!v) return "—";
+
     const low = v.toLowerCase();
 
     if (low.includes("pres") || low === "ok" || low === "compareceu" || low === "realizado") return "Presente";
@@ -181,20 +213,26 @@
 
   function statusEmoji(label) {
     const low = String(label || "").toLowerCase();
+
     if (low.includes("presente")) return "✅";
     if (low.includes("just")) return "🟣";
     if (low.includes("falt")) return "❌";
     if (low.includes("admiss")) return "🟢";
     if (low.includes("alta")) return "🏁";
+
     return "ℹ️";
   }
 
   function profNameFrom(obj) {
-    const direct = pick(obj, ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario"], "");
+    const direct = pick(
+      obj,
+      ["profissional_nome", "profissional", "nome_profissional", "usuario_nome", "nome_usuario", "ag__profissional"],
+      ""
+    );
+
     if (direct && direct !== "—") return direct;
 
     const pid = obj.profissional_id ?? obj.prof_id ?? obj.id_profissional ?? obj.usuario_id ?? "";
-    if (pid && String(pid) in PROFISSIONAIS) return PROFISSIONAIS[String(pid)];
     return pid ? `ID ${pid}` : "—";
   }
 
@@ -215,7 +253,9 @@
       pick(obj, ["pac__telefone", "paciente_telefone1", "telefone1", "telefone", "telefone_paciente"], ""),
       pick(obj, ["pac__telefone2", "paciente_telefone2", "telefone2"], ""),
       pick(obj, ["pac__telefone3", "paciente_telefone3", "telefone3", "celular", "celular_paciente"], ""),
-    ].map(v => String(v || "").trim()).filter(Boolean);
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean);
 
     return [...new Set(tels)].join(" • ") || "—";
   }
@@ -241,39 +281,6 @@
     return partes.length ? partes.join(", ") : "—";
   }
 
-  function debounce(fn, wait = 220) {
-    let t = null;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), wait);
-    };
-  }
-
-  function isSelect(el) {
-    return !!el && String(el.tagName || "").toUpperCase() === "SELECT";
-  }
-
-  function isInput(el) {
-    const tag = String(el?.tagName || "").toUpperCase();
-    return tag === "INPUT" || tag === "TEXTAREA";
-  }
-
-  function mapFill(obj, mapping) {
-    mapping.forEach((m) => {
-      const raw = pick(obj, m.keys, m.fallback ?? "—");
-      const val = typeof m.fmt === "function" ? m.fmt(raw, obj) : raw;
-      setText(m.el, val, m.fallback ?? "—");
-    });
-  }
-
-  function decodeDataRow(raw) {
-    try {
-      return JSON.parse(String(raw || "{}").replaceAll("&quot;", '"'));
-    } catch {
-      return {};
-    }
-  }
-
   function evoOcultaInfo(obj) {
     const total = Number(obj.evo_oculta_total || 0);
     const visivel = Number(obj.evo_oculta_visivel || 0);
@@ -283,8 +290,8 @@
     if (situacao === "visivel" || visivel > 0) {
       return {
         tipo: "visivel",
-        badge: "🔓 Privada visível",
-        titulo: "Evoluções privadas liberadas",
+        badge: "🔓 Restrita visível",
+        titulo: "Evoluções restritas liberadas",
         sub: "Você é o autor ou possui CBO autorizado para visualizar.",
         pill: "Visível",
         total,
@@ -296,9 +303,9 @@
     if (situacao === "restrita" || total > 0) {
       return {
         tipo: "restrita",
-        badge: "🔒 Privada restrita",
-        titulo: "Evoluções privadas restritas",
-        sub: "Existe evolução privada neste atendimento, mas ela não está liberada para seu usuário/CBO.",
+        badge: "🔒 Restrita",
+        titulo: "Evoluções restritas",
+        sub: "Existe evolução restrita neste atendimento, mas ela não está liberada para seu usuário/CBO.",
         pill: "Restrita",
         total,
         visivel,
@@ -308,14 +315,22 @@
 
     return {
       tipo: "sem",
-      badge: "🔘 Sem evolução privada",
-      titulo: "Sem evolução privada",
-      sub: "Este atendimento não possui evolução privada registrada.",
+      badge: "🔘 Sem restrita",
+      titulo: "Sem evolução restrita",
+      sub: "Este atendimento não possui evolução restrita registrada.",
       pill: "Sem registro",
       total: 0,
       visivel: 0,
       texto: "—",
     };
+  }
+
+  function mapFill(obj, mapping) {
+    mapping.forEach((m) => {
+      const raw = pick(obj, m.keys, m.fallback ?? "—");
+      const val = typeof m.fmt === "function" ? m.fmt(raw, obj) : raw;
+      setText(m.el, val, m.fallback ?? "—");
+    });
   }
 
   function setModalTab(tabName) {
@@ -353,6 +368,7 @@
 
     const info = evoOcultaInfo(obj);
     setText(mrBadgeOculta, info.badge);
+
     mrBadgeOculta?.classList.remove("is-visible", "is-restricted", "is-empty");
     mrBadgeOculta?.classList.add(
       info.tipo === "visivel" ? "is-visible" :
@@ -361,7 +377,7 @@
     );
   }
 
-  function fillModalEvolucaoPrivada(obj) {
+  function fillModalEvolucaoRestrita(obj) {
     const info = evoOcultaInfo(obj);
 
     setText(mrOcultaTitulo, info.titulo);
@@ -412,7 +428,7 @@
       { el: mrPacEndereco, keys: ["__end__"], fmt: (_, o) => formatEndereco(o) },
     ]);
 
-    fillModalEvolucaoPrivada(obj);
+    fillModalEvolucaoRestrita(obj);
     setModalTab("atendimento");
 
     try {
@@ -438,58 +454,6 @@
     else arr.sort((a, b) => byData(b, a));
 
     return arr;
-  }
-
-  function ensureCardsUI() {
-    if (selOrdem && cardsWrap) return;
-
-    const resultadosCard = tbl?.closest(".card") || $("#paginacao")?.closest(".card");
-    if (!resultadosCard) return;
-
-    if (!selOrdem) {
-      const toolbar = document.createElement("div");
-      toolbar.className = "result-toolbar";
-      toolbar.innerHTML = `
-        <div class="muted" id="lblResumoCards"></div>
-        <div class="field small">
-          <label for="f_ordem">Ordenar</label>
-          <select id="f_ordem" name="ordem">
-            <option value="data_desc">Mais recentes</option>
-            <option value="data_asc">Mais antigos</option>
-            <option value="paciente_az">Paciente A-Z</option>
-            <option value="paciente_za">Paciente Z-A</option>
-            <option value="prof_az">Profissional A-Z</option>
-          </select>
-        </div>
-      `;
-
-      const oldResumo = $("#lblResumo");
-      if (oldResumo) oldResumo.style.display = "none";
-
-      const tabelaWrap = tbl?.closest(".tabela-wrap");
-      resultadosCard.insertBefore(toolbar, tabelaWrap || $("#paginacao") || resultadosCard.firstChild);
-
-      selOrdem = $("#f_ordem");
-    }
-
-    if (!cardsWrap) {
-      cardsWrap = document.createElement("div");
-      cardsWrap.id = "cardsRegistros";
-      cardsWrap.className = "registros-cards";
-
-      const tabelaWrap = tbl?.closest(".tabela-wrap");
-      if (tabelaWrap) {
-        tabelaWrap.insertAdjacentElement("beforebegin", cardsWrap);
-        tabelaWrap.style.display = "none";
-      } else {
-        resultadosCard.insertBefore(cardsWrap, $("#paginacao") || null);
-      }
-    }
-
-    selOrdem?.addEventListener("change", () => {
-      currentPage = 1;
-      renderPagina();
-    });
   }
 
   function renderCards(rows) {
@@ -539,7 +503,7 @@
 
           <div class="registro-extra">
             <span>CNS: ${escapeHtml(cns)}</span>
-            <span class="grid-priv ${privClass}">${privIcon}</span>
+            <span class="grid-priv ${privClass}" title="${escapeAttr(info.pill)}">${privIcon}</span>
           </div>
 
           <div class="registro-actions">
@@ -598,14 +562,16 @@
     const resumo = total ? `Encontrados ${total} registro(s).` : "Nenhum registro encontrado.";
     if (lblResumo) lblResumo.textContent = resumo;
 
-    const lblResumoCards = $("#lblResumoCards");
-    if (lblResumoCards) lblResumoCards.textContent = resumo;
-
     if (pagAtualEl) pagAtualEl.textContent = String(total ? currentPage : 1);
     if (pagTotalEl) pagTotalEl.textContent = String(total ? totalPages : 1);
 
-    [btnPagFirst, btnPagPrev].forEach((btn) => btn && (btn.disabled = currentPage <= 1 || !total));
-    [btnPagNext, btnPagLast].forEach((btn) => btn && (btn.disabled = currentPage >= totalPages || !total));
+    [btnPagFirst, btnPagPrev].forEach((btn) => {
+      if (btn) btn.disabled = currentPage <= 1 || !total;
+    });
+
+    [btnPagNext, btnPagLast].forEach((btn) => {
+      if (btn) btn.disabled = currentPage >= totalPages || !total;
+    });
   }
 
   function renderPagina() {
@@ -677,7 +643,7 @@
 
   async function listar() {
     try {
-      const resp = await fetch(buildListURL());
+      const resp = await fetch(buildListURL(), { credentials: "same-origin" });
       const rows = await resp.json();
 
       allRows = Array.isArray(rows) ? rows : [];
@@ -685,17 +651,21 @@
       renderPagina();
     } catch (err) {
       console.error("[registros] Erro ao listar:", err);
+
       allRows = [];
       renderCards([]);
       renderTabelaCompat([]);
+
       if (lblResumo) lblResumo.textContent = "Erro ao carregar registros.";
       updatePaginationUI(0, 1, 0, 0);
     }
   }
 
   function limpar() {
-    frm && frm.reset();
+    frm?.reset();
+
     if (inpProfId) inpProfId.value = "";
+
     if (sugBox) {
       sugBox.classList.add("hide");
       sugBox.innerHTML = "";
@@ -715,20 +685,46 @@
     window.location.href = `/registros/exportar_xlsx${qs ? "?" + qs : ""}`;
   }
 
-  function exportarEvolucoesPDF({ apenasPaciente = false } = {}) {
+  function exportarBPAI() {
+    const p = buildFilterParams();
+    const qs = p.toString();
+    window.location.href = `/registros/exportar_bpai_xlsx${qs ? "?" + qs : ""}`;
+  }
+
+  function abrirPdf(urlBase, params) {
+    const qs = params.toString();
+    window.open(`${urlBase}${qs ? "?" + qs : ""}`, "_blank");
+  }
+
+  function exportarEvolucoesGeraisPDF() {
     const p = buildFilterParams();
 
-    if (apenasPaciente && lastModalRowObj) {
-      const pid = lastModalRowObj.paciente_id ?? lastModalRowObj.pacienteId ?? "";
-      if (String(pid).trim()) p.set("paciente_id", String(pid).trim());
+    abrirPdf("/registros/evolucoes/pdf", p);
+  }
+
+  function exportarEvolucoesRestritasPDF() {
+    const p = buildFilterParams();
+
+    if (lastModalRowObj) {
+      const pid =
+        lastModalRowObj.paciente_id ??
+        lastModalRowObj.pacienteId ??
+        lastModalRowObj.pac__id ??
+        "";
+
+      if (String(pid).trim()) {
+        p.set("paciente_id", String(pid).trim());
+      }
     }
 
-    const qs = p.toString();
-    window.open(`/registros/evolucoes/pdf${qs ? "?" + qs : ""}`, "_blank");
+    abrirPdf("/registros/evolucoes-restritas/pdf", p);
   }
 
   async function acFetch(q) {
-    const resp = await fetch(`/atendimentos/api/profissionais_sugestao?q=${encodeURIComponent(q)}`);
+    const resp = await fetch(`/atendimentos/api/profissionais_sugestao?q=${encodeURIComponent(q)}`, {
+      credentials: "same-origin",
+    });
+
     const data = await resp.json();
     return Array.isArray(data) ? data : [];
   }
@@ -756,7 +752,8 @@
 
         return `
           <button type="button" class="prof-sug" data-id="${escapeAttr(id)}" data-label="${escapeAttr(label)}">
-            <strong>${escapeHtml(nome)}</strong>${cbo ? ` <span class="muted">(CBO ${escapeHtml(cbo)})</span>` : ""}
+            <strong>${escapeHtml(nome)}</strong>
+            ${cbo ? `<span class="muted">(CBO ${escapeHtml(cbo)})</span>` : ""}
           </button>
         `;
       }).join("");
@@ -784,6 +781,7 @@
 
     selProf.addEventListener("keydown", (e) => {
       if (e.key === "Escape") acHide();
+
       if (e.key === "Enter") {
         e.preventDefault();
         acHide();
@@ -797,12 +795,13 @@
 
       selProf.value = btn.getAttribute("data-label") || "";
       inpProfId.value = btn.getAttribute("data-id") || "";
+
       acHide();
       listar();
     });
 
     document.addEventListener("click", (e) => {
-      const wrap = document.getElementById("f_prof_wrap");
+      const wrap = $("#f_prof_wrap");
       if (wrap && wrap.contains(e.target)) return;
       acHide();
     });
@@ -814,7 +813,10 @@
     if (!selProf || !isSelect(selProf)) return;
 
     try {
-      const resp = await fetch("/atendimentos/api/profissionais");
+      const resp = await fetch("/atendimentos/api/profissionais", {
+        credentials: "same-origin",
+      });
+
       const data = await resp.json();
 
       if (!Array.isArray(data) || !data.length) return;
@@ -871,107 +873,117 @@
     bind(mrBtnCopyOculta, mrEvolucaoOculta, "📎 Copiar");
   }
 
-  frm?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    listar();
-  });
-
-  btnFiltrar?.addEventListener("click", (e) => {
-    e.preventDefault();
-    listar();
-  });
-
-  btnLimpar?.addEventListener("click", (e) => {
-    e.preventDefault();
-    limpar();
-  });
-
-  btnExportar?.addEventListener("click", (e) => {
-    e.preventDefault();
-    exportarXLSX();
-  });
-
-  [selStatus, selSexo, inpDataIni, inpDataFim].forEach((el) => {
-    el?.addEventListener("change", listar);
-  });
-
-  if (selProf && isSelect(selProf)) {
-    selProf.addEventListener("change", listar);
-  }
-
-  inpBusca?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
+  function bindEvents() {
+    frm?.addEventListener("submit", (e) => {
       e.preventDefault();
       listar();
-    }
-  });
+    });
 
-  tbl?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-act='ver']");
-    if (!btn) return;
-
-    const tr = btn.closest("tr");
-    const obj = decodeDataRow(tr?.getAttribute("data-row") || "{}");
-    openModalFromObj(obj);
-  });
-
-  document.addEventListener("click", (e) => {
-    const cardBtn = e.target.closest("[data-act='ver-card']");
-    if (cardBtn) {
-      const card = cardBtn.closest(".registro-card");
-      const obj = decodeDataRow(card?.getAttribute("data-row") || "{}");
-      openModalFromObj(obj);
-      return;
-    }
-
-    if (!dlg) return;
-    if (e.target.closest("[value='close']")) {
-      if (typeof dlg.close === "function") dlg.close();
-      else dlg.removeAttribute("open");
-    }
-  });
-
-  [
-    [btnPagFirst, "first"],
-    [btnPagPrev, "prev"],
-    [btnPagNext, "next"],
-    [btnPagLast, "last"],
-  ].forEach(([btn, where]) => {
-    btn?.addEventListener("click", (e) => {
+    btnFiltrar?.addEventListener("click", (e) => {
       e.preventDefault();
-      goToPage(where);
-    });
-  });
-
-  document.addEventListener("DOMContentLoaded", () => {
-    const btnBPAI = $("#btnExportBPAI");
-    btnBPAI?.addEventListener("click", () => {
-      const qs = buildFilterParams().toString();
-      window.location.href = `/registros/exportar_bpai_xlsx${qs ? "?" + qs : ""}`;
+      listar();
     });
 
-    const btnEvoGeral = $("#btnExportarEvoGeralPdf");
+    btnLimpar?.addEventListener("click", (e) => {
+      e.preventDefault();
+      limpar();
+    });
+
+    btnExportar?.addEventListener("click", (e) => {
+      e.preventDefault();
+      exportarXLSX();
+    });
+
+    btnExportBPAI?.addEventListener("click", (e) => {
+      e.preventDefault();
+      exportarBPAI();
+    });
+
     btnEvoGeral?.addEventListener("click", (e) => {
       e.preventDefault();
-      exportarEvolucoesPDF({ apenasPaciente: false });
+      exportarEvolucoesGeraisPDF();
     });
 
-    const btnEvoPaciente = $("#btnExportarEvoPacientePdf");
     btnEvoPaciente?.addEventListener("click", (e) => {
       e.preventDefault();
-      exportarEvolucoesPDF({ apenasPaciente: true });
+      exportarEvolucoesRestritasPDF();
     });
-  });
 
-  (async () => {
-    ensureCardsUI();
+    [selStatus, selSexo, inpDataIni, inpDataFim].forEach((el) => {
+      el?.addEventListener("change", listar);
+    });
+
+    if (selProf && isSelect(selProf)) {
+      selProf.addEventListener("change", listar);
+    }
+
+    selOrdem?.addEventListener("change", () => {
+      currentPage = 1;
+      renderPagina();
+    });
+
+    inpBusca?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        listar();
+      }
+    });
+
+    tbl?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act='ver']");
+      if (!btn) return;
+
+      const tr = btn.closest("tr");
+      const obj = decodeDataRow(tr?.getAttribute("data-row") || "{}");
+      openModalFromObj(obj);
+    });
+
+    document.addEventListener("click", (e) => {
+      const cardBtn = e.target.closest("[data-act='ver-card']");
+
+      if (cardBtn) {
+        const card = cardBtn.closest(".registro-card");
+        const obj = decodeDataRow(card?.getAttribute("data-row") || "{}");
+        openModalFromObj(obj);
+        return;
+      }
+
+      if (!dlg) return;
+
+      if (e.target.closest("[value='close']")) {
+        if (typeof dlg.close === "function") dlg.close();
+        else dlg.removeAttribute("open");
+      }
+    });
+
+    [
+      [btnPagFirst, "first"],
+      [btnPagPrev, "prev"],
+      [btnPagNext, "next"],
+      [btnPagLast, "last"],
+    ].forEach(([btn, where]) => {
+      btn?.addEventListener("click", (e) => {
+        e.preventDefault();
+        goToPage(where);
+      });
+    });
+  }
+
+  async function boot() {
     aplicarCompetenciaPadrao();
     initModalTabs();
     initCopyButtons();
+    bindEvents();
 
     const okAC = initProfAutocomplete();
     if (!okAC) await carregarProfissionaisSelectLegado();
 
     listar();
-  })();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();

@@ -14,6 +14,11 @@
   {% set usuario = session.get('usuario') or session.get('user') or session.get('auth_user') or {} %}
   {% set role = (session.get('role') or usuario.get('role') or '')|upper %}
   {% set is_master = session.get('is_master') or usuario.get('is_master') or role in ['MASTER', 'ROOT', 'SUPERADMIN'] %}
+  {% set clinica_nome = session.get('clinica_nome') or 'Sem clínica selecionada' %}
+  {% set clinica_id = session.get('clinica_id') %}
+
+
+
 
   {% if is_master or can_modulo('admin_painel', 'ver') %}
     {% set home_url = url_for('admin.admin_home') %}
@@ -41,13 +46,29 @@
           <div class="avatar">
             {{ (session.get('nome') or 'U')[:1] }}
           </div>
-          <div class="user-block">
-            <span class="user-name">{{ session.get('nome') }}</span>
+          <div class="user-block-inline">
+            <span class="user-name">
+              {{ session.get('nome') }}
+            </span>
+
+            <span class="user-divider">•</span>
+
             <span class="user-role">
               {% if is_master %}
                 MASTER
               {% else %}
                 {{ session.get('role') }}
+              {% endif %}
+            </span>
+
+            <span class="user-divider">•</span>
+
+            <span class="user-clinica-inline">
+              🏥
+              {% if clinica_id %}
+                {{ clinica_nome }}
+              {% else %}
+                Sem clínica
               {% endif %}
             </span>
           </div>
@@ -87,6 +108,15 @@
           <a href="{{ url_for('agenda.visualizar_agenda') }}">
             <span class="ico">🗓️</span>
             <span class="txt">Agenda</span>
+          </a>
+        </li>
+        {% endif %}
+
+        {% if is_master or can_modulo('agenda', 'ver') %}
+        <li>
+          <a href="{{ url_for('agenda_medica.coordenacao') }}">
+            <span class="ico">🩺</span>
+            <span class="txt">Agenda Médica</span>
           </a>
         </li>
         {% endif %}

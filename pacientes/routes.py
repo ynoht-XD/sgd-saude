@@ -2,18 +2,25 @@
 from __future__ import annotations
 
 """
-routes.py
----------
-Arquivo central do módulo pacientes.
+pacientes/routes.py
+-------------------
+
+Arquivo central do módulo Pacientes.
 
 Responsabilidades:
-- carregar helpers do módulo
-- carregar rotas de pacientes
-- carregar rotas de exportação
+- Expor helpers principais do módulo.
+- Importar os arquivos que registram rotas no blueprint `pacientes_bp`.
+- Manter compatibilidade com imports antigos.
 
-Observação:
-As rotas são registradas ao importar os módulos abaixo,
-pois eles usam decorators em `pacientes_bp`.
+Importante:
+As regras de:
+- clinica_id
+- logs
+- módulos/permissões
+
+ficam aplicadas nos arquivos que possuem rotas reais:
+- pacientes.py
+- exports.py
 """
 
 from .helpers import (
@@ -43,10 +50,14 @@ from .helpers import (
     tags_human,
 )
 
-# Importa os módulos que efetivamente registram rotas no blueprint
-from . import pacientes  # noqa: F401
-from . import exports    # noqa: F401
-
+# ============================================================
+# ROTAS DO MÓDULO
+# ============================================================
+# Estes imports registram as rotas no blueprint pacientes_bp.
+# Não remova, mesmo que pareçam "sem uso".
+from . import pacientes  # noqa: F401,E402
+from . import exports    # noqa: F401,E402
+from . import pacientes_master  # noqa: F401,E402
 
 __all__ = [
     "get_conn",

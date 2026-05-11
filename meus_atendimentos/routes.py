@@ -4,10 +4,43 @@ import re
 from datetime import date, datetime
 from typing import Any, List, Optional
 
-from flask import render_template, request, session, jsonify, url_for
+from flask import render_template, request, session, jsonify, url_for, abort
 
 from . import meus_atendimentos_bp
 from db import conectar_db
+
+try:
+    from admin.modulos import require_permission
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+try:
+    from log import registrar_log, log_erro
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+
+
+# ============================================================
+# CONTEXTO
+# ============================================================
+
+def _clinica_id_atual() -> int:
+    clinica_id = session.get("clinica_id")
+    if not clinica_id:
+        abort(403)
+
+    try:
+        return int(clinica_id)
+    except Exception:
+        abort(403)
+
+
+def _usuario_id_atual():
+    return session.get("usuario_id") or session.get("user_id") or session.get("id")
 
 
 # ============================================================
@@ -24,6 +57,12 @@ def _val(row, key: str, index: int = 0, default=None):
 
     if isinstance(row, dict):
         return row.get(key, default)
+
+    if hasattr(row, "keys"):
+        try:
+            return row[key]
+        except Exception:
+            pass
 
     try:
         return row[index]
@@ -198,6 +237,8 @@ def ensure_atendimentos_schema(conn):
             CREATE TABLE IF NOT EXISTS atendimentos (
                 id SERIAL PRIMARY KEY,
 
+                clinica_id INTEGER,
+
                 profissional_id INTEGER,
                 usuario_id INTEGER,
 
@@ -247,6 +288,7 @@ def ensure_atendimentos_schema(conn):
     finally:
         cur.close()
 
+    ensure_column(conn, "atendimentos", "clinica_id", "INTEGER")
     ensure_column(conn, "atendimentos", "profissional_id", "INTEGER")
     ensure_column(conn, "atendimentos", "usuario_id", "INTEGER")
     ensure_column(conn, "atendimentos", "paciente_id", "INTEGER")
@@ -266,6 +308,9 @@ def ensure_atendimentos_schema(conn):
     cur = conn.cursor()
 
     try:
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_clinica ON atendimentos (clinica_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_clinica_prof ON atendimentos (clinica_id, profissional_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_clinica_usuario ON atendimentos (clinica_id, usuario_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_prof ON atendimentos (profissional_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_data ON atendimentos (data_atendimento)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_atend_usuario ON atendimentos (usuario_id)")
@@ -279,7 +324,7 @@ def ensure_atendimentos_schema(conn):
 # LOGADO -> PROFISSIONAL
 # ============================================================
 
-def _resolve_logged_profissional_id(conn) -> int | None:
+def _resolve_logged_profissional_id(conn, clinica_id: int) -> int | None:
     for key in ("profissional_id", "usuario_id", "user_id", "id"):
         val = session.get(key)
         if val is not None:
@@ -315,14 +360,22 @@ def _resolve_logged_profissional_id(conn) -> int | None:
             for c in parts
         ]
 
+        params = [login_like] * len(conds)
+
+        filtro_clinica = ""
+        if "clinica_id" in cols:
+            filtro_clinica = "AND (clinica_id = %s OR clinica_id IS NULL)"
+            params.append(clinica_id)
+
         cur.execute(
             f"""
             SELECT id
               FROM usuarios
-             WHERE {" OR ".join(conds)}
+             WHERE ({" OR ".join(conds)})
+               {filtro_clinica}
              LIMIT 1
             """,
-            [login_like] * len(conds),
+            params,
         )
 
         row = cur.fetchone()
@@ -344,6 +397,7 @@ def _build_url_with_page(page: int) -> str:
 
 def _query_meus_atendimentos_paginado(
     conn,
+    clinica_id: int,
     profissional_uid: int,
     q_nome: str = "",
     data_ini: Optional[str] = None,
@@ -392,7 +446,16 @@ def _query_meus_atendimentos_paginado(
         col_p_cid = _first_existing(p_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
 
         if col_p_id:
-            joins.append(f"LEFT JOIN pacientes p ON p.{col_p_id} = a.{col_pac_id}")
+            if "clinica_id" in p_cols:
+                joins.append(
+                    f"""
+                    LEFT JOIN pacientes p
+                           ON p.{col_p_id} = a.{col_pac_id}
+                          AND (p.clinica_id = a.clinica_id OR p.clinica_id IS NULL)
+                    """
+                )
+            else:
+                joins.append(f"LEFT JOIN pacientes p ON p.{col_p_id} = a.{col_pac_id}")
 
         if col_p_id and col_p_nasc:
             idade_expr = _idade_expr(f"p.{col_p_nasc}")
@@ -421,6 +484,10 @@ def _query_meus_atendimentos_paginado(
 
     where: List[str] = [f"a.{col_prof} = %s"]
     params: List[Any] = [int(profissional_uid)]
+
+    if "clinica_id" in a_cols:
+        where.append("a.clinica_id = %s")
+        params.append(clinica_id)
 
     if q_nome:
         where.append(f"{paciente_expr} ILIKE %s")
@@ -508,15 +575,25 @@ def _query_meus_atendimentos_paginado(
 
 @meus_atendimentos_bp.route("", methods=["GET"])
 @meus_atendimentos_bp.route("/", methods=["GET"])
+@require_permission("meus_atendimentos", "ver")
 def index():
+    clinica_id = _clinica_id_atual()
     conn = conectar_db()
 
     try:
         ensure_atendimentos_schema(conn)
 
-        profissional_uid = _resolve_logged_profissional_id(conn)
+        profissional_uid = _resolve_logged_profissional_id(conn, clinica_id)
 
         if not profissional_uid:
+            registrar_log(
+                modulo="meus_atendimentos",
+                acao="bloqueado",
+                entidade="atendimentos",
+                descricao="Tentativa de acessar Meus Atendimentos sem profissional identificado.",
+                detalhes={"clinica_id": clinica_id, "usuario_id": _usuario_id_atual()},
+            )
+
             return (
                 "<h2>403</h2><p>Não foi possível identificar o profissional logado. Faça login novamente.</p>",
                 403,
@@ -541,6 +618,7 @@ def index():
 
         total, rows = _query_meus_atendimentos_paginado(
             conn=conn,
+            clinica_id=clinica_id,
             profissional_uid=profissional_uid,
             q_nome=q_nome,
             data_ini=data_ini,
@@ -560,6 +638,28 @@ def index():
 
         has_prev = page > 1
         has_next = page < pages
+
+        registrar_log(
+            modulo="meus_atendimentos",
+            acao="visualizar",
+            entidade="atendimentos",
+            descricao="Visualizou Meus Atendimentos.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "profissional_uid": profissional_uid,
+                "total": total,
+                "page": page,
+                "filtros": {
+                    "q": q_nome,
+                    "cidade": cidade,
+                    "cid": cid,
+                    "data_ini": data_ini,
+                    "data_fim": data_fim,
+                    "idade_min": idade_min,
+                    "idade_max": idade_max,
+                },
+            },
+        )
 
         return render_template(
             "meus_atendimentos.html",
@@ -582,9 +682,34 @@ def index():
             has_next=has_next,
             prev_url=_build_url_with_page(page - 1) if has_prev else None,
             next_url=_build_url_with_page(page + 1) if has_next else None,
+            clinica_id=clinica_id,
+            clinica_nome=session.get("clinica_nome"),
         )
 
     except RuntimeError as e:
+        log_erro(
+            "meus_atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro de runtime ao abrir Meus Atendimentos.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
+        return (
+            f"<h2>500</h2><pre>{str(e)}</pre>",
+            500,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    except Exception as e:
+        log_erro(
+            "meus_atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro inesperado ao abrir Meus Atendimentos.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
         return (
             f"<h2>500</h2><pre>{str(e)}</pre>",
             500,
@@ -599,15 +724,25 @@ def index():
 
 
 @meus_atendimentos_bp.route("/api/list", methods=["GET"])
+@require_permission("meus_atendimentos", "ver")
 def api_list():
+    clinica_id = _clinica_id_atual()
     conn = conectar_db()
 
     try:
         ensure_atendimentos_schema(conn)
 
-        profissional_uid = _resolve_logged_profissional_id(conn)
+        profissional_uid = _resolve_logged_profissional_id(conn, clinica_id)
 
         if not profissional_uid:
+            registrar_log(
+                modulo="meus_atendimentos",
+                acao="bloqueado",
+                entidade="atendimentos",
+                descricao="API Meus Atendimentos sem profissional identificado.",
+                detalhes={"clinica_id": clinica_id, "usuario_id": _usuario_id_atual()},
+            )
+
             return jsonify({"ok": False, "error": "not_logged_profissional"}), 401
 
         q_nome = (request.args.get("q") or "").strip()
@@ -628,6 +763,7 @@ def api_list():
 
         total, rows = _query_meus_atendimentos_paginado(
             conn=conn,
+            clinica_id=clinica_id,
             profissional_uid=profissional_uid,
             q_nome=q_nome,
             data_ini=data_ini,
@@ -642,10 +778,8 @@ def api_list():
 
         pages = max(1, (total + per_page - 1) // per_page)
 
-        items = []
-
-        for r in rows:
-            items.append({
+        items = [
+            {
                 "id": r.get("id"),
                 "paciente": r.get("paciente") or "",
                 "procedimento": r.get("procedimento") or "",
@@ -653,7 +787,23 @@ def api_list():
                 "idade": r.get("idade"),
                 "evolucao_preview": r.get("evolucao_preview") or "",
                 "evolucao": r.get("evolucao") or "",
-            })
+            }
+            for r in rows
+        ]
+
+        registrar_log(
+            modulo="meus_atendimentos",
+            acao="consultar",
+            entidade="atendimentos",
+            descricao="Consultou API de Meus Atendimentos.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "profissional_uid": profissional_uid,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+            },
+        )
 
         return jsonify({
             "ok": True,
@@ -665,6 +815,23 @@ def api_list():
         })
 
     except RuntimeError as e:
+        log_erro(
+            "meus_atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro de runtime na API de Meus Atendimentos.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    except Exception as e:
+        log_erro(
+            "meus_atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro inesperado na API de Meus Atendimentos.",
+            detalhes={"clinica_id": clinica_id},
+        )
         return jsonify({"ok": False, "error": str(e)}), 500
 
     finally:

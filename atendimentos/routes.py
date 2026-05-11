@@ -3,7 +3,16 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+    session,
+    abort,
+)
 
 from . import atendimentos_bp
 from db import conectar_db
@@ -29,16 +38,92 @@ from .helpers import (
     resolve_prof_dados,
 )
 
+try:
+    from admin.modulos import require_permission
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+try:
+    from log import registrar_log, log_erro
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+
+
+# =============================================================================
+# CONTEXTO / UTILIDADES
+# =============================================================================
+
+def _clinica_id_atual() -> int:
+    clinica_id = session.get("clinica_id")
+    if not clinica_id:
+        abort(403)
+
+    try:
+        return int(clinica_id)
+    except Exception:
+        abort(403)
+
+
+def _usuario_id_atual():
+    return session.get("usuario_id") or session.get("user_id") or session.get("id")
+
 
 def only_digits(v: str | None) -> str:
     return re.sub(r"\D+", "", v or "")
 
 
+def _ensure_col(conn, table: str, col: str, ddl: str):
+    cur = conn.cursor()
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {ddl};")
+    conn.commit()
+
+
+def _bool_form(v: str | None) -> int:
+    v = (v or "").strip().lower()
+    return 1 if v in ("1", "true", "on", "sim", "yes") else 0
+
+
+def _paciente_da_clinica(conn, paciente_id: str | int, clinica_id: int):
+    if not has_table(conn, "pacientes"):
+        return None
+
+    cols = table_columns(conn, "pacientes")
+    where_clinica = "AND p.clinica_id = %s" if "clinica_id" in cols else ""
+    params = [paciente_id]
+    if "clinica_id" in cols:
+        params.append(clinica_id)
+
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT
+            COALESCE(p.nome, '') AS nome,
+            COALESCE(p.prontuario, '') AS prontuario,
+            COALESCE(p.mod, '') AS mod,
+            COALESCE(p.status, '') AS status
+        FROM pacientes p
+        WHERE p.id = %s
+        {where_clinica}
+        LIMIT 1;
+    """, params)
+
+    return cur.fetchone()
+
+
+# =============================================================================
+# SCHEMAS
+# =============================================================================
+
 def ensure_evolucoes_ocultas_schema(conn):
     cur = conn.cursor()
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS atendimento_evolucoes_ocultas (
             id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
             atendimento_id INTEGER NOT NULL REFERENCES atendimentos(id) ON DELETE CASCADE,
             paciente_id INTEGER,
             profissional_id INTEGER,
@@ -51,289 +136,553 @@ def ensure_evolucoes_ocultas_schema(conn):
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    cur.execute("""
+        ALTER TABLE atendimento_evolucoes_ocultas
+        ADD COLUMN IF NOT EXISTS clinica_id INTEGER;
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_evo_oculta_clinica
+        ON atendimento_evolucoes_ocultas (clinica_id);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_evo_oculta_clinica_atendimento
+        ON atendimento_evolucoes_ocultas (clinica_id, atendimento_id);
+    """)
+
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_evo_oculta_atendimento
-        ON atendimento_evolucoes_ocultas (atendimento_id)
+        ON atendimento_evolucoes_ocultas (atendimento_id);
     """)
+
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_evo_oculta_paciente
-        ON atendimento_evolucoes_ocultas (paciente_id)
+        ON atendimento_evolucoes_ocultas (paciente_id);
     """)
+
     conn.commit()
 
 
+def ensure_atendimentos_multi_schema(conn):
+    ensure_atendimentos_schema(conn)
+    ensure_atendimento_procedimentos_schema(conn)
+    ensure_fila_table(conn)
+    ensure_evolucoes_ocultas_schema(conn)
+
+    if has_table(conn, "atendimentos"):
+        _ensure_col(conn, "atendimentos", "clinica_id", "INTEGER")
+
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica
+            ON atendimentos(clinica_id);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_paciente
+            ON atendimentos(clinica_id, paciente_id);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_data
+            ON atendimentos(clinica_id, data_atendimento);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimentos_clinica_profissional
+            ON atendimentos(clinica_id, profissional_id);
+        """)
+        conn.commit()
+
+    if has_table(conn, "atendimento_procedimentos"):
+        _ensure_col(conn, "atendimento_procedimentos", "clinica_id", "INTEGER")
+
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimento_proc_clinica
+            ON atendimento_procedimentos(clinica_id);
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_atendimento_proc_clinica_atendimento
+            ON atendimento_procedimentos(clinica_id, atendimento_id);
+        """)
+        conn.commit()
+
+    if has_table(conn, "fila_atendimentos"):
+        _ensure_col(conn, "fila_atendimentos", "clinica_id", "INTEGER")
+
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_fila_atendimentos_clinica
+            ON fila_atendimentos(clinica_id);
+        """)
+        conn.commit()
+
+
+def ensure_chamadas_pacientes_schema(conn):
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chamadas_pacientes (
+            id SERIAL PRIMARY KEY,
+            clinica_id INTEGER,
+            paciente_id INTEGER,
+            paciente_nome TEXT NOT NULL,
+            profissional_nome TEXT,
+            setor TEXT,
+            status TEXT DEFAULT 'chamando',
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cur.execute("""
+        ALTER TABLE chamadas_pacientes
+        ADD COLUMN IF NOT EXISTS clinica_id INTEGER;
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chamadas_pacientes_clinica
+        ON chamadas_pacientes (clinica_id);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chamadas_pacientes_clinica_criado
+        ON chamadas_pacientes (clinica_id, criado_em);
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chamadas_pacientes_criado_em
+        ON chamadas_pacientes (criado_em);
+    """)
+
+    conn.commit()
+
+
+# =============================================================================
+# PÁGINA DE ATENDIMENTO
+# =============================================================================
+
 @atendimentos_bp.route("/registrar", methods=["GET"])
+@require_permission("atendimentos", "ver")
 def pagina_atendimento():
-    with conectar_db() as conn:
-        pacientes = fetch_pacientes(conn)
-        combos_ativos = listar_combos_ativos_para_template(conn)
-        ensure_atendimentos_schema(conn)
-        ensure_atendimento_procedimentos_schema(conn)
-        ensure_evolucoes_ocultas_schema(conn)
+    clinica_id = _clinica_id_atual()
 
-    return render_template(
-        "atendimentos.html",
-        pacientes=pacientes,
-        profissionais=[],
-        data_hoje=date.today().isoformat(),
-        combos_ativos=combos_ativos,
-    )
+    try:
+        with conectar_db() as conn:
+            ensure_atendimentos_multi_schema(conn)
 
+            pacientes = fetch_pacientes(conn)
+            combos_ativos = listar_combos_ativos_para_template(conn)
+
+            # Filtro defensivo caso helpers antigos ainda não filtrem por clínica.
+            if has_table(conn, "pacientes") and has_column(conn, "pacientes", "clinica_id"):
+                pacientes = [
+                    p for p in pacientes
+                    if str(p.get("clinica_id") or clinica_id) == str(clinica_id)
+                ] if pacientes and isinstance(pacientes[0], dict) else pacientes
+
+        registrar_log(
+            modulo="atendimentos",
+            acao="visualizar",
+            entidade="atendimentos",
+            descricao="Abriu tela de registrar atendimento.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "total_pacientes": len(pacientes or []),
+            },
+        )
+
+        return render_template(
+            "atendimentos.html",
+            pacientes=pacientes,
+            profissionais=[],
+            data_hoje=date.today().isoformat(),
+            combos_ativos=combos_ativos,
+            clinica_id=clinica_id,
+            clinica_nome=session.get("clinica_nome"),
+        )
+
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro ao abrir tela de atendimento.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return f"Erro ao abrir atendimento: {e}", 500
+
+
+# =============================================================================
+# API COMBO DO PACIENTE
+# =============================================================================
 
 @atendimentos_bp.get("/api/paciente/<int:paciente_id>/combo")
+@require_permission("atendimentos", "ver")
 def api_combo_paciente(paciente_id: int):
-    with conectar_db() as conn:
-        ensure_atendimentos_schema(conn)
-        item = buscar_combo_ativo_paciente(conn, paciente_id)
+    clinica_id = _clinica_id_atual()
 
-    return jsonify({"ok": True, "item": item})
+    try:
+        with conectar_db() as conn:
+            ensure_atendimentos_multi_schema(conn)
 
+            paciente = _paciente_da_clinica(conn, paciente_id, clinica_id)
+            if not paciente:
+                return jsonify({"ok": False, "error": "Paciente não encontrado nesta clínica."}), 404
+
+            item = buscar_combo_ativo_paciente(conn, paciente_id)
+
+        return jsonify({"ok": True, "item": item})
+
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="combo",
+            entidade_id=paciente_id,
+            descricao="Erro ao buscar combo do paciente.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# =============================================================================
+# PROCEDIMENTOS SUGERIDOS
+# =============================================================================
 
 @atendimentos_bp.get("/api/procedimentos_sugeridos")
+@require_permission("atendimentos", "ver")
 def api_procedimentos_sugeridos():
+    clinica_id = _clinica_id_atual()
     paciente_id = (request.args.get("paciente_id") or "").strip()
 
     if not paciente_id:
         return jsonify(ok=False, error="paciente_id é obrigatório."), 400
 
-    with conectar_db() as conn:
-        profissional_id = resolve_logged_profissional_id(conn)
+    try:
+        with conectar_db() as conn:
+            ensure_atendimentos_multi_schema(conn)
 
-        if not profissional_id:
-            return jsonify(ok=False, error="Profissional logado não identificado."), 401
+            paciente = _paciente_da_clinica(conn, paciente_id, clinica_id)
+            if not paciente:
+                return jsonify(ok=False, error="Paciente não encontrado nesta clínica."), 404
 
-        _, _, _, prof_cbo = resolve_prof_dados(conn, profissional_id)
-        prof_cbo = (prof_cbo or "").strip()
+            profissional_id = resolve_logged_profissional_id(conn)
 
-        pac_cids = get_paciente_cids(conn, paciente_id)
-        items = listar_procedimentos_compativeis_db(conn, prof_cbo, pac_cids)
-        competencia_vigente = get_procedimentos_competencia_vigente(conn)
+            if not profissional_id:
+                return jsonify(ok=False, error="Profissional logado não identificado."), 401
 
-    return jsonify(
-        ok=True,
-        cbo=prof_cbo,
-        paciente_cids=pac_cids,
-        competencia=competencia_vigente,
-        total=len(items),
-        items=items,
-    )
+            _, _, _, prof_cbo = resolve_prof_dados(conn, profissional_id)
+            prof_cbo = (prof_cbo or "").strip()
 
+            pac_cids = get_paciente_cids(conn, paciente_id)
+            items = listar_procedimentos_compativeis_db(conn, prof_cbo, pac_cids)
+            competencia_vigente = get_procedimentos_competencia_vigente(conn)
+
+        return jsonify(
+            ok=True,
+            cbo=prof_cbo,
+            paciente_cids=pac_cids,
+            competencia=competencia_vigente,
+            total=len(items),
+            items=items,
+        )
+
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="procedimentos",
+            descricao="Erro ao sugerir procedimentos.",
+            detalhes={"clinica_id": clinica_id, "paciente_id": paciente_id},
+        )
+        return jsonify(ok=False, error=str(e)), 500
+
+
+# =============================================================================
+# CBO SUGESTÕES
+# =============================================================================
 
 @atendimentos_bp.get("/api/cbos_sugestoes")
+@require_permission("atendimentos", "ver")
 def api_cbos_sugestoes():
-    """
-    Busca CBO por número ou descrição.
-    Tenta primeiro tabela de catálogo/biblioteca; se não existir, usa usuarios.cbo.
-    Retorna [{codigo, descricao, label}]
-    """
     q = (request.args.get("q") or "").strip()
     q_digits = only_digits(q)
 
     if len(q) < 2 and len(q_digits) < 2:
         return jsonify(ok=True, items=[])
 
-    with conectar_db() as conn:
-        cur = conn.cursor()
-        items = []
+    try:
+        with conectar_db() as conn:
+            cur = conn.cursor()
+            items = []
 
-        # 1) Catálogos possíveis
-        catalogos = [
-            ("cbo_catalogo", "co_ocupacao", "no_ocupacao"),
-            ("cbos", "co_ocupacao", "no_ocupacao"),
-            ("ocupacoes", "codigo", "descricao"),
-            ("ocupacoes", "co_ocupacao", "no_ocupacao"),
-        ]
+            catalogos = [
+                ("cbo_catalogo", "co_ocupacao", "no_ocupacao"),
+                ("cbos", "co_ocupacao", "no_ocupacao"),
+                ("ocupacoes", "codigo", "descricao"),
+                ("ocupacoes", "co_ocupacao", "no_ocupacao"),
+            ]
 
-        for tabela, col_cod, col_desc in catalogos:
-            if not has_table(conn, tabela):
-                continue
+            for tabela, col_cod, col_desc in catalogos:
+                if not has_table(conn, tabela):
+                    continue
 
-            cols = table_columns(conn, tabela)
-            if col_cod not in cols or col_desc not in cols:
-                continue
+                cols = table_columns(conn, tabela)
+                if col_cod not in cols or col_desc not in cols:
+                    continue
 
-            cur.execute(
-                f"""
-                SELECT
-                    COALESCE({col_cod}::text, '') AS codigo,
-                    COALESCE({col_desc}::text, '') AS descricao
-                FROM {tabela}
-                WHERE
-                    REGEXP_REPLACE(COALESCE({col_cod}::text, ''), '\\D', '', 'g') ILIKE %s
-                    OR COALESCE({col_desc}::text, '') ILIKE %s
-                ORDER BY descricao
-                LIMIT 30
-                """,
-                (f"%{q_digits}%" if q_digits else "%__sem_numero__", f"%{q}%"),
-            )
-            rows = cur.fetchall() or []
+                cur.execute(
+                    f"""
+                    SELECT
+                        COALESCE({col_cod}::text, '') AS codigo,
+                        COALESCE({col_desc}::text, '') AS descricao
+                    FROM {tabela}
+                    WHERE
+                        REGEXP_REPLACE(COALESCE({col_cod}::text, ''), '\\D', '', 'g') ILIKE %s
+                        OR COALESCE({col_desc}::text, '') ILIKE %s
+                    ORDER BY descricao
+                    LIMIT 30
+                    """,
+                    (f"%{q_digits}%" if q_digits else "%__sem_numero__", f"%{q}%"),
+                )
 
-            for r in rows:
-                codigo = _row_get(r, "codigo", 0, "") or ""
-                descricao = _row_get(r, "descricao", 1, "") or ""
-                if codigo or descricao:
+                rows = cur.fetchall() or []
+
+                for r in rows:
+                    codigo = _row_get(r, "codigo", 0, "") or ""
+                    descricao = _row_get(r, "descricao", 1, "") or ""
+                    if codigo or descricao:
+                        items.append({
+                            "codigo": codigo,
+                            "descricao": descricao,
+                            "label": f"{codigo} - {descricao}".strip(" -"),
+                        })
+
+                if items:
+                    break
+
+            if not items and has_table(conn, "usuarios") and has_column(conn, "usuarios", "cbo"):
+                clinica_id = _clinica_id_atual()
+                nome_expr = "COALESCE(nome, '')" if has_column(conn, "usuarios", "nome") else "''"
+                filtro_clinica = "AND COALESCE(clinica_id, %s) = %s" if has_column(conn, "usuarios", "clinica_id") else ""
+
+                params = []
+                if filtro_clinica:
+                    params.extend([clinica_id, clinica_id])
+                params.extend([f"%{q_digits}%" if q_digits else "%__sem_numero__", f"%{q}%"])
+
+                cur.execute(
+                    f"""
+                    SELECT DISTINCT
+                        COALESCE(cbo::text, '') AS codigo,
+                        {nome_expr} AS descricao
+                    FROM usuarios
+                    WHERE COALESCE(cbo::text, '') <> ''
+                      {filtro_clinica}
+                      AND (
+                        REGEXP_REPLACE(COALESCE(cbo::text, ''), '\\D', '', 'g') ILIKE %s
+                        OR {nome_expr} ILIKE %s
+                      )
+                    ORDER BY codigo
+                    LIMIT 30
+                    """,
+                    params,
+                )
+
+                rows = cur.fetchall() or []
+
+                for r in rows:
+                    codigo = _row_get(r, "codigo", 0, "") or ""
+                    descricao = _row_get(r, "descricao", 1, "") or ""
                     items.append({
                         "codigo": codigo,
                         "descricao": descricao,
                         "label": f"{codigo} - {descricao}".strip(" -"),
                     })
 
-            if items:
-                break
+        return jsonify(ok=True, items=items)
 
-        # 2) Fallback: CBOs cadastrados em usuários
-        if not items and has_table(conn, "usuarios") and has_column(conn, "usuarios", "cbo"):
-            nome_expr = "COALESCE(nome, '')" if has_column(conn, "usuarios", "nome") else "''"
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="cbo",
+            descricao="Erro ao buscar sugestões de CBO.",
+            detalhes={"q": q},
+        )
+        return jsonify(ok=False, error=str(e)), 500
 
-            cur.execute(
-                f"""
-                SELECT DISTINCT
-                    COALESCE(cbo::text, '') AS codigo,
-                    {nome_expr} AS descricao
-                FROM usuarios
-                WHERE COALESCE(cbo::text, '') <> ''
-                  AND (
-                    REGEXP_REPLACE(COALESCE(cbo::text, ''), '\\D', '', 'g') ILIKE %s
-                    OR {nome_expr} ILIKE %s
-                  )
-                ORDER BY codigo
-                LIMIT 30
-                """,
-                (f"%{q_digits}%" if q_digits else "%__sem_numero__", f"%{q}%"),
-            )
 
-            rows = cur.fetchall() or []
-            for r in rows:
-                codigo = _row_get(r, "codigo", 0, "") or ""
-                descricao = _row_get(r, "descricao", 1, "") or ""
-                items.append({
-                    "codigo": codigo,
-                    "descricao": descricao,
-                    "label": f"{codigo} - {descricao}".strip(" -"),
-                })
-
-    return jsonify(ok=True, items=items)
-
+# =============================================================================
+# SUGESTÕES DE PACIENTES
+# =============================================================================
 
 @atendimentos_bp.route("/api/sugestoes_pacientes")
+@require_permission("atendimentos", "ver")
 def sugestoes_pacientes():
+    clinica_id = _clinica_id_atual()
     termo = (request.args.get("termo", "") or "").strip()
 
     if len(termo) < 2:
         return jsonify([])
 
-    with conectar_db() as conn:
-        if not has_table(conn, "pacientes"):
-            return jsonify([])
+    try:
+        with conectar_db() as conn:
+            if not has_table(conn, "pacientes"):
+                return jsonify([])
 
-        cols = table_columns(conn, "pacientes")
+            cols = table_columns(conn, "pacientes")
 
-        col_pront = "prontuario" if "prontuario" in cols else "''"
-        col_stat = "status" if "status" in cols else "''"
-        col_mod = "mod" if "mod" in cols else "''"
-        col_nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else "''")
-        col_cid = "cid" if "cid" in cols else "''"
+            col_pront = "prontuario" if "prontuario" in cols else "''"
+            col_stat = "status" if "status" in cols else "''"
+            col_mod = "mod" if "mod" in cols else "''"
+            col_nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else "''")
+            col_cid = "cid" if "cid" in cols else "''"
+            filtro_clinica = "AND clinica_id = %s" if "clinica_id" in cols else ""
 
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT
-                id,
-                COALESCE(nome, '') AS nome,
-                COALESCE({col_pront}, '') AS prontuario,
-                COALESCE({col_stat}, '') AS status,
-                COALESCE({col_mod}, '') AS mod,
-                COALESCE({col_nasc}, '') AS nascimento,
-                COALESCE({col_cid}, '') AS cid
-            FROM pacientes
-            WHERE nome ILIKE %s
-            ORDER BY nome
-            LIMIT 10
-            """,
-            (f"%{termo}%",),
+            params = [f"%{termo}%"]
+            if filtro_clinica:
+                params.insert(0, clinica_id)
+
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    COALESCE(nome, '') AS nome,
+                    COALESCE({col_pront}, '') AS prontuario,
+                    COALESCE({col_stat}, '') AS status,
+                    COALESCE({col_mod}, '') AS mod,
+                    COALESCE({col_nasc}, '') AS nascimento,
+                    COALESCE({col_cid}, '') AS cid
+                FROM pacientes
+                WHERE 1=1
+                  {filtro_clinica}
+                  AND nome ILIKE %s
+                ORDER BY nome
+                LIMIT 10
+                """,
+                params,
+            )
+            rows = cur.fetchall() or []
+
+        return jsonify([
+            {
+                "id": _row_get(r, "id", 0),
+                "nome": _row_get(r, "nome", 1, "") or "",
+                "prontuario": _row_get(r, "prontuario", 2, "") or "",
+                "status": _row_get(r, "status", 3, "") or "",
+                "mod": _row_get(r, "mod", 4, "") or "",
+                "nascimento": str(_row_get(r, "nascimento", 5, "") or ""),
+                "cid": _row_get(r, "cid", 6, "") or "-",
+            }
+            for r in rows
+        ])
+
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="pacientes",
+            descricao="Erro ao buscar sugestões de pacientes.",
+            detalhes={"clinica_id": clinica_id, "termo": termo},
         )
-        rows = cur.fetchall() or []
+        return jsonify([]), 500
 
-    return jsonify([
-        {
-            "id": _row_get(r, "id", 0),
-            "nome": _row_get(r, "nome", 1, "") or "",
-            "prontuario": _row_get(r, "prontuario", 2, "") or "",
-            "status": _row_get(r, "status", 3, "") or "",
-            "mod": _row_get(r, "mod", 4, "") or "",
-            "nascimento": str(_row_get(r, "nascimento", 5, "") or ""),
-            "cid": _row_get(r, "cid", 6, "") or "-",
-        }
-        for r in rows
-    ])
 
+# =============================================================================
+# API PACIENTE
+# =============================================================================
 
 @atendimentos_bp.route("/api/paciente")
+@require_permission("atendimentos", "ver")
 def api_paciente():
+    clinica_id = _clinica_id_atual()
     pid = (request.args.get("id") or "").strip()
 
     if not pid:
         return jsonify({"ok": False, "error": "Parâmetro 'id' é obrigatório."}), 400
 
-    with conectar_db() as conn:
-        if not has_table(conn, "pacientes"):
+    try:
+        with conectar_db() as conn:
+            if not has_table(conn, "pacientes"):
+                return jsonify({"ok": True, "found": False}), 404
+
+            cols = table_columns(conn, "pacientes")
+
+            col_pront = "prontuario" if "prontuario" in cols else "''"
+            col_stat = "status" if "status" in cols else "''"
+            col_mod = "mod" if "mod" in cols else "''"
+            col_nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else "''")
+            col_cid = "cid" if "cid" in cols else "''"
+            filtro_clinica = "AND clinica_id = %s" if "clinica_id" in cols else ""
+
+            params = [pid]
+            if filtro_clinica:
+                params.append(clinica_id)
+
+            cur = conn.cursor()
+            cur.execute(
+                f"""
+                SELECT
+                    id,
+                    COALESCE(nome, '') AS nome,
+                    COALESCE({col_pront}, '') AS prontuario,
+                    COALESCE({col_stat}, '') AS status,
+                    COALESCE({col_mod}, '') AS mod,
+                    COALESCE({col_nasc}, '') AS nascimento,
+                    COALESCE({col_cid}, '') AS cid
+                FROM pacientes
+                WHERE id = %s
+                {filtro_clinica}
+                LIMIT 1
+                """,
+                params,
+            )
+            row = cur.fetchone()
+
+        if not row:
             return jsonify({"ok": True, "found": False}), 404
 
-        cols = table_columns(conn, "pacientes")
+        return jsonify({
+            "ok": True,
+            "found": True,
+            "id": _row_get(row, "id", 0),
+            "nome": _row_get(row, "nome", 1, "") or "",
+            "prontuario": _row_get(row, "prontuario", 2, "") or "",
+            "status": _row_get(row, "status", 3, "") or "",
+            "mod": _row_get(row, "mod", 4, "") or "",
+            "nascimento": str(_row_get(row, "nascimento", 5, "") or ""),
+            "cid": _row_get(row, "cid", 6, "") or "-",
+        })
 
-        col_pront = "prontuario" if "prontuario" in cols else "''"
-        col_stat = "status" if "status" in cols else "''"
-        col_mod = "mod" if "mod" in cols else "''"
-        col_nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else "''")
-        col_cid = "cid" if "cid" in cols else "''"
-
-        cur = conn.cursor()
-        cur.execute(
-            f"""
-            SELECT
-                id,
-                COALESCE(nome, '') AS nome,
-                COALESCE({col_pront}, '') AS prontuario,
-                COALESCE({col_stat}, '') AS status,
-                COALESCE({col_mod}, '') AS mod,
-                COALESCE({col_nasc}, '') AS nascimento,
-                COALESCE({col_cid}, '') AS cid
-            FROM pacientes
-            WHERE id = %s
-            LIMIT 1
-            """,
-            (pid,),
+    except Exception as e:
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="pacientes",
+            entidade_id=pid,
+            descricao="Erro ao carregar paciente no atendimento.",
+            detalhes={"clinica_id": clinica_id},
         )
-        row = cur.fetchone()
+        return jsonify({"ok": False, "error": str(e)}), 500
 
-    if not row:
-        return jsonify({"ok": True, "found": False}), 404
 
-    return jsonify({
-        "ok": True,
-        "found": True,
-        "id": _row_get(row, "id", 0),
-        "nome": _row_get(row, "nome", 1, "") or "",
-        "prontuario": _row_get(row, "prontuario", 2, "") or "",
-        "status": _row_get(row, "status", 3, "") or "",
-        "mod": _row_get(row, "mod", 4, "") or "",
-        "nascimento": str(_row_get(row, "nascimento", 5, "") or ""),
-        "cid": _row_get(row, "cid", 6, "") or "-",
-    })
-
+# =============================================================================
+# SALVAR ATENDIMENTO
+# =============================================================================
 
 @atendimentos_bp.route("/salvar", methods=["POST"], endpoint="salvar_atendimento")
+@require_permission("atendimentos", "editar")
 def salvar_atendimento_view():
+    clinica_id = _clinica_id_atual()
     is_fetch = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     conn = conectar_db()
     cursor = conn.cursor()
 
     try:
-        ensure_atendimentos_schema(conn)
-        ensure_atendimento_procedimentos_schema(conn)
-        ensure_fila_table(conn)
-        ensure_evolucoes_ocultas_schema(conn)
+        ensure_atendimentos_multi_schema(conn)
 
         profissional_id = resolve_logged_profissional_id(conn)
 
@@ -361,9 +710,7 @@ def salvar_atendimento_view():
         evolucao = (request.form.get("evolucao") or "").strip()
 
         evolucao_oculta = (request.form.get("evolucao_oculta") or "").strip()
-        evolucao_oculta_visibilidade = (
-            request.form.get("evolucao_oculta_visibilidade") or "somente_eu"
-        ).strip()
+        evolucao_oculta_visibilidade = (request.form.get("evolucao_oculta_visibilidade") or "somente_eu").strip()
         evolucao_oculta_cbos = (request.form.get("evolucao_oculta_cbos") or "").strip()
 
         if evolucao_oculta_visibilidade not in ("somente_eu", "cbos"):
@@ -378,11 +725,8 @@ def salvar_atendimento_view():
         combo_plano_id_raw = (request.form.get("combo_plano_id") or "").strip()
         combo_plano_id = int(combo_plano_id_raw) if combo_plano_id_raw.isdigit() else None
 
-        contabiliza_sessao_raw = (request.form.get("contabiliza_sessao") or "").strip().lower()
-        contabiliza_sessao = 1 if contabiliza_sessao_raw in ("1", "true", "on", "sim", "yes") else 0
-
-        enviar_sem_procedimento_raw = (request.form.get("enviar_sem_procedimento") or "").strip().lower()
-        enviar_sem_procedimento = 1 if enviar_sem_procedimento_raw in ("1", "true", "on", "sim", "yes") else 0
+        contabiliza_sessao = _bool_form(request.form.get("contabiliza_sessao"))
+        enviar_sem_procedimento = _bool_form(request.form.get("enviar_sem_procedimento"))
 
         if not paciente_id:
             msg = "Paciente não informado."
@@ -393,23 +737,10 @@ def salvar_atendimento_view():
 
         procedimentos, codigos = normalize_procs_from_form(request.form)
 
-        cursor.execute(
-            """
-            SELECT
-                COALESCE(nome, '') AS nome,
-                COALESCE(prontuario, '') AS prontuario,
-                COALESCE(mod, '') AS mod,
-                COALESCE(status, '') AS status
-            FROM pacientes
-            WHERE id = %s
-            LIMIT 1
-            """,
-            (paciente_id,),
-        )
-        paciente = cursor.fetchone()
+        paciente = _paciente_da_clinica(conn, paciente_id, clinica_id)
 
         if not paciente:
-            msg = "Paciente não encontrado."
+            msg = "Paciente não encontrado nesta clínica."
             if is_fetch:
                 return jsonify({"ok": False, "error": msg}), 404
             flash(msg)
@@ -437,18 +768,16 @@ def salvar_atendimento_view():
                 flash(msg)
                 return redirect(url_for("atendimentos.pagina_atendimento"))
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT 1
                 FROM atendimentos
                 WHERE paciente_id = %s
+                  AND clinica_id = %s
                   AND data_atendimento = %s
                   AND combo_plano_id = %s
                   AND COALESCE(contabiliza_sessao, 1) = 1
                 LIMIT 1
-                """,
-                (paciente_id, data_atendimento, combo_plano_id),
-            )
+            """, (paciente_id, clinica_id, data_atendimento, combo_plano_id))
 
             if contabiliza_sessao and cursor.fetchone():
                 msg = "Já existe atendimento deste combo contabilizado para este paciente nesta data."
@@ -526,9 +855,9 @@ def salvar_atendimento_view():
                 flash(msg)
                 return redirect(url_for("atendimentos.pagina_atendimento"))
 
-        cursor.execute(
-            """
+        cursor.execute("""
             INSERT INTO atendimentos (
+                clinica_id,
                 paciente_id,
                 data_atendimento,
                 status,
@@ -548,6 +877,7 @@ def salvar_atendimento_view():
                 atualizado_em
             )
             VALUES (
+                %s,
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
@@ -556,51 +886,49 @@ def salvar_atendimento_view():
                 CURRENT_TIMESTAMP
             )
             RETURNING id
-            """,
-            (
-                paciente_id,
-                data_atendimento,
-                status_atend,
-                justificativa,
-                evolucao,
-                nome,
-                prontuario,
-                mod,
-                status_paciente,
-                profissional_id,
-                prof_nome,
-                prof_cns,
-                prof_cbo,
-                combo_plano_id,
-                1 if combo_plano_id and contabiliza_sessao else 0,
-            ),
-        )
+        """, (
+            clinica_id,
+            paciente_id,
+            data_atendimento,
+            status_atend,
+            justificativa,
+            evolucao,
+            nome,
+            prontuario,
+            mod,
+            status_paciente,
+            profissional_id,
+            prof_nome,
+            prof_cns,
+            prof_cbo,
+            combo_plano_id,
+            1 if combo_plano_id and contabiliza_sessao else 0,
+        ))
 
         atendimento_id = _row_get(cursor.fetchone(), "id", 0)
 
         if procedimentos:
             for proc, cod in zip(procedimentos, codigos):
-                cursor.execute(
-                    """
+                cursor.execute("""
                     INSERT INTO atendimento_procedimentos (
+                        clinica_id,
                         atendimento_id,
                         procedimento,
                         codigo_sigtap,
                         created_at
                     )
-                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-                    """,
-                    (
-                        atendimento_id,
-                        (proc or "").strip(),
-                        (cod or "").strip() or None,
-                    ),
-                )
+                    VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                """, (
+                    clinica_id,
+                    atendimento_id,
+                    (proc or "").strip(),
+                    (cod or "").strip() or None,
+                ))
 
         if evolucao_oculta:
-            cursor.execute(
-                """
+            cursor.execute("""
                 INSERT INTO atendimento_evolucoes_ocultas (
+                    clinica_id,
                     atendimento_id,
                     paciente_id,
                     profissional_id,
@@ -613,42 +941,72 @@ def salvar_atendimento_view():
                     atualizado_em
                 )
                 VALUES (
+                    %s,
                     %s, %s, %s, %s, %s,
                     %s, %s, %s,
                     CURRENT_TIMESTAMP,
                     CURRENT_TIMESTAMP
                 )
-                """,
-                (
-                    atendimento_id,
-                    paciente_id,
-                    profissional_id,
-                    prof_nome,
-                    prof_cbo,
-                    evolucao_oculta,
-                    evolucao_oculta_visibilidade,
-                    evolucao_oculta_cbos,
-                ),
-            )
+            """, (
+                clinica_id,
+                atendimento_id,
+                paciente_id,
+                profissional_id,
+                prof_nome,
+                prof_cbo,
+                evolucao_oculta,
+                evolucao_oculta_visibilidade,
+                evolucao_oculta_cbos,
+            ))
 
         if fila_id:
-            cursor.execute(
-                """
-                UPDATE fila_atendimentos
-                   SET status = 'finalizado',
-                       obs = CASE
-                               WHEN COALESCE(obs, '') = '' THEN 'ATENDIDO'
-                               ELSE obs
-                             END
-                 WHERE id = %s
-                """,
-                (fila_id,),
-            )
+            if has_column(conn, "fila_atendimentos", "clinica_id"):
+                cursor.execute("""
+                    UPDATE fila_atendimentos
+                       SET status = 'finalizado',
+                           obs = CASE
+                                   WHEN COALESCE(obs, '') = '' THEN 'ATENDIDO'
+                                   ELSE obs
+                                 END
+                     WHERE id = %s
+                       AND clinica_id = %s
+                """, (fila_id, clinica_id))
+            else:
+                cursor.execute("""
+                    UPDATE fila_atendimentos
+                       SET status = 'finalizado',
+                           obs = CASE
+                                   WHEN COALESCE(obs, '') = '' THEN 'ATENDIDO'
+                                   ELSE obs
+                                 END
+                     WHERE id = %s
+                """, (fila_id,))
 
         conn.commit()
 
         if combo_plano_id:
             recalcular_saldo_combo(conn, combo_plano_id)
+
+        registrar_log(
+            modulo="atendimentos",
+            acao="criar",
+            entidade="atendimentos",
+            entidade_id=atendimento_id,
+            descricao="Atendimento salvo.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "paciente_id": paciente_id,
+                "paciente_nome": nome,
+                "profissional_id": profissional_id,
+                "profissional_nome": prof_nome,
+                "data_atendimento": data_atendimento,
+                "status": status_atend,
+                "procedimentos": codigos,
+                "combo_plano_id": combo_plano_id,
+                "contabiliza_sessao": 1 if combo_plano_id and contabiliza_sessao else 0,
+                "evolucao_oculta_salva": bool(evolucao_oculta),
+            },
+        )
 
         if is_fetch:
             return jsonify({
@@ -674,6 +1032,17 @@ def salvar_atendimento_view():
         except Exception:
             pass
 
+        log_erro(
+            "atendimentos",
+            e,
+            entidade="atendimentos",
+            descricao="Erro ao salvar atendimento.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "form": dict(request.form),
+            },
+        )
+
         msg = f"Erro ao salvar atendimento: {e}"
 
         if is_fetch:
@@ -688,36 +1057,34 @@ def salvar_atendimento_view():
         except Exception:
             pass
 
-def ensure_chamadas_pacientes_schema(conn):
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS chamadas_pacientes (
-            id SERIAL PRIMARY KEY,
-            paciente_id INTEGER,
-            paciente_nome TEXT NOT NULL,
-            profissional_nome TEXT,
-            setor TEXT,
-            status TEXT DEFAULT 'chamando',
-            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    cur.execute("""
-        CREATE INDEX IF NOT EXISTS idx_chamadas_pacientes_criado_em
-        ON chamadas_pacientes (criado_em)
-    """)
-    conn.commit()
 
+# =============================================================================
+# CHAMA NA TELA
+# =============================================================================
 
 @atendimentos_bp.route("/chama-na-tela/tv")
+@require_permission("atendimentos_chama_tela", "ver")
 def chama_na_tela_tv():
+    clinica_id = _clinica_id_atual()
+
     with conectar_db() as conn:
         ensure_chamadas_pacientes_schema(conn)
+
+    registrar_log(
+        modulo="atendimentos_chama_tela",
+        acao="visualizar",
+        entidade="chamadas_pacientes",
+        descricao="Abriu TV de chamada.",
+        detalhes={"clinica_id": clinica_id},
+    )
 
     return render_template("chama_na_tela_tv.html")
 
 
 @atendimentos_bp.route("/chama-na-tela/chamar", methods=["POST"])
+@require_permission("atendimentos_chama_tela", "editar")
 def chamar_paciente_na_tela():
+    clinica_id = _clinica_id_atual()
     data = request.get_json(silent=True) or request.form
 
     paciente_id = data.get("paciente_id") or None
@@ -728,110 +1095,175 @@ def chamar_paciente_na_tela():
     if not paciente_nome:
         return jsonify(ok=False, erro="Nome do paciente não informado."), 400
 
-    with conectar_db() as conn:
-        ensure_chamadas_pacientes_schema(conn)
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO chamadas_pacientes (
-                paciente_id,
-                paciente_nome,
-                profissional_nome,
-                setor,
-                status,
-                criado_em
-            )
-            VALUES (%s, %s, %s, %s, 'chamando', CURRENT_TIMESTAMP)
-            RETURNING id
-            """,
-            (
-                paciente_id,
-                paciente_nome,
-                profissional_nome,
-                setor,
-            ),
-        )
-        chamada_id = _row_get(cur.fetchone(), "id", 0)
-        conn.commit()
+    try:
+        with conectar_db() as conn:
+            ensure_chamadas_pacientes_schema(conn)
+            cur = conn.cursor()
 
-    return jsonify(
-        ok=True,
-        chamada_id=chamada_id,
-        mensagem=f"{paciente_nome} chamado na tela."
-    )
+            cur.execute("""
+                INSERT INTO chamadas_pacientes (
+                    clinica_id,
+                    paciente_id,
+                    paciente_nome,
+                    profissional_nome,
+                    setor,
+                    status,
+                    criado_em
+                )
+                VALUES (%s, %s, %s, %s, %s, 'chamando', CURRENT_TIMESTAMP)
+                RETURNING id
+            """, (
+                clinica_id,
+                paciente_id,
+                paciente_nome,
+                profissional_nome,
+                setor,
+            ))
+
+            chamada_id = _row_get(cur.fetchone(), "id", 0)
+            conn.commit()
+
+        registrar_log(
+            modulo="atendimentos_chama_tela",
+            acao="criar",
+            entidade="chamadas_pacientes",
+            entidade_id=chamada_id,
+            descricao="Chamou paciente na tela.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "paciente_id": paciente_id,
+                "paciente_nome": paciente_nome,
+                "profissional_nome": profissional_nome,
+                "setor": setor,
+            },
+        )
+
+        return jsonify(
+            ok=True,
+            chamada_id=chamada_id,
+            mensagem=f"{paciente_nome} chamado na tela."
+        )
+
+    except Exception as e:
+        log_erro(
+            "atendimentos_chama_tela",
+            e,
+            entidade="chamadas_pacientes",
+            descricao="Erro ao chamar paciente na tela.",
+            detalhes={"clinica_id": clinica_id, "payload": dict(data)},
+        )
+        return jsonify(ok=False, erro=str(e)), 500
 
 
 @atendimentos_bp.route("/chama-na-tela/api/ultima")
+@require_permission("atendimentos_chama_tela", "ver")
 def ultima_chamada_na_tela():
-    with conectar_db() as conn:
-        ensure_chamadas_pacientes_schema(conn)
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT
-                id,
-                paciente_id,
-                paciente_nome,
-                profissional_nome,
-                setor,
-                status,
-                criado_em
-            FROM chamadas_pacientes
-            ORDER BY id DESC
-            LIMIT 1
-        """)
-        row = cur.fetchone()
+    clinica_id = _clinica_id_atual()
 
-    if not row:
-        return jsonify(ok=True, chamada=None)
+    try:
+        with conectar_db() as conn:
+            ensure_chamadas_pacientes_schema(conn)
+            cur = conn.cursor()
 
-    chamada = {
-        "id": _row_get(row, "id", 0),
-        "paciente_id": _row_get(row, "paciente_id", 1),
-        "paciente_nome": _row_get(row, "paciente_nome", 2, ""),
-        "profissional_nome": _row_get(row, "profissional_nome", 3, ""),
-        "setor": _row_get(row, "setor", 4, ""),
-        "status": _row_get(row, "status", 5, ""),
-        "criado_em": str(_row_get(row, "criado_em", 6, "")),
-    }
+            cur.execute("""
+                SELECT
+                    id,
+                    paciente_id,
+                    paciente_nome,
+                    profissional_nome,
+                    setor,
+                    status,
+                    criado_em
+                FROM chamadas_pacientes
+                WHERE clinica_id = %s
+                ORDER BY id DESC
+                LIMIT 1
+            """, (clinica_id,))
 
-    return jsonify(ok=True, chamada=chamada)
+            row = cur.fetchone()
+
+        if not row:
+            return jsonify(ok=True, chamada=None)
+
+        chamada = {
+            "id": _row_get(row, "id", 0),
+            "paciente_id": _row_get(row, "paciente_id", 1),
+            "paciente_nome": _row_get(row, "paciente_nome", 2, ""),
+            "profissional_nome": _row_get(row, "profissional_nome", 3, ""),
+            "setor": _row_get(row, "setor", 4, ""),
+            "status": _row_get(row, "status", 5, ""),
+            "criado_em": str(_row_get(row, "criado_em", 6, "")),
+        }
+
+        return jsonify(ok=True, chamada=chamada)
+
+    except Exception as e:
+        log_erro(
+            "atendimentos_chama_tela",
+            e,
+            entidade="chamadas_pacientes",
+            descricao="Erro ao buscar última chamada.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return jsonify(ok=False, erro=str(e)), 500
+
 
 @atendimentos_bp.route("/chama-na-tela/api/recentes")
+@require_permission("atendimentos_chama_tela", "ver")
 def chamadas_recentes_na_tela():
-    with conectar_db() as conn:
-        ensure_chamadas_pacientes_schema(conn)
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT
-                id,
-                paciente_id,
-                paciente_nome,
-                profissional_nome,
-                setor,
-                status,
-                criado_em
-            FROM chamadas_pacientes
-            ORDER BY id DESC
-            LIMIT 4
-        """)
-        rows = cur.fetchall() or []
+    clinica_id = _clinica_id_atual()
 
-    chamadas = []
-    for r in rows:
-        chamadas.append({
-            "id": _row_get(r, "id", 0),
-            "paciente_id": _row_get(r, "paciente_id", 1),
-            "paciente_nome": _row_get(r, "paciente_nome", 2, ""),
-            "profissional_nome": _row_get(r, "profissional_nome", 3, ""),
-            "cbo": _row_get(r, "setor", 4, ""),  # por enquanto usando setor como CBO/modalidade
-            "status": _row_get(r, "status", 5, ""),
-            "criado_em": str(_row_get(r, "criado_em", 6, "")),
-        })
+    try:
+        with conectar_db() as conn:
+            ensure_chamadas_pacientes_schema(conn)
+            cur = conn.cursor()
 
-    return jsonify(ok=True, chamadas=chamadas)
+            cur.execute("""
+                SELECT
+                    id,
+                    paciente_id,
+                    paciente_nome,
+                    profissional_nome,
+                    setor,
+                    status,
+                    criado_em
+                FROM chamadas_pacientes
+                WHERE clinica_id = %s
+                ORDER BY id DESC
+                LIMIT 4
+            """, (clinica_id,))
+
+            rows = cur.fetchall() or []
+
+        chamadas = []
+        for r in rows:
+            chamadas.append({
+                "id": _row_get(r, "id", 0),
+                "paciente_id": _row_get(r, "paciente_id", 1),
+                "paciente_nome": _row_get(r, "paciente_nome", 2, ""),
+                "profissional_nome": _row_get(r, "profissional_nome", 3, ""),
+                "cbo": _row_get(r, "setor", 4, ""),
+                "status": _row_get(r, "status", 5, ""),
+                "criado_em": str(_row_get(r, "criado_em", 6, "")),
+            })
+
+        return jsonify(ok=True, chamadas=chamadas)
+
+    except Exception as e:
+        log_erro(
+            "atendimentos_chama_tela",
+            e,
+            entidade="chamadas_pacientes",
+            descricao="Erro ao buscar chamadas recentes.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return jsonify(ok=False, erro=str(e)), 500
+
 
 @atendimentos_bp.route("/chama-na-tela/api/fila")
+@require_permission("atendimentos_chama_tela", "ver")
 def fila_chamadas_na_tela():
+    clinica_id = _clinica_id_atual()
     after_id = request.args.get("after_id", "0")
 
     try:
@@ -839,36 +1271,50 @@ def fila_chamadas_na_tela():
     except ValueError:
         after_id = 0
 
-    with conectar_db() as conn:
-        ensure_chamadas_pacientes_schema(conn)
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT
-                id,
-                paciente_id,
-                paciente_nome,
-                profissional_nome,
-                setor,
-                status,
-                criado_em
-            FROM chamadas_pacientes
-            WHERE id > %s
-            ORDER BY id ASC
-            LIMIT 10
-        """, (after_id,))
-        rows = cur.fetchall() or []
+    try:
+        with conectar_db() as conn:
+            ensure_chamadas_pacientes_schema(conn)
+            cur = conn.cursor()
 
-    chamadas = []
-    for r in rows:
-        chamadas.append({
-            "id": _row_get(r, "id", 0),
-            "paciente_id": _row_get(r, "paciente_id", 1),
-            "paciente_nome": _row_get(r, "paciente_nome", 2, ""),
-            "profissional_nome": _row_get(r, "profissional_nome", 3, ""),
-            "cbo": _row_get(r, "setor", 4, ""),
-            "setor": _row_get(r, "setor", 4, ""),
-            "status": _row_get(r, "status", 5, ""),
-            "criado_em": str(_row_get(r, "criado_em", 6, "")),
-        })
+            cur.execute("""
+                SELECT
+                    id,
+                    paciente_id,
+                    paciente_nome,
+                    profissional_nome,
+                    setor,
+                    status,
+                    criado_em
+                FROM chamadas_pacientes
+                WHERE clinica_id = %s
+                  AND id > %s
+                ORDER BY id ASC
+                LIMIT 10
+            """, (clinica_id, after_id))
 
-    return jsonify(ok=True, chamadas=chamadas)
+            rows = cur.fetchall() or []
+
+        chamadas = []
+        for r in rows:
+            chamadas.append({
+                "id": _row_get(r, "id", 0),
+                "paciente_id": _row_get(r, "paciente_id", 1),
+                "paciente_nome": _row_get(r, "paciente_nome", 2, ""),
+                "profissional_nome": _row_get(r, "profissional_nome", 3, ""),
+                "cbo": _row_get(r, "setor", 4, ""),
+                "setor": _row_get(r, "setor", 4, ""),
+                "status": _row_get(r, "status", 5, ""),
+                "criado_em": str(_row_get(r, "criado_em", 6, "")),
+            })
+
+        return jsonify(ok=True, chamadas=chamadas)
+
+    except Exception as e:
+        log_erro(
+            "atendimentos_chama_tela",
+            e,
+            entidade="chamadas_pacientes",
+            descricao="Erro ao buscar fila de chamadas.",
+            detalhes={"clinica_id": clinica_id, "after_id": after_id},
+        )
+        return jsonify(ok=False, erro=str(e)), 500

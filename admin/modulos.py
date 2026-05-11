@@ -23,243 +23,59 @@ try:
 except ImportError:
     conectar_db = None
 
+try:
+    from log import registrar_log, log_erro, log_edicao, log_visualizacao
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+    def log_edicao(*args, **kwargs): pass
+    def log_visualizacao(*args, **kwargs): pass
+
 
 # =============================================================================
-# MÓDULOS OFICIAIS DO SISTEMA
+# MÓDULOS OFICIAIS
 # =============================================================================
 
 MODULOS_DISPONIVEIS = [
-    {
-        "codigo": "dashboard",
-        "nome": "Início",
-        "descricao": "Tela inicial com visão geral do sistema.",
-        "icone": "home",
-        "ordem": 1,
-        "categoria": "Geral",
-    },
-    {
-        "codigo": "agenda",
-        "nome": "Agenda",
-        "descricao": "Agenda médica, horários e marcações.",
-        "icone": "calendar",
-        "ordem": 2,
-        "categoria": "Operacional",
-    },
-    {
-        "codigo": "meus_atendimentos",
-        "nome": "Meus Atendimentos",
-        "descricao": "Área do profissional para visualizar e registrar seus atendimentos.",
-        "icone": "activity",
-        "ordem": 3,
-        "categoria": "Operacional",
-    },
-    {
-        "codigo": "cadastro",
-        "nome": "Cadastro",
-        "descricao": "Cadastro geral e entrada inicial de informações.",
-        "icone": "clipboard",
-        "ordem": 4,
-        "categoria": "Operacional",
-    },
-    {
-        "codigo": "lista_atendimentos",
-        "nome": "Lista de Atendimentos",
-        "descricao": "Fila, organização e controle dos atendimentos.",
-        "icone": "list",
-        "ordem": 5,
-        "categoria": "Operacional",
-    },
-    {
-        "codigo": "avaliacoes",
-        "nome": "Avaliações",
-        "descricao": "Avaliações clínicas, formulários e registros avaliativos.",
-        "icone": "file-text",
-        "ordem": 6,
-        "categoria": "Clínico",
-    },
-    {
-        "codigo": "pacientes",
-        "nome": "Pacientes",
-        "descricao": "Cadastro, edição, visualização e histórico de pacientes.",
-        "icone": "users",
-        "ordem": 7,
-        "categoria": "Clínico",
-    },
-    {
-        "codigo": "pts",
-        "nome": "PTS",
-        "descricao": "Plano Terapêutico Singular.",
-        "icone": "target",
-        "ordem": 8,
-        "categoria": "Clínico",
-    },
-    {
-        "codigo": "registros",
-        "nome": "Registros",
-        "descricao": "Histórico, consultas e registros administrativos/assistenciais.",
-        "icone": "archive",
-        "ordem": 9,
-        "categoria": "Clínico",
-    },
-    {
-        "codigo": "financeiro",
-        "nome": "Comercial / Financeiro",
-        "descricao": "Receitas, despesas, planos, caixa e relatórios financeiros.",
-        "icone": "dollar-sign",
-        "ordem": 10,
-        "categoria": "Comercial",
-    },
-    {
-        "codigo": "combos",
-        "nome": "Comercial / Combos",
-        "descricao": "Planos, pacotes, combos e vínculos comerciais.",
-        "icone": "package",
-        "ordem": 11,
-        "categoria": "Comercial",
-    },
-    {
-        "codigo": "export_bpai",
-        "nome": "Exportações / BPA-i",
-        "descricao": "Exportação BPA Individualizado.",
-        "icone": "download-cloud",
-        "ordem": 12,
-        "categoria": "Exportações",
-    },
-    {
-        "codigo": "export_apac",
-        "nome": "Exportações / APAC",
-        "descricao": "Exportação APAC.",
-        "icone": "file-plus",
-        "ordem": 13,
-        "categoria": "Exportações",
-    },
-    {
-        "codigo": "admin_painel",
-        "nome": "Admin / Painel",
-        "descricao": "Painel principal administrativo.",
-        "icone": "settings",
-        "ordem": 14,
-        "categoria": "Administração",
-    },
-    {
-        "codigo": "admin_usuarios",
-        "nome": "Admin / Usuários",
-        "descricao": "Criação, edição e controle de usuários.",
-        "icone": "user-cog",
-        "ordem": 15,
-        "categoria": "Administração",
-    },
-    {
-        "codigo": "admin_modulos",
-        "nome": "Admin / Módulos",
-        "descricao": "Controle de módulos contratados e permissões.",
-        "icone": "shield",
-        "ordem": 16,
-        "categoria": "Administração",
-        "master_only": True,
-    },
-    {
-        "codigo": "admin_cbo",
-        "nome": "Admin / CBO",
-        "descricao": "Biblioteca e importação de CBO.",
-        "icone": "book-open",
-        "ordem": 17,
-        "categoria": "Administração",
-    },
-    {
-        "codigo": "admin_cid",
-        "nome": "Admin / CID",
-        "descricao": "Biblioteca e importação de CID.",
-        "icone": "tag",
-        "ordem": 18,
-        "categoria": "Administração",
-    },
-    {
-        "codigo": "admin_cep_ibge",
-        "nome": "Admin / CEP-IBGE",
-        "descricao": "Biblioteca de CEP, município e IBGE.",
-        "icone": "map",
-        "ordem": 19,
-        "categoria": "Administração",
-    },
-
-    # Futuro
-    {
-        "codigo": "rh",
-        "nome": "RH",
-        "descricao": "Recursos humanos, colaboradores e controles internos.",
-        "icone": "briefcase",
-        "ordem": 50,
-        "categoria": "Futuros",
-    },
-    {
-        "codigo": "modalidade_intelectual",
-        "nome": "Modalidade / Intelectual",
-        "descricao": "Módulo da modalidade intelectual.",
-        "icone": "brain",
-        "ordem": 51,
-        "categoria": "Futuros",
-    },
-    {
-        "codigo": "modalidade_fisico",
-        "nome": "Modalidade / Físico",
-        "descricao": "Módulo da modalidade física.",
-        "icone": "activity",
-        "ordem": 52,
-        "categoria": "Futuros",
-    },
-    {
-        "codigo": "modalidade_auditivo",
-        "nome": "Modalidade / Auditivo",
-        "descricao": "Módulo da modalidade auditiva.",
-        "icone": "volume-2",
-        "ordem": 53,
-        "categoria": "Futuros",
-    },
-    {
-        "codigo": "modalidade_visual",
-        "nome": "Modalidade / Visual",
-        "descricao": "Módulo da modalidade visual.",
-        "icone": "eye",
-        "ordem": 54,
-        "categoria": "Futuros",
-    },
+    {"codigo": "dashboard", "nome": "Início", "descricao": "Tela inicial.", "icone": "home", "ordem": 1, "categoria": "Geral"},
+    {"codigo": "agenda", "nome": "Agenda", "descricao": "Agenda médica.", "icone": "calendar", "ordem": 2, "categoria": "Operacional"},
+    {"codigo": "meus_atendimentos", "nome": "Meus Atendimentos", "descricao": "Área do profissional.", "icone": "activity", "ordem": 3, "categoria": "Operacional"},
+    {"codigo": "cadastro", "nome": "Cadastro", "descricao": "Cadastro geral.", "icone": "clipboard", "ordem": 4, "categoria": "Operacional"},
+    {"codigo": "lista_atendimentos", "nome": "Lista de Atendimentos", "descricao": "Fila de atendimentos.", "icone": "list", "ordem": 5, "categoria": "Operacional"},
+    {"codigo": "avaliacoes", "nome": "Avaliações", "descricao": "Avaliações clínicas.", "icone": "file-text", "ordem": 6, "categoria": "Clínico"},
+    {"codigo": "pacientes", "nome": "Pacientes", "descricao": "Cadastro e histórico de pacientes.", "icone": "users", "ordem": 7, "categoria": "Clínico"},
+    {"codigo": "pts", "nome": "PTS", "descricao": "Plano Terapêutico Singular.", "icone": "target", "ordem": 8, "categoria": "Clínico"},
+    {"codigo": "registros", "nome": "Registros", "descricao": "Histórico e registros.", "icone": "archive", "ordem": 9, "categoria": "Clínico"},
+    {"codigo": "financeiro", "nome": "Comercial / Financeiro", "descricao": "Receitas, despesas e relatórios.", "icone": "dollar-sign", "ordem": 10, "categoria": "Comercial"},
+    {"codigo": "combos", "nome": "Comercial / Combos", "descricao": "Planos, pacotes e combos.", "icone": "package", "ordem": 11, "categoria": "Comercial"},
+    {"codigo": "export_bpai", "nome": "Exportações / BPA-i", "descricao": "Exportação BPA Individualizado.", "icone": "download-cloud", "ordem": 12, "categoria": "Exportações"},
+    {"codigo": "export_apac", "nome": "Exportações / APAC", "descricao": "Exportação APAC.", "icone": "file-plus", "ordem": 13, "categoria": "Exportações"},
+    {"codigo": "admin_painel", "nome": "Admin / Painel", "descricao": "Painel administrativo.", "icone": "settings", "ordem": 14, "categoria": "Administração"},
+    {"codigo": "admin_usuarios", "nome": "Admin / Usuários", "descricao": "Controle de usuários.", "icone": "user-cog", "ordem": 15, "categoria": "Administração"},
+    {"codigo": "admin_modulos", "nome": "Admin / Módulos", "descricao": "Controle de módulos e permissões.", "icone": "shield", "ordem": 16, "categoria": "Administração", "master_only": True},
+    {"codigo": "admin_cbo", "nome": "Admin / CBO", "descricao": "Biblioteca CBO.", "icone": "book-open", "ordem": 17, "categoria": "Administração"},
+    {"codigo": "admin_cid", "nome": "Admin / CID", "descricao": "Biblioteca CID.", "icone": "tag", "ordem": 18, "categoria": "Administração"},
+    {"codigo": "admin_cep_ibge", "nome": "Admin / CEP-IBGE", "descricao": "Biblioteca CEP/IBGE.", "icone": "map", "ordem": 19, "categoria": "Administração"},
+    {"codigo": "rh", "nome": "RH", "descricao": "Recursos humanos.", "icone": "briefcase", "ordem": 50, "categoria": "Futuros"},
+    {"codigo": "modalidade_intelectual", "nome": "Modalidade / Intelectual", "descricao": "Módulo intelectual.", "icone": "brain", "ordem": 51, "categoria": "Futuros"},
+    {"codigo": "modalidade_fisico", "nome": "Modalidade / Físico", "descricao": "Módulo físico.", "icone": "activity", "ordem": 52, "categoria": "Futuros"},
+    {"codigo": "modalidade_auditivo", "nome": "Modalidade / Auditivo", "descricao": "Módulo auditivo.", "icone": "volume-2", "ordem": 53, "categoria": "Futuros"},
+    {"codigo": "modalidade_visual", "nome": "Modalidade / Visual", "descricao": "Módulo visual.", "icone": "eye", "ordem": 54, "categoria": "Futuros"},
 ]
 
 
 # =============================================================================
-# NÍVEIS DE ACESSO
+# NÍVEIS
 # =============================================================================
 
 NIVEIS_ACESSO = [
-    {
-        "codigo": "nenhum",
-        "valor": 0,
-        "nome": "Sem acesso",
-        "acoes": [],
-    },
-    {
-        "codigo": "ver",
-        "valor": 1,
-        "nome": "Apenas ver",
-        "acoes": ["ver"],
-    },
-    {
-        "codigo": "editar",
-        "valor": 2,
-        "nome": "Ver e editar",
-        "acoes": ["ver", "editar"],
-    },
-    {
-        "codigo": "exportar",
-        "valor": 3,
-        "nome": "Ver, editar e exportar",
-        "acoes": ["ver", "editar", "exportar"],
-    },
+    {"codigo": "nenhum", "valor": 0, "nome": "Sem acesso", "acoes": []},
+    {"codigo": "ver", "valor": 1, "nome": "Apenas ver", "acoes": ["ver"]},
+    {"codigo": "editar", "valor": 2, "nome": "Ver e editar", "acoes": ["ver", "editar", "criar", "imprimir"]},
+    {"codigo": "exportar", "valor": 3, "nome": "Ver, editar e exportar", "acoes": ["ver", "editar", "criar", "imprimir", "exportar"]},
 ]
 
 NIVEIS_MAP = {n["codigo"]: n for n in NIVEIS_ACESSO}
-NIVEIS_VALOR = {n["valor"]: n for n in NIVEIS_ACESSO}
 
 ROLES_BASE = [
     {"codigo": "ADMIN", "nome": "Admin"},
@@ -269,15 +85,12 @@ ROLES_BASE = [
 
 
 # =============================================================================
-# CONEXÃO
+# CONEXÃO / HELPERS
 # =============================================================================
 
 def get_conn():
     if conectar_db is None:
-        raise RuntimeError(
-            "Não encontrei a função conectar_db em db.py. "
-            "Ajuste o import no topo de admin/modulos.py."
-        )
+        raise RuntimeError("Não encontrei conectar_db em db.py.")
 
     conn = conectar_db()
 
@@ -287,6 +100,7 @@ def get_conn():
         pass
 
     return conn
+
 
 def row_to_dict(row, cur=None):
     if row is None:
@@ -326,28 +140,32 @@ def dictfetchone(cur):
 def only_digits(valor: str | None) -> str:
     return re.sub(r"\D", "", valor or "")
 
+
+def get_clinica_id_contexto(default=1) -> int:
+    return int(session.get("clinica_id") or default)
+
+
+def exigir_clinica_contexto() -> int:
+    clinica_id = session.get("clinica_id")
+
+    if not clinica_id:
+        abort(403)
+
+    return int(clinica_id)
+
+
 # =============================================================================
-# SEGURANÇA MASTER
+# USUÁRIO / MASTER
 # =============================================================================
 
 def usuario_logado():
-    return (
-        session.get("usuario")
-        or session.get("user")
-        or session.get("auth_user")
-        or {}
-    )
+    return session.get("usuario") or session.get("user") or session.get("auth_user") or {}
 
 
 def usuario_eh_master() -> bool:
     user = usuario_logado()
 
-    role = str(
-        session.get("role")
-        or user.get("role")
-        or user.get("nivel")
-        or ""
-    ).upper()
+    role = str(session.get("role") or user.get("role") or user.get("nivel") or "").upper()
 
     return (
         role in {"MASTER", "SUPERADMIN", "ROOT"}
@@ -362,6 +180,12 @@ def master_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
         if not usuario_eh_master():
+            registrar_log(
+                modulo="admin_modulos",
+                acao="acesso_negado",
+                descricao="Tentativa de acessar área restrita ao MASTER.",
+                sucesso=False,
+            )
             abort(403)
 
         return view(*args, **kwargs)
@@ -370,34 +194,42 @@ def master_required(view):
 
 
 # =============================================================================
-# BANCO - SCHEMA
+# SCHEMA
 # =============================================================================
 
+def _table_columns(conn, table: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s;
+    """, (table,))
+    rows = cur.fetchall()
+    cur.close()
+
+    return {
+        row_value(r, "column_name")
+        for r in rows
+        if row_value(r, "column_name")
+    }
+
+
+def _add_col(conn, table: str, col: str, ddl: str):
+    if col in _table_columns(conn, table):
+        return
+
+    cur = conn.cursor()
+    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl};")
+    conn.commit()
+    cur.close()
+
+
 def ensure_modulos_schema():
-    """
-    Nova lógica:
-    - sistema_modulos: catálogo oficial de telas/módulos
-    - clinicas: unidades/clientes
-    - clinica_modulos: módulo contratado/ativo por clínica
-    - modulo_regras_acesso: regras por ROLE, CBO ou USUARIO
-
-    alvo_tipo:
-        ROLE    -> ADMIN, RECEPCAO, PROFISSIONAL
-        CBO     -> código CBO
-        USUARIO -> id do usuário
-
-    nivel_acesso:
-        0 = sem acesso
-        1 = apenas ver
-        2 = ver e editar
-        3 = ver, editar e exportar
-    """
-
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS sistema_modulos (
             id SERIAL PRIMARY KEY,
             codigo VARCHAR(100) UNIQUE NOT NULL,
@@ -411,24 +243,18 @@ def ensure_modulos_schema():
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        """
-    )
+    """)
 
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS clinicas (
             id SERIAL PRIMARY KEY,
-            nome VARCHAR(180) NOT NULL,
-            documento VARCHAR(30),
-            ativo BOOLEAN DEFAULT TRUE,
+            nome VARCHAR(255) NOT NULL,
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        """
-    )
+    """)
 
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS clinica_modulos (
             id SERIAL PRIMARY KEY,
             clinica_id INTEGER NOT NULL REFERENCES clinicas(id) ON DELETE CASCADE,
@@ -439,57 +265,52 @@ def ensure_modulos_schema():
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE (clinica_id, modulo_codigo)
         );
-        """
-    )
+    """)
 
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS modulo_regras_acesso (
             id SERIAL PRIMARY KEY,
             clinica_id INTEGER NOT NULL REFERENCES clinicas(id) ON DELETE CASCADE,
             modulo_codigo VARCHAR(100) NOT NULL REFERENCES sistema_modulos(codigo) ON DELETE CASCADE,
-
             alvo_tipo VARCHAR(20) NOT NULL,
             alvo_valor VARCHAR(120) NOT NULL,
-
             nivel_acesso INTEGER NOT NULL DEFAULT 0,
             permitido BOOLEAN DEFAULT TRUE,
-
             criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
             UNIQUE (clinica_id, modulo_codigo, alvo_tipo, alvo_valor)
         );
-        """
-    )
+    """)
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_clinica_modulos_clinica
-        ON clinica_modulos (clinica_id);
-        """
-    )
+    conn.commit()
+    cur.close()
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_clinica_modulos_modulo
-        ON clinica_modulos (modulo_codigo);
-        """
-    )
+    # Compatibilidade com versões antigas da tabela clinicas
+    for col, ddl in {
+        "nome_fantasia": "VARCHAR(255)",
+        "razao_social": "VARCHAR(255)",
+        "cnpj": "VARCHAR(30)",
+        "documento": "VARCHAR(30)",
+        "ativo": "BOOLEAN DEFAULT TRUE",
+        "ativa": "BOOLEAN DEFAULT TRUE",
+        "is_matriz": "BOOLEAN DEFAULT FALSE",
+        "atualizado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "criado_em": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    }.items():
+        _add_col(conn, "clinicas", col, ddl)
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_regras_acesso_clinica_modulo
-        ON modulo_regras_acesso (clinica_id, modulo_codigo);
-        """
-    )
+    cur = conn.cursor()
 
-    cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_regras_acesso_alvo
-        ON modulo_regras_acesso (alvo_tipo, alvo_valor);
-        """
-    )
+    indices = [
+        "CREATE INDEX IF NOT EXISTS idx_clinica_modulos_clinica ON clinica_modulos (clinica_id);",
+        "CREATE INDEX IF NOT EXISTS idx_clinica_modulos_modulo ON clinica_modulos (modulo_codigo);",
+        "CREATE INDEX IF NOT EXISTS idx_regras_acesso_clinica_modulo ON modulo_regras_acesso (clinica_id, modulo_codigo);",
+        "CREATE INDEX IF NOT EXISTS idx_regras_acesso_alvo ON modulo_regras_acesso (alvo_tipo, alvo_valor);",
+        "CREATE INDEX IF NOT EXISTS idx_regras_acesso_lookup ON modulo_regras_acesso (clinica_id, alvo_tipo, alvo_valor);",
+    ]
+
+    for sql in indices:
+        cur.execute(sql)
 
     conn.commit()
     cur.close()
@@ -497,22 +318,18 @@ def ensure_modulos_schema():
 
 
 def seed_modulos():
+    cache_key = "_seed_modulos_ok"
+
+    if getattr(g, cache_key, False):
+        return
+
     conn = get_conn()
     cur = conn.cursor()
 
     for modulo in MODULOS_DISPONIVEIS:
-        cur.execute(
-            """
+        cur.execute("""
             INSERT INTO sistema_modulos (
-                codigo,
-                nome,
-                descricao,
-                icone,
-                categoria,
-                ordem,
-                ativo,
-                master_only,
-                atualizado_em
+                codigo, nome, descricao, icone, categoria, ordem, ativo, master_only, atualizado_em
             )
             VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (codigo)
@@ -524,21 +341,21 @@ def seed_modulos():
                 ordem = EXCLUDED.ordem,
                 master_only = EXCLUDED.master_only,
                 atualizado_em = CURRENT_TIMESTAMP;
-            """,
-            (
-                modulo["codigo"],
-                modulo["nome"],
-                modulo.get("descricao"),
-                modulo.get("icone"),
-                modulo.get("categoria"),
-                modulo.get("ordem", 999),
-                bool(modulo.get("master_only", False)),
-            ),
-        )
+        """, (
+            modulo["codigo"],
+            modulo["nome"],
+            modulo.get("descricao"),
+            modulo.get("icone"),
+            modulo.get("categoria"),
+            modulo.get("ordem", 999),
+            bool(modulo.get("master_only", False)),
+        ))
 
     conn.commit()
     cur.close()
     conn.close()
+
+    setattr(g, cache_key, True)
 
 
 def ensure_clinica_padrao():
@@ -546,23 +363,36 @@ def ensure_clinica_padrao():
     cur = conn.cursor()
 
     try:
-        cur.execute("SELECT id FROM clinicas ORDER BY id ASC LIMIT 1;")
+        cur.execute("SELECT id FROM clinicas WHERE id = 1 LIMIT 1;")
         row = cur.fetchone()
 
         if row:
             clinica_id = row_value(row, "id")
         else:
-            cur.execute(
-                """
-                INSERT INTO clinicas (nome, documento, ativo)
-                VALUES (%s, %s, TRUE)
+            cur.execute("""
+                INSERT INTO clinicas (
+                    id, nome, nome_fantasia, razao_social, ativo, ativa, is_matriz, criado_em, atualizado_em
+                )
+                VALUES (
+                    1, 'Minha Empresa', 'Minha Empresa', 'Minha Empresa', TRUE, TRUE, TRUE,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (id) DO NOTHING
                 RETURNING id;
-                """,
-                ("Clínica Principal", None),
-            )
-            clinica_id = row_value(cur.fetchone(), "id")
-            conn.commit()
+            """)
+            row = cur.fetchone()
+            clinica_id = row_value(row, "id") if row else 1
 
+        cur.execute("""
+            UPDATE clinicas
+            SET is_matriz = TRUE,
+                ativo = TRUE,
+                ativa = TRUE,
+                atualizado_em = CURRENT_TIMESTAMP
+            WHERE id = 1;
+        """)
+
+        conn.commit()
         return int(clinica_id)
 
     except Exception:
@@ -573,27 +403,39 @@ def ensure_clinica_padrao():
         cur.close()
         conn.close()
 
+
 def preparar_modulos():
+    cache_key = "_preparar_modulos_ok"
+
+    if getattr(g, cache_key, False):
+        return get_clinica_id_contexto()
+
     ensure_modulos_schema()
     seed_modulos()
-    return ensure_clinica_padrao()
+    clinica_id = ensure_clinica_padrao()
+
+    setattr(g, cache_key, True)
+    return clinica_id
 
 
 # =============================================================================
-# CONSULTAS BASE
+# CONSULTAS
 # =============================================================================
 
 def listar_clinicas():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT id, nome, documento, ativo
+    cur.execute("""
+        SELECT
+            id,
+            nome,
+            COALESCE(cnpj, documento) AS documento,
+            COALESCE(ativa, ativo, TRUE) AS ativo,
+            COALESCE(is_matriz, FALSE) AS is_matriz
         FROM clinicas
-        ORDER BY nome ASC;
-        """
-    )
+        ORDER BY COALESCE(is_matriz, FALSE) DESC, nome ASC;
+    """)
 
     dados = dictfetchall(cur)
 
@@ -607,14 +449,16 @@ def buscar_clinica(clinica_id: int):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT id, nome, documento, ativo
+    cur.execute("""
+        SELECT
+            id,
+            nome,
+            COALESCE(cnpj, documento) AS documento,
+            COALESCE(ativa, ativo, TRUE) AS ativo,
+            COALESCE(is_matriz, FALSE) AS is_matriz
         FROM clinicas
         WHERE id = %s;
-        """,
-        (clinica_id,),
-    )
+    """, (clinica_id,))
 
     dado = dictfetchone(cur)
 
@@ -628,8 +472,7 @@ def listar_modulos_da_clinica(clinica_id: int):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
+    cur.execute("""
         SELECT
             sm.codigo,
             sm.nome,
@@ -646,9 +489,7 @@ def listar_modulos_da_clinica(clinica_id: int):
               AND cm.clinica_id = %s
         WHERE sm.ativo = TRUE
         ORDER BY sm.ordem ASC, sm.nome ASC;
-        """,
-        (clinica_id,),
-    )
+    """, (clinica_id,))
 
     dados = dictfetchall(cur)
 
@@ -662,22 +503,12 @@ def listar_regras_acesso(clinica_id: int):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT
-            id,
-            clinica_id,
-            modulo_codigo,
-            alvo_tipo,
-            alvo_valor,
-            nivel_acesso,
-            permitido
+    cur.execute("""
+        SELECT id, clinica_id, modulo_codigo, alvo_tipo, alvo_valor, nivel_acesso, permitido
         FROM modulo_regras_acesso
         WHERE clinica_id = %s
         ORDER BY modulo_codigo, alvo_tipo, alvo_valor;
-        """,
-        (clinica_id,),
-    )
+    """, (clinica_id,))
 
     dados = dictfetchall(cur)
 
@@ -688,34 +519,17 @@ def listar_regras_acesso(clinica_id: int):
 
 
 def listar_usuarios_por_role(clinica_id: int | None = None):
-    """
-    Lista usuários agrupáveis por role.
-    Se clinica_id existir na tabela, filtra por clínica.
-    """
-
     conn = get_conn()
     cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'usuarios';
-        """
-    )
-    cols = {row_value(r, "column_name") for r in cur.fetchall()}
 
     filtro_clinica = ""
     params = []
 
-    if clinica_id and "clinica_id" in cols:
+    if clinica_id:
         filtro_clinica = "AND COALESCE(clinica_id, %s) = %s"
         params.extend([clinica_id, clinica_id])
 
-    cur.execute(
-        f"""
+    cur.execute(f"""
         SELECT
             id,
             nome,
@@ -726,12 +540,12 @@ def listar_usuarios_por_role(clinica_id: int | None = None):
             COALESCE(is_active, TRUE) AS is_active
         FROM usuarios
         WHERE COALESCE(is_active, TRUE) = TRUE
-          AND UPPER(COALESCE(role, '')) IN ('ADMIN', 'RECEPCAO', 'RECEPÇÃO', 'PROFISSIONAL', 'PROFISSIONAIS')
+          AND UPPER(COALESCE(role, '')) IN (
+            'ADMIN', 'RECEPCAO', 'RECEPÇÃO', 'PROFISSIONAL', 'PROFISSIONAIS'
+          )
           {filtro_clinica}
         ORDER BY role ASC, nome ASC;
-        """,
-        params,
-    )
+    """, params)
 
     usuarios = dictfetchall(cur)
 
@@ -753,48 +567,28 @@ def listar_usuarios_por_role(clinica_id: int | None = None):
 
 
 def listar_cbos_com_profissionais(clinica_id: int | None = None):
-    """
-    Retorna apenas CBOs que possuem profissional vinculado.
-    Não lista a biblioteca inteira, só o que realmente existe em usuários.
-    """
-
     conn = get_conn()
     cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'usuarios';
-        """
-    )
-    cols = {row_value(r, "column_name") for r in cur.fetchall()}
 
     filtro_clinica = ""
     params = []
 
-    if clinica_id and "clinica_id" in cols:
+    if clinica_id:
         filtro_clinica = "AND COALESCE(u.clinica_id, %s) = %s"
         params.extend([clinica_id, clinica_id])
 
-    # Primeiro tenta buscar descrição em cbo_catalogo, se existir.
-    cur.execute(
-        """
+    cur.execute("""
         SELECT EXISTS (
             SELECT 1
             FROM information_schema.tables
             WHERE table_schema = 'public'
               AND table_name = 'cbo_catalogo'
         );
-        """
-    )
+    """)
     tem_cbo_catalogo = bool(row_value(cur.fetchone(), "exists"))
 
     if tem_cbo_catalogo:
-        cur.execute(
-            f"""
+        sql = f"""
             SELECT
                 regexp_replace(COALESCE(u.cbo, ''), '\\D', '', 'g') AS codigo,
                 COALESCE(MAX(c.no_ocupacao), MAX(u.cbo), 'CBO sem descrição') AS descricao,
@@ -809,12 +603,9 @@ def listar_cbos_com_profissionais(clinica_id: int | None = None):
               {filtro_clinica}
             GROUP BY regexp_replace(COALESCE(u.cbo, ''), '\\D', '', 'g')
             ORDER BY descricao ASC;
-            """,
-            params,
-        )
+        """
     else:
-        cur.execute(
-            f"""
+        sql = f"""
             SELECT
                 regexp_replace(COALESCE(u.cbo, ''), '\\D', '', 'g') AS codigo,
                 MAX(u.cbo) AS descricao,
@@ -826,10 +617,9 @@ def listar_cbos_com_profissionais(clinica_id: int | None = None):
               {filtro_clinica}
             GROUP BY regexp_replace(COALESCE(u.cbo, ''), '\\D', '', 'g')
             ORDER BY descricao ASC;
-            """,
-            params,
-        )
+        """
 
+    cur.execute(sql, params)
     cbos = dictfetchall(cur)
 
     cur.close()
@@ -840,46 +630,31 @@ def listar_cbos_com_profissionais(clinica_id: int | None = None):
 
 def listar_profissionais_por_cbo(clinica_id: int | None = None):
     usuarios = listar_usuarios_por_role(clinica_id)
-    profissionais = [u for u in usuarios if u.get("role") == "PROFISSIONAL" and u.get("cbo_digits")]
+    profissionais = [
+        u for u in usuarios
+        if u.get("role") == "PROFISSIONAL" and u.get("cbo_digits")
+    ]
 
     por_cbo = {}
 
     for u in profissionais:
         cbo = u["cbo_digits"]
-
-        if cbo not in por_cbo:
-            por_cbo[cbo] = []
-
-        por_cbo[cbo].append(u)
+        por_cbo.setdefault(cbo, []).append(u)
 
     return por_cbo
 
 
 def montar_contexto_acessos(clinica_id: int):
-    """
-    Prepara tudo que o HTML vai precisar:
-    - módulos
-    - regras já salvas
-    - usuários por role
-    - CBOs usados
-    - profissionais dentro de cada CBO
-    """
-
     modulos = listar_modulos_da_clinica(clinica_id)
     regras = listar_regras_acesso(clinica_id)
     usuarios = listar_usuarios_por_role(clinica_id)
     cbos = listar_cbos_com_profissionais(clinica_id)
     profissionais_por_cbo = listar_profissionais_por_cbo(clinica_id)
 
-    usuarios_por_role = {
-        "ADMIN": [],
-        "RECEPCAO": [],
-        "PROFISSIONAL": [],
-    }
+    usuarios_por_role = {"ADMIN": [], "RECEPCAO": [], "PROFISSIONAL": []}
 
     for u in usuarios:
         role = u.get("role")
-
         if role in usuarios_por_role:
             usuarios_por_role[role].append(u)
 
@@ -900,19 +675,13 @@ def montar_contexto_acessos(clinica_id: int):
         "roles_base": ROLES_BASE,
         "niveis_acesso": NIVEIS_ACESSO,
     }
+
+
 # =============================================================================
 # GRAVAÇÃO
 # =============================================================================
 
 def nivel_para_valor(nivel: str | int | None) -> int:
-    """
-    Converte:
-    - nenhum  -> 0
-    - ver     -> 1
-    - editar  -> 2
-    - exportar -> 3
-    """
-
     if nivel is None:
         return 0
 
@@ -925,18 +694,10 @@ def nivel_para_valor(nivel: str | int | None) -> int:
         return max(0, min(3, int(nivel)))
 
     dados = NIVEIS_MAP.get(nivel)
-
-    if not dados:
-        return 0
-
-    return int(dados["valor"])
+    return int(dados["valor"]) if dados else 0
 
 
 def valor_permite_acao(nivel_valor: int, acao: str) -> bool:
-    """
-    Verifica se o nível numérico permite determinada ação.
-    """
-
     acao = (acao or "ver").strip().lower()
 
     if nivel_valor >= 3:
@@ -955,35 +716,20 @@ def salvar_modulos_clinica(clinica_id: int, modulos_ativos: set[str]):
     codigos_validos = {m["codigo"] for m in MODULOS_DISPONIVEIS}
     modulos_ativos = {m for m in modulos_ativos if m in codigos_validos}
 
-    dados = [
-        (
-            clinica_id,
-            codigo,
-            codigo in modulos_ativos,
-        )
-        for codigo in codigos_validos
-    ]
+    dados = [(clinica_id, codigo, codigo in modulos_ativos) for codigo in codigos_validos]
 
     conn = get_conn()
     cur = conn.cursor()
 
     try:
-        cur.executemany(
-            """
-            INSERT INTO clinica_modulos (
-                clinica_id,
-                modulo_codigo,
-                ativo,
-                atualizado_em
-            )
+        cur.executemany("""
+            INSERT INTO clinica_modulos (clinica_id, modulo_codigo, ativo, atualizado_em)
             VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (clinica_id, modulo_codigo)
             DO UPDATE SET
                 ativo = EXCLUDED.ativo,
                 atualizado_em = CURRENT_TIMESTAMP;
-            """,
-            dados,
-        )
+        """, dados)
 
         conn.commit()
 
@@ -997,14 +743,6 @@ def salvar_modulos_clinica(clinica_id: int, modulos_ativos: set[str]):
 
 
 def salvar_regras_acesso_from_form(clinica_id: int, form):
-    """
-    Salva regras em lote.
-
-    Não apaga tudo antes.
-    Só faz UPSERT do que veio do formulário.
-    Muito mais rápido que abrir conexão/commit por regra.
-    """
-
     dados = []
 
     for key, value in form.items():
@@ -1027,44 +765,32 @@ def salvar_regras_acesso_from_form(clinica_id: int, form):
         if not modulo_codigo or not alvo_valor:
             continue
 
-        dados.append(
-            (
-                clinica_id,
-                modulo_codigo,
-                alvo_tipo,
-                alvo_valor,
-                nivel_para_valor(value),
-                True,
-            )
-        )
-
-    if not dados:
-        return
+        dados.append((
+            clinica_id,
+            modulo_codigo,
+            alvo_tipo,
+            alvo_valor,
+            nivel_para_valor(value),
+            True,
+        ))
 
     conn = get_conn()
     cur = conn.cursor()
 
     try:
-        cur.executemany(
-            """
-            INSERT INTO modulo_regras_acesso (
-                clinica_id,
-                modulo_codigo,
-                alvo_tipo,
-                alvo_valor,
-                nivel_acesso,
-                permitido,
-                atualizado_em
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (clinica_id, modulo_codigo, alvo_tipo, alvo_valor)
-            DO UPDATE SET
-                nivel_acesso = EXCLUDED.nivel_acesso,
-                permitido = EXCLUDED.permitido,
-                atualizado_em = CURRENT_TIMESTAMP;
-            """,
-            dados,
-        )
+        if dados:
+            cur.executemany("""
+                INSERT INTO modulo_regras_acesso (
+                    clinica_id, modulo_codigo, alvo_tipo, alvo_valor,
+                    nivel_acesso, permitido, atualizado_em
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (clinica_id, modulo_codigo, alvo_tipo, alvo_valor)
+                DO UPDATE SET
+                    nivel_acesso = EXCLUDED.nivel_acesso,
+                    permitido = EXCLUDED.permitido,
+                    atualizado_em = CURRENT_TIMESTAMP;
+            """, dados)
 
         conn.commit()
 
@@ -1077,39 +803,38 @@ def salvar_regras_acesso_from_form(clinica_id: int, form):
         conn.close()
 
 # =============================================================================
-# PERMISSÕES - FUNÇÕES PARA USAR NO SISTEMA TODO
+# NORMALIZAÇÃO / ALIASES DE MÓDULOS
 # =============================================================================
 
-def clinica_tem_modulo(clinica_id: int, modulo_codigo: str) -> bool:
-    conn = get_conn()
-    cur = conn.cursor()
+MODULOS_ALIASES = {
+    # LEGADOS / NOMES ANTIGOS
+    "atendimentos": "meus_atendimentos",
+    "registrar_atendimento": "meus_atendimentos",
+    "registro_atendimento": "meus_atendimentos",
 
-    cur.execute(
-        """
-        SELECT 1
-        FROM clinica_modulos
-        WHERE clinica_id = %s
-          AND modulo_codigo = %s
-          AND ativo = TRUE
-        LIMIT 1;
-        """,
-        (clinica_id, modulo_codigo),
-    )
+    # FILA
+    "fila_atendimentos": "lista_atendimentos",
 
-    ok = cur.fetchone() is not None
+    # EXPORTS
+    "bpai": "export_bpai",
+    "apac": "export_apac",
+}
 
-    cur.close()
-    conn.close()
 
-    return ok
+def normalizar_modulo_codigo(modulo_codigo: str) -> str:
+    codigo = str(modulo_codigo or "").strip().lower()
 
+    return MODULOS_ALIASES.get(codigo, codigo)
+
+# =============================================================================
+# PERMISSÕES PARA O SISTEMA TODO
+# =============================================================================
 
 def buscar_usuario_para_permissao(usuario_id: int):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
+    cur.execute("""
         SELECT
             id,
             nome,
@@ -1121,9 +846,7 @@ def buscar_usuario_para_permissao(usuario_id: int):
         FROM usuarios
         WHERE id = %s
         LIMIT 1;
-        """,
-        (usuario_id,),
-    )
+    """, (usuario_id,))
 
     usuario = dictfetchone(cur)
 
@@ -1144,59 +867,44 @@ def buscar_usuario_para_permissao(usuario_id: int):
     return usuario
 
 
-def nivel_regra(
-    clinica_id: int,
-    modulo_codigo: str,
-    alvo_tipo: str,
-    alvo_valor: str | int,
-) -> int | None:
+def nivel_regra(clinica_id: int, modulo_codigo: str, alvo_tipo: str, alvo_valor: str | int) -> int | None:
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute(
-        """
-        SELECT nivel_acesso, permitido
-        FROM modulo_regras_acesso
-        WHERE clinica_id = %s
-          AND modulo_codigo = %s
-          AND alvo_tipo = %s
-          AND alvo_valor = %s
-        LIMIT 1;
-        """,
-        (
+    try:
+        cur.execute("""
+            SELECT nivel_acesso, permitido
+            FROM modulo_regras_acesso
+            WHERE clinica_id = %s
+              AND modulo_codigo = %s
+              AND alvo_tipo = %s
+              AND alvo_valor = %s
+            LIMIT 1;
+        """, (
             clinica_id,
             modulo_codigo,
             str(alvo_tipo).upper(),
             str(alvo_valor),
-        ),
-    )
+        ))
 
-    row = cur.fetchone()
+        row = cur.fetchone()
 
-    cur.close()
-    conn.close()
+        if row is None:
+            return None
 
-    if row is None:
-        return None
+        dado = row_to_dict(row, cur)
 
-    dado = row_to_dict(row, cur)
+        if dado.get("permitido") is False:
+            return 0
 
-    nivel = dado.get("nivel_acesso")
-    permitido = dado.get("permitido")
+        return int(dado.get("nivel_acesso") or 0)
 
-    if permitido is False:
-        return 0
-
-    return int(nivel or 0)
-
+    finally:
+        cur.close()
+        conn.close()
 
 
 def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
-    """
-    Carrega todas as permissões do usuário em UMA consulta principal.
-    Evita abrir conexão várias vezes para cada módulo.
-    """
-
     cache_key = f"permissoes_fast_{clinica_id}_{usuario_id}"
 
     if hasattr(g, cache_key):
@@ -1206,8 +914,7 @@ def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
     cur = conn.cursor()
 
     try:
-        cur.execute(
-            """
+        cur.execute("""
             SELECT
                 id,
                 nome,
@@ -1218,9 +925,7 @@ def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
             FROM usuarios
             WHERE id = %s
             LIMIT 1;
-            """,
-            (usuario_id,),
-        )
+        """, (usuario_id,))
 
         usuario = dictfetchone(cur)
 
@@ -1249,37 +954,17 @@ def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
         usuario["role"] = role
         usuario["cbo_digits"] = cbo_digits
 
-        cur.execute(
-            """
+        cur.execute("""
             SELECT modulo_codigo
             FROM clinica_modulos
             WHERE clinica_id = %s
               AND ativo = TRUE;
-            """,
-            (clinica_id,),
-        )
+        """, (clinica_id,))
 
-        modulos_ativos = {
-            row_value(row, "modulo_codigo")
-            for row in cur.fetchall()
-        }
+        modulos_ativos = {row_value(row, "modulo_codigo") for row in cur.fetchall()}
 
-        alvos = [
-            ("USUARIO", str(usuario_id)),
-            ("ROLE", role),
-        ]
-
-        if cbo_digits:
-            alvos.append(("CBO", cbo_digits))
-
-        cur.execute(
-            """
-            SELECT
-                modulo_codigo,
-                alvo_tipo,
-                alvo_valor,
-                nivel_acesso,
-                permitido
+        cur.execute("""
+            SELECT modulo_codigo, alvo_tipo, alvo_valor, nivel_acesso, permitido
             FROM modulo_regras_acesso
             WHERE clinica_id = %s
               AND permitido = TRUE
@@ -1288,14 +973,12 @@ def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
                  OR (alvo_tipo = 'ROLE'    AND alvo_valor = %s)
                  OR (alvo_tipo = 'CBO'     AND alvo_valor = %s)
               );
-            """,
-            (
-                clinica_id,
-                str(usuario_id),
-                role,
-                cbo_digits or "__SEM_CBO__",
-            ),
-        )
+        """, (
+            clinica_id,
+            str(usuario_id),
+            role,
+            cbo_digits or "__SEM_CBO__",
+        ))
 
         regras_usuario = {}
         regras_cbo = {}
@@ -1330,7 +1013,6 @@ def carregar_permissoes_usuario_fast(usuario_id: int, clinica_id: int):
         conn.close()
 
 
-
 def usuario_tem_permissao(
     usuario_id: int,
     clinica_id: int,
@@ -1338,12 +1020,7 @@ def usuario_tem_permissao(
     acao: str = "ver",
     perfil_id: int | None = None,
 ) -> bool:
-    """
-    Versão rápida:
-    - 1 carregamento por request
-    - permissões em memória via g
-    - prioridade: USUARIO > CBO > ROLE
-    """
+    modulo_codigo = normalizar_modulo_codigo(modulo_codigo)
 
     if usuario_eh_master():
         return True
@@ -1365,31 +1042,23 @@ def usuario_tem_permissao(
         return False
 
     if modulo_codigo in dados["regras_usuario"]:
-        return valor_permite_acao(
-            dados["regras_usuario"][modulo_codigo],
-            acao,
-        )
+        return valor_permite_acao(dados["regras_usuario"][modulo_codigo], acao)
 
     if modulo_codigo in dados["regras_cbo"]:
-        return valor_permite_acao(
-            dados["regras_cbo"][modulo_codigo],
-            acao,
-        )
+        return valor_permite_acao(dados["regras_cbo"][modulo_codigo], acao)
 
     if modulo_codigo in dados["regras_role"]:
-        return valor_permite_acao(
-            dados["regras_role"][modulo_codigo],
-            acao,
-        )
+        return valor_permite_acao(dados["regras_role"][modulo_codigo], acao)
 
     return False
-
-
 
 def require_permission(modulo_codigo: str, acao: str = "ver"):
     def decorator(view):
         @wraps(view)
         def wrapper(*args, **kwargs):
+            modulo_original = modulo_codigo
+            modulo_normalizado = normalizar_modulo_codigo(modulo_codigo)
+
             user = usuario_logado()
 
             usuario_id = (
@@ -1398,24 +1067,46 @@ def require_permission(modulo_codigo: str, acao: str = "ver"):
                 or session.get("usuario_id")
             )
 
-            clinica_id = (
-                user.get("clinica_id")
-                or session.get("clinica_id")
-                or 1
-            )
+            clinica_id = get_clinica_id_contexto()
 
             if usuario_eh_master():
                 return view(*args, **kwargs)
 
             if not usuario_id or not clinica_id:
+                registrar_log(
+                    modulo=modulo_normalizado,
+                    acao="acesso_negado",
+                    descricao="Usuário sem sessão ou clínica definida.",
+                    sucesso=False,
+                    detalhes={
+                        "modulo_original": modulo_original,
+                        "modulo_normalizado": modulo_normalizado,
+                        "acao_requerida": acao,
+                    },
+                )
                 abort(403)
 
-            if not usuario_tem_permissao(
+            permitido = usuario_tem_permissao(
                 usuario_id=int(usuario_id),
                 clinica_id=int(clinica_id),
-                modulo_codigo=modulo_codigo,
+                modulo_codigo=modulo_normalizado,
                 acao=acao,
-            ):
+            )
+
+            if not permitido:
+                registrar_log(
+                    modulo=modulo_normalizado,
+                    acao="acesso_negado",
+                    descricao="Usuário tentou acessar módulo sem permissão.",
+                    sucesso=False,
+                    detalhes={
+                        "modulo_original": modulo_original,
+                        "modulo_normalizado": modulo_normalizado,
+                        "acao_requerida": acao,
+                        "usuario_id": usuario_id,
+                        "clinica_id": clinica_id,
+                    },
+                )
                 abort(403)
 
             return view(*args, **kwargs)
@@ -1423,7 +1114,6 @@ def require_permission(modulo_codigo: str, acao: str = "ver"):
         return wrapper
 
     return decorator
-
 
 # =============================================================================
 # ROTAS
@@ -1433,63 +1123,102 @@ def require_permission(modulo_codigo: str, acao: str = "ver"):
 @admin_required
 @master_required
 def modulos():
-    preparar_modulos()
+    try:
+        preparar_modulos()
 
-    clinicas = listar_clinicas()
-    clinica_id = request.values.get("clinica_id", type=int)
+        clinicas = listar_clinicas()
 
-    if not clinica_id:
-        clinica_id = clinicas[0]["id"] if clinicas else preparar_modulos()
-
-    clinica = buscar_clinica(clinica_id)
-
-    if not clinica:
-        flash("Clínica não encontrada.", "error")
-        return redirect(url_for("admin.modulos"))
-
-    if request.method == "POST":
-        modulos_ativos = set(request.form.getlist("modulos_ativos"))
-
-        salvar_modulos_clinica(
-            clinica_id=clinica_id,
-            modulos_ativos=modulos_ativos,
+        clinica_id = (
+            request.values.get("clinica_id", type=int)
+            or session.get("clinica_id")
         )
 
-        salvar_regras_acesso_from_form(
-            clinica_id=clinica_id,
-            form=request.form,
+        if not clinica_id:
+            flash("Escolha uma clínica antes de configurar os módulos.", "error")
+            return redirect(url_for("clinica_config.selecionar_ambiente"))
+
+        clinica = buscar_clinica(clinica_id)
+
+        if not clinica:
+            flash("Clínica não encontrada.", "error")
+            return redirect(url_for("clinica_config.selecionar_ambiente"))
+
+        if request.method == "POST":
+            modulos_ativos = set(request.form.getlist("modulos_ativos"))
+
+            salvar_modulos_clinica(
+                clinica_id=clinica_id,
+                modulos_ativos=modulos_ativos,
+            )
+
+            salvar_regras_acesso_from_form(
+                clinica_id=clinica_id,
+                form=request.form,
+            )
+
+            log_edicao(
+                modulo="admin_modulos",
+                entidade="clinica_modulos",
+                entidade_id=clinica_id,
+                descricao="Módulos e regras de acesso atualizados.",
+                detalhes={
+                    "clinica_id": clinica_id,
+                    "clinica_nome": clinica.get("nome"),
+                    "modulos_ativos": list(modulos_ativos),
+                },
+            )
+
+            flash("Módulos e regras de acesso atualizados com sucesso.", "success")
+            return redirect(url_for("admin.modulos", clinica_id=clinica_id))
+
+        contexto = montar_contexto_acessos(clinica_id)
+
+        log_visualizacao(
+            modulo="admin_modulos",
+            entidade="clinica_modulos",
+            entidade_id=clinica_id,
+            descricao="Visualizou painel de módulos da clínica.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "clinica_nome": clinica.get("nome"),
+            },
         )
 
-        flash("Módulos e regras de acesso atualizados com sucesso.", "success")
-        return redirect(url_for("admin.modulos", clinica_id=clinica_id))
+        return render_template(
+            "modulos.html",
+            clinicas=clinicas,
+            clinica=clinica,
+            clinica_id=clinica_id,
+            is_master=True,
+            **contexto,
+        )
 
-    contexto = montar_contexto_acessos(clinica_id)
-
-    return render_template(
-        "modulos.html",
-        clinicas=clinicas,
-        clinica=clinica,
-        clinica_id=clinica_id,
-        is_master=True,
-        **contexto,
-    )
+    except Exception as e:
+        log_erro(
+            "admin_modulos",
+            e,
+            descricao="Erro na tela principal de módulos.",
+            detalhes={"clinica_id": request.values.get("clinica_id")},
+        )
+        flash(f"Erro ao abrir módulos: {e}", "error")
+        return redirect(url_for("admin.index"))
 
 
 @admin_bp.route("/modulos/api/clinica/<int:clinica_id>", methods=["GET"])
 @admin_required
 @master_required
 def api_modulos_clinica(clinica_id: int):
-    preparar_modulos()
+    try:
+        preparar_modulos()
 
-    clinica = buscar_clinica(clinica_id)
+        clinica = buscar_clinica(clinica_id)
 
-    if not clinica:
-        return jsonify({"ok": False, "erro": "Clínica não encontrada."}), 404
+        if not clinica:
+            return jsonify({"ok": False, "erro": "Clínica não encontrada."}), 404
 
-    contexto = montar_contexto_acessos(clinica_id)
+        contexto = montar_contexto_acessos(clinica_id)
 
-    return jsonify(
-        {
+        return jsonify({
             "ok": True,
             "clinica": clinica,
             "modulos": contexto["modulos"],
@@ -1500,101 +1229,119 @@ def api_modulos_clinica(clinica_id: int):
             "profissionais_por_cbo": contexto["profissionais_por_cbo"],
             "regras": contexto["regras"],
             "regras_map": contexto["regras_map"],
-        }
-    )
+        })
+
+    except Exception as e:
+        log_erro(
+            "admin_modulos",
+            e,
+            entidade="clinica_modulos",
+            entidade_id=clinica_id,
+            descricao="Erro na API de módulos da clínica.",
+        )
+        return jsonify({"ok": False, "erro": str(e)}), 500
 
 
 @admin_bp.route("/modulos/api/check", methods=["GET"])
 @admin_required
 def api_check_permissao():
-    preparar_modulos()
+    try:
+        preparar_modulos()
 
-    user = usuario_logado()
+        user = usuario_logado()
 
-    modulo_codigo = request.args.get("modulo", "").strip()
-    acao = request.args.get("acao", "ver").strip()
+        modulo_original = request.args.get("modulo", "").strip()
+        modulo_codigo = normalizar_modulo_codigo(modulo_original)
+        acao = request.args.get("acao", "ver").strip()
 
-    usuario_id = (
-        user.get("id")
-        or session.get("user_id")
-        or session.get("usuario_id")
-    )
+        usuario_id = user.get("id") or session.get("user_id") or session.get("usuario_id")
+        clinica_id = get_clinica_id_contexto()
 
-    clinica_id = (
-        user.get("clinica_id")
-        or session.get("clinica_id")
-        or 1
-    )
-
-    if usuario_eh_master():
-        return jsonify(
-            {
+        if usuario_eh_master():
+            return jsonify({
                 "ok": True,
                 "permitido": True,
                 "master": True,
                 "nivel": 3,
-            }
+                "clinica_id": clinica_id,
+            })
+
+        if not usuario_id or not clinica_id or not modulo_codigo:
+            return jsonify({
+                "ok": False,
+                "permitido": False,
+                "erro": "Sessão, clínica ou módulo inválido.",
+            }), 403
+
+        permitido = usuario_tem_permissao(
+            usuario_id=int(usuario_id),
+            clinica_id=int(clinica_id),
+            modulo_codigo=modulo_codigo,
+            acao=acao,
         )
 
-    if not usuario_id or not clinica_id or not modulo_codigo:
-        return jsonify({"ok": False, "permitido": False}), 403
-
-    permitido = usuario_tem_permissao(
-        usuario_id=int(usuario_id),
-        clinica_id=int(clinica_id),
-        modulo_codigo=modulo_codigo,
-        acao=acao,
-    )
-
-    return jsonify(
-        {
+        return jsonify({
             "ok": True,
             "permitido": permitido,
             "master": False,
-        }
-    )
+            "clinica_id": clinica_id,
+            "modulo": modulo_codigo,
+            "acao": acao,
+        })
+
+    except Exception as e:
+        log_erro(
+            "admin_modulos",
+            e,
+            descricao="Erro ao verificar permissão via API.",
+            detalhes={
+                "modulo": request.args.get("modulo"),
+                "acao": request.args.get("acao"),
+            },
+        )
+        return jsonify({"ok": False, "permitido": False, "erro": str(e)}), 500
 
 
 @admin_bp.route("/modulos/api/usuario/<int:usuario_id>/permissoes", methods=["GET"])
 @admin_required
 @master_required
 def api_usuario_permissoes(usuario_id: int):
-    preparar_modulos()
+    try:
+        preparar_modulos()
 
-    clinica_id = request.args.get("clinica_id", type=int) or 1
-    usuario = buscar_usuario_para_permissao(usuario_id)
+        clinica_id = request.args.get("clinica_id", type=int) or get_clinica_id_contexto()
+        usuario = buscar_usuario_para_permissao(usuario_id)
 
-    if not usuario:
-        return jsonify({"ok": False, "erro": "Usuário não encontrado."}), 404
+        if not usuario:
+            return jsonify({"ok": False, "erro": "Usuário não encontrado."}), 404
 
-    modulos = listar_modulos_da_clinica(clinica_id)
-    resultado = []
+        modulos = listar_modulos_da_clinica(clinica_id)
+        resultado = []
 
-    for modulo in modulos:
-        codigo = modulo["codigo"]
+        for modulo in modulos:
+            codigo = modulo["codigo"]
 
-        nivel_usuario = nivel_regra(clinica_id, codigo, "USUARIO", usuario_id)
-        nivel_cbo = None
-        nivel_role = None
+            nivel_usuario = nivel_regra(clinica_id, codigo, "USUARIO", usuario_id)
+            nivel_cbo = None
+            nivel_role = None
 
-        if usuario.get("cbo_digits"):
-            nivel_cbo = nivel_regra(clinica_id, codigo, "CBO", usuario["cbo_digits"])
+            if usuario.get("cbo_digits"):
+                nivel_cbo = nivel_regra(clinica_id, codigo, "CBO", usuario["cbo_digits"])
 
-        if usuario.get("role"):
-            nivel_role = nivel_regra(clinica_id, codigo, "ROLE", usuario["role"])
+            if usuario.get("role"):
+                nivel_role = nivel_regra(clinica_id, codigo, "ROLE", usuario["role"])
 
-        nivel_final = (
-            nivel_usuario
-            if nivel_usuario is not None
-            else nivel_cbo
-            if nivel_cbo is not None
-            else nivel_role
-            if nivel_role is not None
-            else 0
-        )
+            nivel_final = (
+                nivel_usuario
+                if nivel_usuario is not None
+                else nivel_cbo
+                if nivel_cbo is not None
+                else nivel_role
+                if nivel_role is not None
+                else 0
+            )
 
-        resultado.append(
-            {
+            resultado.append({
                 "modulo_codigo": codigo,
                 "modulo_nome": modulo["nome"],
                 "contratado": modulo["contratado"],
@@ -1602,13 +1349,20 @@ def api_usuario_permissoes(usuario_id: int):
                 "nivel_cbo": nivel_cbo,
                 "nivel_role": nivel_role,
                 "nivel_final": nivel_final,
-            }
-        )
+            })
 
-    return jsonify(
-        {
+        return jsonify({
             "ok": True,
             "usuario": usuario,
             "permissoes": resultado,
-        }
-    )
+        })
+
+    except Exception as e:
+        log_erro(
+            "admin_modulos",
+            e,
+            entidade="usuarios",
+            entidade_id=usuario_id,
+            descricao="Erro ao buscar permissões do usuário.",
+        )
+        return jsonify({"ok": False, "erro": str(e)}), 500

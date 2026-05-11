@@ -9,6 +9,20 @@ from flask import render_template, request, redirect, url_for, flash
 from . import admin_bp, admin_required
 from db import conectar_db
 
+try:
+    from .modulos import require_permission
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+try:
+    from log import registrar_log, log_erro
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+
 
 # ============================================================
 # SCHEMA POSTGRES
@@ -16,7 +30,13 @@ from db import conectar_db
 
 def ensure_bibliotecas_postgres():
     conn = conectar_db()
+
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         cur.execute("""
@@ -47,13 +67,21 @@ def ensure_bibliotecas_postgres():
             );
         """)
 
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_ocupacoes_codigo ON ocupacoes(co_ocupacao);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_ocupacoes_nome ON ocupacoes(no_ocupacao);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_cid_codigo ON cid_catalogo(co_cid);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_cid_nome ON cid_catalogo(no_cid);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_cep ON cep_ibge(cep);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_cep_ibge_municipio ON cep_ibge(municipio);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_cep_ibge_ibge ON cep_ibge(ibge);")
 
         conn.commit()
         cur.close()
+
+    except Exception:
+        conn.rollback()
+        raise
+
     finally:
         conn.close()
 
@@ -77,10 +105,12 @@ def _val(row, key: str, index: int = 0, default=None):
 
 def _header_map(headers):
     mapa = {}
+
     for idx, h in enumerate(headers):
         chave = str(h or "").strip().lower()
         if chave:
             mapa[chave] = idx
+
     return mapa
 
 
@@ -102,6 +132,17 @@ def _normalizar_codigo_cid(valor) -> str:
     codigo = str(valor or "").strip().upper()
     codigo = codigo.replace(".", "").replace("-", "").strip()
     return codigo
+
+
+def _pick_col(hmap: dict, nomes: list[str]):
+    for nome in nomes:
+        if nome in hmap:
+            return hmap[nome]
+    return None
+
+
+def _filename(file_storage):
+    return getattr(file_storage, "filename", "") or ""
 
 
 # ============================================================
@@ -126,11 +167,18 @@ def importar_cbo_xlsx(file_storage):
         raise ValueError("Colunas obrigatórias: co_ocupacao, no_ocupacao.")
 
     conn = conectar_db()
+
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         processados = 0
         ignorados = 0
+        lote = []
 
         for row in rows:
             codigo = _normalizar_codigo_cbo(row[hmap["co_ocupacao"]])
@@ -140,21 +188,37 @@ def importar_cbo_xlsx(file_storage):
                 ignorados += 1
                 continue
 
-            cur.execute("""
+            lote.append((codigo, nome))
+
+            if len(lote) >= 1000:
+                cur.executemany("""
+                    INSERT INTO ocupacoes (co_ocupacao, no_ocupacao)
+                    VALUES (%s, %s)
+                    ON CONFLICT (co_ocupacao)
+                    DO UPDATE SET no_ocupacao = EXCLUDED.no_ocupacao;
+                """, lote)
+
+                processados += len(lote)
+                lote.clear()
+
+        if lote:
+            cur.executemany("""
                 INSERT INTO ocupacoes (co_ocupacao, no_ocupacao)
                 VALUES (%s, %s)
                 ON CONFLICT (co_ocupacao)
                 DO UPDATE SET no_ocupacao = EXCLUDED.no_ocupacao;
-            """, (codigo, nome))
+            """, lote)
 
-            processados += 1
+            processados += len(lote)
 
         conn.commit()
         cur.close()
-        print("CBO importados:", processados, "ignorados:", ignorados)
-        return processados, ignorados
-    
 
+        return processados, ignorados
+
+    except Exception:
+        conn.rollback()
+        raise
 
     finally:
         conn.close()
@@ -163,13 +227,6 @@ def importar_cbo_xlsx(file_storage):
 # ============================================================
 # IMPORTAÇÃO CID
 # ============================================================
-
-def _pick_col(hmap: dict, nomes: list[str]):
-    for nome in nomes:
-        if nome in hmap:
-            return hmap[nome]
-    return None
-
 
 def importar_cid_xlsx(file_storage):
     ensure_bibliotecas_postgres()
@@ -185,19 +242,8 @@ def importar_cid_xlsx(file_storage):
 
     hmap = _header_map(headers)
 
-    col_codigo = _pick_col(hmap, [
-        "co_cid",
-        "codigo",
-        "código",
-        "cid",
-    ])
-
-    col_nome = _pick_col(hmap, [
-        "no_cid",
-        "descricao",
-        "descrição",
-        "nome",
-    ])
+    col_codigo = _pick_col(hmap, ["co_cid", "codigo", "código", "cid"])
+    col_nome = _pick_col(hmap, ["no_cid", "descricao", "descrição", "nome"])
 
     if col_codigo is None or col_nome is None:
         raise ValueError(
@@ -207,10 +253,16 @@ def importar_cid_xlsx(file_storage):
     conn = conectar_db()
 
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         processados = 0
         ignorados = 0
+        lote = []
 
         for row in rows:
             codigo = _normalizar_codigo_cid(row[col_codigo])
@@ -220,21 +272,37 @@ def importar_cid_xlsx(file_storage):
                 ignorados += 1
                 continue
 
-            cur.execute("""
+            lote.append((codigo, nome))
+
+            if len(lote) >= 1000:
+                cur.executemany("""
+                    INSERT INTO cid_catalogo (co_cid, no_cid)
+                    VALUES (%s, %s)
+                    ON CONFLICT (co_cid)
+                    DO UPDATE SET no_cid = EXCLUDED.no_cid;
+                """, lote)
+
+                processados += len(lote)
+                lote.clear()
+
+        if lote:
+            cur.executemany("""
                 INSERT INTO cid_catalogo (co_cid, no_cid)
                 VALUES (%s, %s)
                 ON CONFLICT (co_cid)
                 DO UPDATE SET no_cid = EXCLUDED.no_cid;
-            """, (codigo, nome))
+            """, lote)
 
-            processados += 1
+            processados += len(lote)
 
         conn.commit()
         cur.close()
 
-        print("CID importados:", processados, "ignorados:", ignorados)
-
         return processados, ignorados
+
+    except Exception:
+        conn.rollback()
+        raise
 
     finally:
         conn.close()
@@ -252,9 +320,13 @@ def importar_cep_ibge_txt(file_storage, chunk_size=50000):
     ignorados = 0
 
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
-        # Reimportação limpa
         cur.execute("TRUNCATE TABLE cep_ibge RESTART IDENTITY;")
         conn.commit()
 
@@ -291,7 +363,6 @@ def importar_cep_ibge_txt(file_storage, chunk_size=50000):
 
                 conn.commit()
                 processados += len(lote)
-                print("CEP/IBGE lote importado:", processados)
                 lote.clear()
 
         if lote:
@@ -305,11 +376,16 @@ def importar_cep_ibge_txt(file_storage, chunk_size=50000):
             processados += len(lote)
 
         cur.close()
-        print("CEP/IBGE importados:", processados, "ignorados:", ignorados)
+
         return processados, ignorados
+
+    except Exception:
+        conn.rollback()
+        raise
 
     finally:
         conn.close()
+
 
 # ============================================================
 # ROTA CBO
@@ -317,6 +393,7 @@ def importar_cep_ibge_txt(file_storage, chunk_size=50000):
 
 @admin_bp.route("/cbo", methods=["GET", "POST"])
 @admin_required
+@require_permission("admin_cbo", "ver")
 def biblioteca_cbo():
     ensure_bibliotecas_postgres()
 
@@ -329,8 +406,29 @@ def biblioteca_cbo():
 
         try:
             p, i = importar_cbo_xlsx(arquivo)
+
+            registrar_log(
+                modulo="admin_cbo",
+                acao="importar",
+                entidade="ocupacoes",
+                descricao="Importou biblioteca CBO.",
+                detalhes={
+                    "arquivo": _filename(arquivo),
+                    "processados": p,
+                    "ignorados": i,
+                },
+            )
+
             flash(f"CBO importado com sucesso: {p} registros. Ignorados: {i}.", "success")
+
         except Exception as e:
+            log_erro(
+                "admin_cbo",
+                e,
+                entidade="ocupacoes",
+                descricao="Erro ao importar CBO.",
+                detalhes={"arquivo": _filename(arquivo)},
+            )
             flash(f"Erro ao importar CBO: {e}", "error")
 
         return redirect(url_for("admin.biblioteca_cbo"))
@@ -339,7 +437,13 @@ def biblioteca_cbo():
     itens = []
 
     conn = conectar_db()
+
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         if q:
@@ -374,19 +478,23 @@ def biblioteca_cbo():
 
         cur.close()
 
+        registrar_log(
+            modulo="admin_cbo",
+            acao="visualizar",
+            entidade="ocupacoes",
+            descricao="Visualizou biblioteca CBO.",
+            detalhes={"q": q, "total_exibido": len(itens)},
+        )
+
     except Exception as e:
         conn.rollback()
+        log_erro("admin_cbo", e, entidade="ocupacoes", descricao="Erro ao carregar CBOs.", detalhes={"q": q})
         flash(f"Erro ao carregar CBOs: {e}", "error")
 
     finally:
         conn.close()
 
-    return render_template(
-        "cbo.html",
-        titulo="Biblioteca CBO",
-        q=q,
-        itens=itens,
-    )
+    return render_template("cbo.html", titulo="Biblioteca CBO", q=q, itens=itens)
 
 
 # ============================================================
@@ -395,6 +503,7 @@ def biblioteca_cbo():
 
 @admin_bp.route("/cid", methods=["GET", "POST"])
 @admin_required
+@require_permission("admin_cid", "ver")
 def biblioteca_cid():
     ensure_bibliotecas_postgres()
 
@@ -407,8 +516,29 @@ def biblioteca_cid():
 
         try:
             p, i = importar_cid_xlsx(arquivo)
+
+            registrar_log(
+                modulo="admin_cid",
+                acao="importar",
+                entidade="cid_catalogo",
+                descricao="Importou biblioteca CID.",
+                detalhes={
+                    "arquivo": _filename(arquivo),
+                    "processados": p,
+                    "ignorados": i,
+                },
+            )
+
             flash(f"CID importado com sucesso: {p} registros. Ignorados: {i}.", "success")
+
         except Exception as e:
+            log_erro(
+                "admin_cid",
+                e,
+                entidade="cid_catalogo",
+                descricao="Erro ao importar CID.",
+                detalhes={"arquivo": _filename(arquivo)},
+            )
             flash(f"Erro ao importar CID: {e}", "error")
 
         return redirect(url_for("admin.biblioteca_cid"))
@@ -424,7 +554,13 @@ def biblioteca_cid():
     total = 0
 
     conn = conectar_db()
+
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         if q:
@@ -451,11 +587,7 @@ def biblioteca_cid():
             """, (like, like, por_pagina, offset))
 
         else:
-            cur.execute("""
-                SELECT COUNT(*) AS total
-                FROM cid_catalogo;
-            """)
-
+            cur.execute("SELECT COUNT(*) AS total FROM cid_catalogo;")
             total = int(_val(cur.fetchone(), "total", 0, 0) or 0)
 
             cur.execute("""
@@ -477,8 +609,22 @@ def biblioteca_cid():
 
         cur.close()
 
+        registrar_log(
+            modulo="admin_cid",
+            acao="visualizar",
+            entidade="cid_catalogo",
+            descricao="Visualizou biblioteca CID.",
+            detalhes={
+                "q": q,
+                "pagina": pagina,
+                "total": total,
+                "total_exibido": len(itens),
+            },
+        )
+
     except Exception as e:
         conn.rollback()
+        log_erro("admin_cid", e, entidade="cid_catalogo", descricao="Erro ao carregar CIDs.", detalhes={"q": q})
         flash(f"Erro ao carregar CIDs: {e}", "error")
 
     finally:
@@ -507,6 +653,7 @@ def biblioteca_cid():
 
 @admin_bp.route("/cep-ibge", methods=["GET", "POST"])
 @admin_required
+@require_permission("admin_cep_ibge", "ver")
 def biblioteca_cep_ibge():
     ensure_bibliotecas_postgres()
 
@@ -519,8 +666,29 @@ def biblioteca_cep_ibge():
 
         try:
             p, i = importar_cep_ibge_txt(arquivo)
+
+            registrar_log(
+                modulo="admin_cep_ibge",
+                acao="importar",
+                entidade="cep_ibge",
+                descricao="Importou biblioteca CEP/IBGE.",
+                detalhes={
+                    "arquivo": _filename(arquivo),
+                    "processados": p,
+                    "ignorados": i,
+                },
+            )
+
             flash(f"CEP/IBGE importado com sucesso: {p} registros. Ignorados: {i}.", "success")
+
         except Exception as e:
+            log_erro(
+                "admin_cep_ibge",
+                e,
+                entidade="cep_ibge",
+                descricao="Erro ao importar CEP/IBGE.",
+                detalhes={"arquivo": _filename(arquivo)},
+            )
             flash(f"Erro ao importar CEP/IBGE: {e}", "error")
 
         return redirect(url_for("admin.biblioteca_cep_ibge"))
@@ -536,7 +704,13 @@ def biblioteca_cep_ibge():
     total = 0
 
     conn = conectar_db()
+
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         if q:
@@ -603,8 +777,22 @@ def biblioteca_cep_ibge():
 
         cur.close()
 
+        registrar_log(
+            modulo="admin_cep_ibge",
+            acao="visualizar",
+            entidade="cep_ibge",
+            descricao="Visualizou biblioteca CEP/IBGE.",
+            detalhes={
+                "q": q,
+                "pagina": pagina,
+                "total": total,
+                "total_exibido": len(itens),
+            },
+        )
+
     except Exception as e:
         conn.rollback()
+        log_erro("admin_cep_ibge", e, entidade="cep_ibge", descricao="Erro ao carregar CEP/IBGE.", detalhes={"q": q})
         flash(f"Erro ao carregar CEP/IBGE: {e}", "error")
 
     finally:

@@ -1,0 +1,1092 @@
+{% extends "layout.html" %}
+
+{% block title %}Timbre da Clínica{% endblock %}
+
+{% block content %}
+
+<section class="timbre-page">
+
+  <div class="page-header">
+    <div>
+      <span class="eyebrow">Identidade visual</span>
+      <h1>Timbre da Clínica</h1>
+      <p>Configure cabeçalho, marca d’água, rodapé e aparência da folha A4.</p>
+    </div>
+
+    <div class="header-actions">
+      <a class="btn-secondary" href="{{ url_for('clinica_config.index', clinica_id=clinica.id if clinica else clinica_id) }}">
+        Voltar para matriz
+      </a>
+    </div>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="flash-wrap">
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST"
+        enctype="multipart/form-data"
+        id="formTimbre"
+        action="{{ url_for('clinica_config.timbre', clinica_id=clinica.id if clinica else clinica_id) }}">
+    <input type="hidden" name="clinica_id" value="{{ clinica.id if clinica else clinica_id }}">
+
+    <input type="hidden" name="cabecalho_texto" value="{{ config.cabecalho_texto or '' }}">
+    <input type="hidden" name="rodape_texto" value="{{ config.rodape_texto or '' }}">
+    <input type="hidden" name="cabecalho_altura" value="{{ config.cabecalho_altura or 130 }}">
+    <input type="hidden" name="rodape_altura" value="{{ config.rodape_altura or 115 }}">
+    <input type="hidden" name="cabecalho_alinhamento" value="{{ config.cabecalho_alinhamento or 'centro' }}">
+    <input type="hidden" name="rodape_alinhamento" value="{{ config.rodape_alinhamento or 'esquerda' }}">
+    <input type="hidden" name="margem_superior" value="{{ config.margem_superior or 20 }}">
+    <input type="hidden" name="margem_inferior" value="{{ config.margem_inferior or 20 }}">
+    <input type="hidden" name="margem_esquerda" value="{{ config.margem_esquerda or 20 }}">
+    <input type="hidden" name="margem_direita" value="{{ config.margem_direita or 20 }}">
+    <input type="hidden" name="cabecalho_mostrar_logo" value="on">
+    <input type="hidden" name="mostrar_linha_cabecalho" value="">
+    <input type="hidden" name="mostrar_linha_rodape" value="">
+    <input type="hidden" name="cor_listra_topo" id="corListraTopo" value="{{ config.cor_listra_topo or '#0f766e' }}">
+
+    <input hidden type="file" name="imagem_cabecalho" accept="image/png,image/jpeg,image/webp" data-file-preview="cabecalho">
+    <input hidden type="file" name="logo" accept="image/png,image/jpeg,image/webp" data-file-preview="marca">
+    <input hidden type="file" name="imagem_rodape" accept="image/png,image/jpeg,image/webp" data-file-preview="rodape1">
+    <input hidden type="file" name="rodape_img_2" accept="image/png,image/jpeg,image/webp" data-file-preview="rodape2">
+    <input hidden type="file" name="rodape_img_3" accept="image/png,image/jpeg,image/webp" data-file-preview="rodape3">
+
+    <input hidden type="color" id="colorPickerTopo" value="{{ config.cor_listra_topo or '#0f766e' }}">
+
+    <div class="editor-shell">
+
+      <aside class="side-panel">
+        <div class="panel-card">
+          <span class="panel-kicker">Editor visual</span>
+
+          <h2>
+            {{ clinica.nome if clinica else 'Clínica' }}
+          </h2>
+
+          <p class="panel-muted">
+            Ajuste o papel timbrado usado em relatórios, declarações e documentos.
+          </p>
+
+          <div class="measure-list">
+            <div><strong>Listra superior:</strong> 10px, cor editável ou transparente.</div>
+            <div><strong>Cabeçalho:</strong> recomendado 430 × 95 px.</div>
+            <div><strong>Marca d’água:</strong> PNG transparente recomendado.</div>
+            <div><strong>Rodapé:</strong> até 3 imagens pequenas.</div>
+            <div><strong>Texto:</strong> clique no rodapé para editar.</div>
+          </div>
+
+          <div class="color-actions">
+            <button type="button" class="btn-mini" id="btnEscolherCorTopo">
+              Escolher cor da listra
+            </button>
+
+            <button type="button" class="btn-mini ghost" id="btnListraTransparente">
+              Deixar transparente
+            </button>
+          </div>
+
+          <button type="button" class="btn-secondary full" id="btnAbrirPreview">
+            Ver A4 em tela cheia
+          </button>
+
+          <button type="submit" class="btn-primary full">
+            Salvar timbre
+          </button>
+
+          <span class="save-status" id="saveStatus">
+            Edição sincronizada
+          </span>
+        </div>
+
+        <details class="panel-card tools-card">
+          <summary>
+            <strong>Arquivos e opções</strong>
+            <span>⌄</span>
+          </summary>
+
+          <div class="tools-body">
+
+            <label>
+              Cabeçalho
+              <input type="file" accept="image/png,image/jpeg,image/webp" data-file-mirror="cabecalho">
+            </label>
+
+            <label>
+              Logo de fundo
+              <input type="file" accept="image/png,image/jpeg,image/webp" data-file-mirror="marca">
+            </label>
+
+            <label>
+              Imagem rodapé 1
+              <input type="file" accept="image/png,image/jpeg,image/webp" data-file-mirror="rodape1">
+            </label>
+
+            <label>
+              Imagem rodapé 2
+              <input type="file" accept="image/png,image/jpeg,image/webp" data-file-mirror="rodape2">
+            </label>
+
+            <label>
+              Imagem rodapé 3
+              <input type="file" accept="image/png,image/jpeg,image/webp" data-file-mirror="rodape3">
+            </label>
+
+            <label>
+              Cor da listra
+              <input type="color" id="colorMirrorTopo" value="{{ config.cor_listra_topo or '#0f766e' }}">
+            </label>
+
+            <label class="check-line">
+              <input type="checkbox" data-toggle-footer-img="1" checked>
+              Usar imagem 1 no rodapé
+            </label>
+
+            <label class="check-line">
+              <input type="checkbox" data-toggle-footer-img="2" checked>
+              Usar imagem 2 no rodapé
+            </label>
+
+            <label class="check-line">
+              <input type="checkbox" data-toggle-footer-img="3" checked>
+              Usar imagem 3 no rodapé
+            </label>
+
+          </div>
+        </details>
+      </aside>
+
+      <main class="a4-editor-area">
+        <div class="a4-scroll">
+          <div class="a4-page" id="a4Preview">
+
+            <button
+              type="button"
+              class="top-stripe"
+              id="topStripe"
+              title="Clique para escolher a cor da listra superior"
+            ></button>
+
+            <header class="a4-header">
+              <button type="button" class="image-box header-box" data-pick-image="cabecalho">
+                <img id="previewCabecalhoImg" alt="">
+                <span>
+                  Cabeçalho / Logo horizontal<br>
+                  <b>430 × 95 px</b>
+                </span>
+              </button>
+            </header>
+
+            <section class="a4-watermark">
+              <button type="button" class="image-box watermark-box" data-pick-image="marca">
+                <img id="previewMarcaImg" alt="">
+                <span>
+                  Logo de fundo / marca d’água<br>
+                  <b>600 × 600 px</b>
+                </span>
+              </button>
+            </section>
+
+            <main class="a4-body">
+              <div class="sample-content">
+                <h3>Área do relatório</h3>
+                <p>O conteúdo dos relatórios aparecerá nesta região.</p>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+            </main>
+
+            <footer class="a4-footer">
+
+              <div
+                class="footer-text"
+                id="previewRodapeTexto"
+                contenteditable="true"
+                data-edit-field="rodape_texto"
+                title="Clique para editar. Arraste pela direita para aumentar a largura."
+              >{{ config.rodape_texto or 'CNPJ: 00.000.000/0001-00 | CNES: 0000000\nEndereço da clínica.\nContato: telefone | e-mail' }}</div>
+
+              <div class="footer-images" id="footerImages">
+                <button type="button" class="image-box footer-img-box" data-pick-image="rodape1" data-footer-img="1">
+                  <img id="previewRodape1" alt="">
+                  <span>Imagem 1<br><b>130 × 55</b></span>
+                </button>
+
+                <button type="button" class="image-box footer-img-box" data-pick-image="rodape2" data-footer-img="2">
+                  <img id="previewRodape2" alt="">
+                  <span>Imagem 2<br><b>130 × 55</b></span>
+                </button>
+
+                <button type="button" class="image-box footer-img-box" data-pick-image="rodape3" data-footer-img="3">
+                  <img id="previewRodape3" alt="">
+                  <span>Imagem 3<br><b>130 × 55</b></span>
+                </button>
+              </div>
+
+            </footer>
+
+          </div>
+        </div>
+      </main>
+
+    </div>
+  </form>
+</section>
+
+<div class="preview-modal" id="previewModal">
+  <div class="preview-modal-backdrop" data-close-preview></div>
+
+  <div class="preview-modal-content">
+    <div class="preview-modal-top">
+      <strong>Prévia A4</strong>
+      <button type="button" data-close-preview>Fechar</button>
+    </div>
+
+    <div class="preview-modal-body">
+      <div id="previewModalA4"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+.timbre-page {
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(20,184,166,.18), transparent 34%),
+    linear-gradient(135deg, #f8fafc 0%, #eef6f6 100%);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: white;
+  border-radius: 28px;
+  padding: 28px;
+  margin-bottom: 22px;
+  box-shadow: 0 16px 35px rgba(15,118,110,.25);
+}
+
+.page-header h1 {
+  margin: 6px 0;
+  font-size: clamp(1.7rem, 4vw, 2.35rem);
+}
+
+.page-header p {
+  margin: 0;
+  opacity: .92;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  font-size: .75rem;
+  letter-spacing: .12em;
+  opacity: .85;
+  font-weight: 900;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.flash-wrap {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.flash {
+  padding: 13px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.flash.success {
+  color: #065f46;
+  background: rgba(16,185,129,.12);
+  border: 1px solid rgba(16,185,129,.22);
+}
+
+.flash.error {
+  color: #991b1b;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.22);
+}
+
+.editor-shell {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.side-panel {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.panel-card {
+  background: rgba(255,255,255,.96);
+  border-radius: 24px;
+  padding: 22px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 15px 35px rgba(15,23,42,.08);
+  display: grid;
+  gap: 14px;
+}
+
+.panel-kicker {
+  color: #0f766e;
+  font-size: .75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+.panel-card h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.panel-muted {
+  margin: 0;
+  color: #64748b;
+}
+
+.measure-list {
+  display: grid;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 14px;
+  border-radius: 18px;
+  color: #334155;
+  font-size: .9rem;
+}
+
+.color-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-mini {
+  border: none;
+  border-radius: 16px;
+  padding: 13px 18px;
+  font-weight: 900;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary {
+  background: #0f766e;
+  color: white;
+  box-shadow: 0 12px 24px rgba(15,118,110,.25);
+}
+
+.btn-secondary {
+  background: #e0f2f1;
+  color: #0f766e;
+}
+
+.page-header .btn-secondary {
+  background: rgba(255,255,255,.18);
+  color: white;
+  border: 1px solid rgba(255,255,255,.38);
+}
+
+.btn-mini {
+  background: #ecfeff;
+  color: #0f766e;
+  border: 1px solid #ccfbf1;
+}
+
+.btn-mini.ghost {
+  background: #fff;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+}
+
+.full {
+  width: 100%;
+}
+
+.save-status {
+  display: inline-flex;
+  justify-content: center;
+  color: #0f766e;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  padding: 9px 13px;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 900;
+}
+
+.tools-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tools-card summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  color: #0f172a;
+}
+
+.tools-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.tools-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 20px 20px;
+  border-top: 1px solid #eef2f7;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #334155;
+  font-weight: 800;
+}
+
+input {
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 11px 12px;
+  font-size: .92rem;
+  outline: none;
+  background: #f8fafc;
+}
+
+input[type="color"] {
+  min-height: 46px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 4px rgba(20,184,166,.15);
+  background: #fff;
+}
+
+.check-line {
+  flex-direction: row;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 11px 12px;
+}
+
+.check-line input {
+  width: auto;
+}
+
+.a4-scroll {
+  background: #cbd5e1;
+  border-radius: 28px;
+  padding: 28px;
+  overflow: auto;
+  max-height: calc(100vh - 40px);
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,.12);
+}
+
+.a4-page {
+  width: 794px;
+  min-height: 1123px;
+  background: white;
+  margin: 0 auto;
+  box-shadow: 0 24px 70px rgba(15,23,42,.28);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: #0f766e;
+  z-index: 10;
+}
+
+.top-stripe.is-transparent {
+  background:
+    linear-gradient(45deg, rgba(148,163,184,.28) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(148,163,184,.28) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(148,163,184,.28) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(148,163,184,.28) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+
+.a4-header {
+  height: 150px;
+  display: grid;
+  place-items: center;
+  padding-top: 18px;
+  position: relative;
+  z-index: 3;
+}
+
+.image-box {
+  border: 2px dashed rgba(15,118,110,.45);
+  background: rgba(240,253,250,.78);
+  color: #0f766e;
+  border-radius: 18px;
+  cursor: pointer;
+  font-weight: 900;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.image-box:hover {
+  background: rgba(204,251,241,.95);
+}
+
+.image-box img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+}
+
+.image-box.has-img {
+  border-color: transparent;
+  background: transparent;
+}
+
+.image-box.has-img img {
+  display: block;
+}
+
+.image-box.has-img span {
+  display: none;
+}
+
+.header-box {
+  width: 430px;
+  height: 95px;
+}
+
+.a4-watermark {
+  position: absolute;
+  inset: 245px 0 auto;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+}
+
+.watermark-box {
+  width: 600px;
+  height: 600px;
+  opacity: .16;
+}
+
+.watermark-box:hover,
+.watermark-box:focus {
+  opacity: .35;
+}
+
+.a4-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 760px;
+  padding: 80px 70px 130px;
+}
+
+.sample-content {
+  opacity: .28;
+  border: 1px dashed #94a3b8;
+  border-radius: 18px;
+  padding: 22px;
+  color: #334155;
+}
+
+.sample-content h3 {
+  margin: 0 0 8px;
+}
+
+.sample-content p {
+  margin: 0 0 20px;
+}
+
+.sample-content div {
+  height: 12px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  margin: 12px 0;
+}
+
+.sample-content div:nth-child(4) {
+  width: 78%;
+}
+
+.sample-content div:nth-child(5) {
+  width: 58%;
+}
+
+.a4-footer {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 26px;
+  height: 92px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  z-index: 4;
+}
+
+.footer-text {
+  width: 395px;
+  max-width: 100%;
+  min-width: 260px;
+  min-height: 62px;
+  max-height: 86px;
+  resize: horizontal;
+  overflow: auto;
+  font-size: .78rem;
+  line-height: 1.35;
+  color: #0f172a;
+  white-space: pre-line;
+  border-radius: 10px;
+  padding: 6px 10px 6px 6px;
+  background: rgba(255,255,255,.72);
+  border-right: 3px solid rgba(15,118,110,.35);
+}
+
+.footer-images {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+.footer-images.is-empty {
+  display: none;
+}
+
+.footer-img-box {
+  width: 130px;
+  height: 55px;
+  border-radius: 10px;
+  font-size: .65rem;
+  flex: 0 0 auto;
+}
+
+.footer-img-box.is-hidden {
+  display: none;
+}
+
+[contenteditable="true"] {
+  outline: 1.5px dashed transparent;
+  transition: .2s ease;
+}
+
+[contenteditable="true"]:hover {
+  outline-color: rgba(20,184,166,.45);
+  background: rgba(240,253,250,.75);
+}
+
+[contenteditable="true"]:focus {
+  outline-color: #14b8a6;
+  background: #ecfeff;
+}
+
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+}
+
+.preview-modal.open {
+  display: block;
+}
+
+.preview-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15,23,42,.62);
+  backdrop-filter: blur(4px);
+}
+
+.preview-modal-content {
+  position: relative;
+  width: min(1000px, calc(100vw - 28px));
+  height: min(94vh, 920px);
+  margin: 3vh auto;
+  background: #f8fafc;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 25px 80px rgba(0,0,0,.35);
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-modal-top {
+  background: white;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-modal-top button {
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: #0f766e;
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.preview-modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 26px;
+  background: #cbd5e1;
+  display: grid;
+  place-items: start center;
+}
+
+@media (max-width: 1200px) {
+  .editor-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    position: static;
+  }
+
+  .a4-scroll {
+    max-height: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .timbre-page {
+    padding: 14px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 22px;
+    padding: 20px;
+  }
+
+  .header-actions .btn-secondary {
+    width: 100%;
+  }
+
+  .a4-page {
+    transform: scale(.72);
+    transform-origin: top center;
+    margin-bottom: -310px;
+  }
+
+  .a4-scroll {
+    padding: 18px;
+  }
+}
+</style>
+
+<script>
+(() => {
+  "use strict";
+
+  const form = document.getElementById("formTimbre");
+  const saveStatus = document.getElementById("saveStatus");
+  const footerImages = document.getElementById("footerImages");
+
+  const topStripe = document.getElementById("topStripe");
+  const colorPickerTopo = document.getElementById("colorPickerTopo");
+  const colorMirrorTopo = document.getElementById("colorMirrorTopo");
+  const corListraTopo = document.getElementById("corListraTopo");
+  const btnEscolherCorTopo = document.getElementById("btnEscolherCorTopo");
+  const btnListraTransparente = document.getElementById("btnListraTransparente");
+
+  const savedImages = {
+    cabecalho: "{{ config.cabecalho_img_path or '' }}",
+    marca: "{{ config.logo_path or '' }}",
+    rodape1: "{{ config.rodape_img_path or '' }}",
+    rodape2: "{{ config.rodape_img_2_path or '' }}",
+    rodape3: "{{ config.rodape_img_3_path or '' }}"
+  };
+
+  const localImages = {
+    cabecalho: "",
+    marca: "",
+    rodape1: "",
+    rodape2: "",
+    rodape3: ""
+  };
+
+  const imageTargets = {
+    cabecalho: document.getElementById("previewCabecalhoImg"),
+    marca: document.getElementById("previewMarcaImg"),
+    rodape1: document.getElementById("previewRodape1"),
+    rodape2: document.getElementById("previewRodape2"),
+    rodape3: document.getElementById("previewRodape3")
+  };
+
+  function getField(name) {
+    return form.elements[name];
+  }
+
+  function setField(name, value) {
+    const field = getField(name);
+    if (!field) return;
+    field.value = value;
+  }
+
+  function markEditing() {
+    if (!saveStatus) return;
+
+    saveStatus.textContent = "Alterações prontas para salvar";
+    saveStatus.style.color = "#92400e";
+    saveStatus.style.background = "#fffbeb";
+    saveStatus.style.borderColor = "#fde68a";
+
+    clearTimeout(markEditing.timer);
+
+    markEditing.timer = setTimeout(() => {
+      saveStatus.textContent = "Edição sincronizada";
+      saveStatus.style.color = "#0f766e";
+      saveStatus.style.background = "#ecfdf5";
+      saveStatus.style.borderColor = "#bbf7d0";
+    }, 900);
+  }
+
+  function setTopStripeColor(value) {
+    if (!topStripe || !corListraTopo) return;
+
+    corListraTopo.value = value;
+
+    if (value === "transparent") {
+      topStripe.classList.add("is-transparent");
+      topStripe.style.backgroundColor = "transparent";
+    } else {
+      topStripe.classList.remove("is-transparent");
+      topStripe.style.background = value;
+
+      if (colorPickerTopo) colorPickerTopo.value = value;
+      if (colorMirrorTopo) colorMirrorTopo.value = value;
+    }
+
+    markEditing();
+  }
+
+  function applyImage(tipo) {
+    const img = imageTargets[tipo];
+    if (!img) return;
+
+    const src = localImages[tipo] || savedImages[tipo] || "";
+    const box = img.closest(".image-box");
+
+    if (src) {
+      img.src = src;
+      box.classList.add("has-img");
+    } else {
+      img.removeAttribute("src");
+      box.classList.remove("has-img");
+    }
+  }
+
+  function handleFile(input, tipo) {
+    const file = input.files && input.files[0];
+
+    if (!file || !file.type.startsWith("image/")) return;
+
+    if (localImages[tipo]) {
+      URL.revokeObjectURL(localImages[tipo]);
+    }
+
+    localImages[tipo] = URL.createObjectURL(file);
+
+    applyImage(tipo);
+    markEditing();
+  }
+
+  function updateFooterImagesVisibility() {
+    const boxes = Array.from(document.querySelectorAll("[data-footer-img]"));
+    let visible = 0;
+
+    boxes.forEach((box) => {
+      if (!box.classList.contains("is-hidden")) visible += 1;
+    });
+
+    footerImages?.classList.toggle("is-empty", visible === 0);
+    markEditing();
+  }
+
+  topStripe?.addEventListener("click", () => {
+    colorPickerTopo?.click();
+  });
+
+  btnEscolherCorTopo?.addEventListener("click", () => {
+    colorPickerTopo?.click();
+  });
+
+  btnListraTransparente?.addEventListener("click", () => {
+    setTopStripeColor("transparent");
+  });
+
+  colorPickerTopo?.addEventListener("input", () => {
+    setTopStripeColor(colorPickerTopo.value);
+  });
+
+  colorMirrorTopo?.addEventListener("input", () => {
+    setTopStripeColor(colorMirrorTopo.value);
+  });
+
+  document.querySelectorAll("[data-pick-image]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tipo = btn.dataset.pickImage;
+      const input = document.querySelector(`[data-file-preview="${tipo}"]`);
+
+      if (input) input.click();
+    });
+  });
+
+  document.querySelectorAll("[data-file-preview]").forEach((input) => {
+    input.addEventListener("change", () => {
+      handleFile(input, input.dataset.filePreview);
+    });
+  });
+
+  document.querySelectorAll("[data-file-mirror]").forEach((mirror) => {
+    mirror.addEventListener("change", () => {
+      const tipo = mirror.dataset.fileMirror;
+      const realInput = document.querySelector(`[data-file-preview="${tipo}"]`);
+
+      if (!realInput) return;
+
+      realInput.files = mirror.files;
+
+      handleFile(realInput, tipo);
+    });
+  });
+
+  document.querySelectorAll("[data-edit-field]").forEach((editable) => {
+    editable.addEventListener("input", () => {
+      setField(editable.dataset.editField, editable.innerText.trim());
+      markEditing();
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-footer-img]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const n = checkbox.dataset.toggleFooterImg;
+      const box = document.querySelector(`[data-footer-img="${n}"]`);
+
+      if (!box) return;
+
+      box.classList.toggle("is-hidden", !checkbox.checked);
+
+      updateFooterImagesVisibility();
+    });
+  });
+
+  const rodape = document.getElementById("previewRodapeTexto");
+
+  if (rodape) {
+    setField("rodape_texto", rodape.innerText.trim());
+
+    rodape.addEventListener("mouseup", markEditing);
+    rodape.addEventListener("keyup", markEditing);
+  }
+
+  form?.addEventListener("submit", () => {
+    if (rodape) {
+      setField("rodape_texto", rodape.innerText.trim());
+    }
+  });
+
+  Object.keys(imageTargets).forEach(applyImage);
+  updateFooterImagesVisibility();
+  setTopStripeColor(corListraTopo?.value || "#0f766e");
+
+  const modal = document.getElementById("previewModal");
+  const modalA4 = document.getElementById("previewModalA4");
+  const btnAbrirPreview = document.getElementById("btnAbrirPreview");
+  const a4 = document.getElementById("a4Preview");
+
+  btnAbrirPreview?.addEventListener("click", () => {
+    const clone = a4.cloneNode(true);
+
+    clone.querySelectorAll(".image-box").forEach((box) => {
+      box.disabled = true;
+      box.style.pointerEvents = "none";
+    });
+
+    clone.querySelectorAll("[contenteditable]").forEach((el) => {
+      el.removeAttribute("contenteditable");
+    });
+
+    const cloneFooterText = clone.querySelector(".footer-text");
+
+    if (cloneFooterText) {
+      cloneFooterText.style.resize = "none";
+      cloneFooterText.style.overflow = "hidden";
+    }
+
+    modalA4.innerHTML = "";
+    modalA4.appendChild(clone);
+
+    modal.classList.add("open");
+  });
+
+  document.querySelectorAll("[data-close-preview]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      modal.classList.remove("open");
+      modalA4.innerHTML = "";
+    });
+  });
+
+})();
+</script>
+
+{% endblock %}

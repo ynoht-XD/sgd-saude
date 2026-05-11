@@ -5,10 +5,11 @@ import json
 from datetime import datetime, date
 from typing import Any
 
-from flask import jsonify, render_template, request
+from flask import jsonify, render_template, request, session
 
 from db import conectar_db
 from . import financeiro_bp
+from admin.modulos import require_permission
 
 
 # ============================================================
@@ -54,6 +55,19 @@ def _today_iso() -> str:
 
 def _competencia_padrao() -> str:
     return date.today().strftime("%Y-%m")
+
+
+def _usuario_id_atual():
+    return session.get("user_id") or session.get("usuario_id")
+
+
+def _clinica_id_atual(default=1):
+    val = session.get("clinica_id") or session.get("clinic_id") or default
+
+    try:
+        return int(val) if val is not None else None
+    except Exception:
+        return default
 
 
 def _to_float(v, default=0.0) -> float:
@@ -190,6 +204,10 @@ def _list_columns(conn, table: str) -> set[str]:
         return set()
 
 
+def _has_col(conn, table: str, col: str) -> bool:
+    return col in _list_columns(conn, table)
+
+
 def _ensure_column(conn, table: str, column: str, ddl: str):
     if column in _list_columns(conn, table):
         return
@@ -199,8 +217,77 @@ def _ensure_column(conn, table: str, column: str, ddl: str):
             _execute(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
         else:
             _execute(conn, f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[FINANCEIRO][SCHEMA] coluna {table}.{column}: {e}")
+
+
+def _add_clinica_where(conn, table: str, alias: str, where: list[str], params: list, clinica_id=None):
+    clinica_id = clinica_id or _clinica_id_atual()
+
+    if not clinica_id:
+        return
+
+    if _has_col(conn, table, "clinica_id"):
+        where.append(f"{alias}.clinica_id = ?")
+        params.append(int(clinica_id))
+
+
+def _add_clinica_insert(conn, table: str, cols: list[str], vals: list):
+    if _has_col(conn, table, "clinica_id") and "clinica_id" not in cols:
+        cols.insert(0, "clinica_id")
+        vals.insert(0, _clinica_id_atual())
+
+    return cols, vals
+
+
+def _registrar_log(conn, acao: str, referencia_id=None, detalhes: str = "", sucesso: bool = True):
+    """
+    Log tolerante:
+    - Se tabela logs não existir, ignora.
+    - Se alguma coluna não existir, ignora só aquela coluna.
+    """
+
+    try:
+        if not _table_exists(conn, "logs"):
+            return
+
+        cols_logs = _list_columns(conn, "logs")
+
+        campos = []
+        valores = []
+        params = []
+
+        def add(campo, valor):
+            if campo in cols_logs:
+                campos.append(campo)
+                valores.append("?")
+                params.append(valor)
+
+        add("usuario_id", _usuario_id_atual())
+        add("clinica_id", _clinica_id_atual())
+        add("modulo", "financeiro")
+        add("acao", acao)
+        add("referencia_id", str(referencia_id or ""))
+        add("detalhes", detalhes or "")
+        add("sucesso", sucesso)
+
+        if "created_at" in cols_logs:
+            campos.append("created_at")
+            valores.append("CURRENT_TIMESTAMP")
+        elif "criado_em" in cols_logs:
+            campos.append("criado_em")
+            valores.append("CURRENT_TIMESTAMP")
+
+        if not campos:
+            return
+
+        _execute(conn, f"""
+            INSERT INTO logs ({", ".join(campos)})
+            VALUES ({", ".join(valores)})
+        """, params)
+
+    except Exception as e:
+        print(f"[FINANCEIRO][LOG] Falha ao registrar log: {e}")
 
 
 # ============================================================
@@ -215,14 +302,17 @@ def ensure_financeiro_schema():
             pk = "SERIAL PRIMARY KEY"
             money = "NUMERIC(12,2)"
             dt = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            clinica_col = "INTEGER"
         else:
             pk = "INTEGER PRIMARY KEY AUTOINCREMENT"
             money = "REAL"
             dt = "TEXT DEFAULT CURRENT_TIMESTAMP"
+            clinica_col = "INTEGER"
 
         _execute(conn, f"""
             CREATE TABLE IF NOT EXISTS financeiro_combos (
                 id {pk},
+                clinica_id {clinica_col},
                 nome TEXT NOT NULL,
                 descricao TEXT,
                 sessoes INTEGER NOT NULL DEFAULT 0,
@@ -236,6 +326,7 @@ def ensure_financeiro_schema():
         _execute(conn, f"""
             CREATE TABLE IF NOT EXISTS financeiro_paciente_planos (
                 id {pk},
+                clinica_id {clinica_col},
                 paciente_id INTEGER,
                 paciente_nome TEXT NOT NULL,
                 paciente_cpf TEXT,
@@ -264,6 +355,7 @@ def ensure_financeiro_schema():
         _execute(conn, f"""
             CREATE TABLE IF NOT EXISTS financeiro_lancamentos (
                 id {pk},
+                clinica_id {clinica_col},
                 paciente_id INTEGER,
                 plano_id INTEGER,
                 origem TEXT DEFAULT 'manual',
@@ -296,6 +388,11 @@ def ensure_financeiro_schema():
                 atualizado_em TEXT
             )
         """)
+
+        # Colunas obrigatórias de multi-clínica
+        _ensure_column(conn, "financeiro_combos", "clinica_id", "INTEGER")
+        _ensure_column(conn, "financeiro_paciente_planos", "clinica_id", "INTEGER")
+        _ensure_column(conn, "financeiro_lancamentos", "clinica_id", "INTEGER")
 
         extras_planos = {
             "paciente_cpf": "TEXT",
@@ -351,6 +448,10 @@ def ensure_financeiro_schema():
             _ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 1")
 
         indices = [
+            "CREATE INDEX IF NOT EXISTS idx_fin_combos_clinica ON financeiro_combos(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_planos_clinica ON financeiro_paciente_planos(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_lanc_clinica ON financeiro_lancamentos(clinica_id)",
+
             "CREATE INDEX IF NOT EXISTS idx_fin_lanc_tipo ON financeiro_lancamentos(tipo)",
             "CREATE INDEX IF NOT EXISTS idx_fin_lanc_status ON financeiro_lancamentos(status)",
             "CREATE INDEX IF NOT EXISTS idx_fin_lanc_categoria ON financeiro_lancamentos(categoria)",
@@ -365,8 +466,8 @@ def ensure_financeiro_schema():
         for sql in indices:
             try:
                 _execute(conn, sql)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[FINANCEIRO][INDEX] {e}")
 
         conn.commit()
 
@@ -386,8 +487,16 @@ ensure_financeiro_schema()
 # ============================================================
 
 @financeiro_bp.get("/")
+@require_permission("financeiro", "ver")
 def financeiro_index():
     ensure_financeiro_schema()
+
+    conn = _conn()
+    try:
+        _registrar_log(conn, "VISUALIZAR_FINANCEIRO", detalhes="Tela principal do financeiro.")
+        conn.commit()
+    finally:
+        conn.close()
 
     return render_template("financeiro.html", kpis={
         "saldo_caixa": 0.0,
@@ -398,8 +507,17 @@ def financeiro_index():
 
 
 @financeiro_bp.get("/comercial")
+@require_permission("financeiro", "ver")
 def comercial_index():
     ensure_financeiro_schema()
+
+    conn = _conn()
+    try:
+        _registrar_log(conn, "VISUALIZAR_COMERCIAL", detalhes="Tela comercial do financeiro.")
+        conn.commit()
+    finally:
+        conn.close()
+
     return render_template("comercial.html")
 
 
@@ -431,6 +549,10 @@ def _buscar_paciente_por_id(conn, paciente_id: int):
     elif "telefone1" in cols:
         telefone_expr = "COALESCE(telefone1, '')"
 
+    where = ["id = ?"]
+    params = [paciente_id]
+    _add_clinica_where(conn, "pacientes", "pacientes", where, params)
+
     cur = _execute(conn, f"""
         SELECT
             id,
@@ -440,14 +562,15 @@ def _buscar_paciente_por_id(conn, paciente_id: int):
             {nasc_expr} AS nascimento,
             {telefone_expr} AS telefone
         FROM pacientes
-        WHERE id = ?
+        WHERE {" AND ".join(where)}
         LIMIT 1
-    """, (paciente_id,))
+    """, params)
 
     return _fetchone_dict(cur)
 
 
 @financeiro_bp.get("/api/pacientes/buscar")
+@require_permission("financeiro", "ver")
 def api_buscar_pacientes():
     ensure_financeiro_schema()
 
@@ -471,7 +594,28 @@ def api_buscar_pacientes():
             else ("COALESCE(nascimento, '')" if "nascimento" in cols else "''")
         )
 
-        sql = f"""
+        where = ["1 = 1"]
+        params = []
+
+        _add_clinica_where(conn, "pacientes", "pacientes", where, params)
+
+        if q:
+            like = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
+            q_digits = _normalize_digits(q)
+
+            where.append(f"""
+                (
+                    COALESCE(nome, '') {like} ?
+                    OR REPLACE(REPLACE(REPLACE({cpf_expr}, '.', ''), '-', ''), ' ', '') {like} ?
+                    OR REPLACE(REPLACE(REPLACE({cns_expr}, '.', ''), '-', ''), ' ', '') {like} ?
+                )
+            """)
+
+            params += [f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"]
+
+        params.append(limit)
+
+        cur = _execute(conn, f"""
             SELECT
                 id,
                 COALESCE(nome, '') AS nome,
@@ -479,29 +623,10 @@ def api_buscar_pacientes():
                 {cns_expr} AS cns,
                 {nasc_expr} AS nascimento
             FROM pacientes
-            WHERE 1 = 1
-        """
-
-        params = []
-
-        if q:
-            like = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
-            q_digits = _normalize_digits(q)
-
-            sql += f"""
-                AND (
-                    COALESCE(nome, '') {like} ?
-                    OR REPLACE(REPLACE(REPLACE({cpf_expr}, '.', ''), '-', ''), ' ', '') {like} ?
-                    OR REPLACE(REPLACE(REPLACE({cns_expr}, '.', ''), '-', ''), ' ', '') {like} ?
-                )
-            """
-
-            params += [f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"]
-
-        sql += " ORDER BY COALESCE(nome, '') LIMIT ?"
-        params.append(limit)
-
-        cur = _execute(conn, sql, params)
+            WHERE {" AND ".join(where)}
+            ORDER BY COALESCE(nome, '')
+            LIMIT ?
+        """, params)
 
         return _ok(items=_fetchall_dict(cur))
 
@@ -513,6 +638,7 @@ def api_buscar_pacientes():
 
 
 @financeiro_bp.get("/api/pacientes-sem-vinculo")
+@require_permission("financeiro", "ver")
 def api_pacientes_sem_vinculo():
     ensure_financeiro_schema()
 
@@ -530,52 +656,81 @@ def api_pacientes_sem_vinculo():
         cpf_expr = "COALESCE(p.cpf, '')" if "cpf" in cols else "''"
         cns_expr = "COALESCE(p.cns, '')" if "cns" in cols else "''"
 
-        sql = f"""
-            SELECT
-                p.id,
-                COALESCE(p.nome, '') AS nome,
-                {cpf_expr} AS cpf,
-                {cns_expr} AS cns
-            FROM pacientes p
-            WHERE NOT EXISTS (
+        where = [
+            """
+            NOT EXISTS (
                 SELECT 1
                 FROM financeiro_paciente_planos pp
                 WHERE pp.paciente_id = p.id
                   AND COALESCE(pp.status, 'ativo') = 'ativo'
             )
-        """
-
+            """
+        ]
         params = []
+
+        _add_clinica_where(conn, "pacientes", "p", where, params)
+
+        if _has_col(conn, "financeiro_paciente_planos", "clinica_id"):
+            where[0] = """
+            NOT EXISTS (
+                SELECT 1
+                FROM financeiro_paciente_planos pp
+                WHERE pp.paciente_id = p.id
+                  AND pp.clinica_id = ?
+                  AND COALESCE(pp.status, 'ativo') = 'ativo'
+            )
+            """
+            params.insert(0, _clinica_id_atual())
 
         if apenas_com_atendimento and _table_exists(conn, "atendimentos"):
             atend_cols = _list_columns(conn, "atendimentos")
 
             if "paciente_id" in atend_cols:
-                sql += """
-                    AND EXISTS (
+                exists_at = """
+                    EXISTS (
                         SELECT 1
                         FROM atendimentos a
                         WHERE a.paciente_id = p.id
                     )
                 """
 
+                if "clinica_id" in atend_cols:
+                    exists_at = """
+                        EXISTS (
+                            SELECT 1
+                            FROM atendimentos a
+                            WHERE a.paciente_id = p.id
+                              AND a.clinica_id = ?
+                        )
+                    """
+                    params.append(_clinica_id_atual())
+
+                where.append(exists_at)
+
         if q:
             like = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
             q_digits = _normalize_digits(q)
 
-            sql += f"""
-                AND (
+            where.append(f"""
+                (
                     COALESCE(p.nome, '') {like} ?
                     OR REPLACE(REPLACE(REPLACE({cpf_expr}, '.', ''), '-', ''), ' ', '') {like} ?
                     OR REPLACE(REPLACE(REPLACE({cns_expr}, '.', ''), '-', ''), ' ', '') {like} ?
                 )
-            """
+            """)
 
             params += [f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"]
 
-        sql += " ORDER BY COALESCE(p.nome, '')"
-
-        cur = _execute(conn, sql, params)
+        cur = _execute(conn, f"""
+            SELECT
+                p.id,
+                COALESCE(p.nome, '') AS nome,
+                {cpf_expr} AS cpf,
+                {cns_expr} AS cns
+            FROM pacientes p
+            WHERE {" AND ".join(where)}
+            ORDER BY COALESCE(p.nome, '')
+        """, params)
 
         return _ok(items=_fetchall_dict(cur))
 
@@ -599,21 +754,20 @@ def _contar_atendimentos_vinculados(conn, plano_id: int) -> int:
     if "combo_plano_id" not in cols:
         return 0
 
-    if "contabiliza_sessao" in cols:
-        sql = """
-            SELECT COUNT(*) AS total
-            FROM atendimentos
-            WHERE combo_plano_id = ?
-              AND COALESCE(contabiliza_sessao, 1) = 1
-        """
-    else:
-        sql = """
-            SELECT COUNT(*) AS total
-            FROM atendimentos
-            WHERE combo_plano_id = ?
-        """
+    where = ["combo_plano_id = ?"]
+    params = [plano_id]
 
-    cur = _execute(conn, sql, (plano_id,))
+    if "contabiliza_sessao" in cols:
+        where.append("COALESCE(contabiliza_sessao, 1) = 1")
+
+    _add_clinica_where(conn, "atendimentos", "atendimentos", where, params)
+
+    cur = _execute(conn, f"""
+        SELECT COUNT(*) AS total
+        FROM atendimentos
+        WHERE {" AND ".join(where)}
+    """, params)
+
     row = _fetchone_dict(cur) or {}
 
     return _to_int(row.get("total"), 0)
@@ -633,7 +787,11 @@ def _enriquecer_plano(conn, item: dict[str, Any]) -> dict[str, Any]:
     item["sessoes_restantes"] = restantes
     item["percentual_usado"] = percentual
     item["acabou"] = contratadas > 0 and restantes <= 0
-    item["perto_de_acabar"] = contratadas > 0 and restantes <= max(2, round(contratadas * 0.2)) and restantes > 0
+    item["perto_de_acabar"] = (
+        contratadas > 0
+        and restantes <= max(2, round(contratadas * 0.2))
+        and restantes > 0
+    )
 
     return item
 
@@ -654,48 +812,63 @@ def _gerar_lancamento_plano(
     data_mov = data_inicio or _today_iso()
     competencia = str(data_mov)[:7]
 
-    _execute(conn, """
-        INSERT INTO financeiro_lancamentos (
-            paciente_id,
-            plano_id,
-            origem,
-            referencia_tipo,
-            referencia_id,
-            tipo,
-            categoria,
-            subcategoria,
-            descricao,
-            valor,
-            status,
-            forma_pagamento,
-            parcela_numero,
-            parcelas_total,
-            vencimento,
-            data_movimento,
-            competencia,
-            cliente_nome,
-            criado_em,
-            atualizado_em
-        ) VALUES (?, ?, 'plano', 'plano', ?, 'entrada',
-                  'Serviços clínicos', 'Combo/Plano', ?, ?,
-                  'pendente', ?, 1, 1, ?, ?, ?, ?, ?, ?)
-    """, (
+    cols = [
+        "paciente_id",
+        "plano_id",
+        "origem",
+        "referencia_tipo",
+        "referencia_id",
+        "tipo",
+        "categoria",
+        "subcategoria",
+        "descricao",
+        "valor",
+        "status",
+        "forma_pagamento",
+        "parcela_numero",
+        "parcelas_total",
+        "vencimento",
+        "data_movimento",
+        "competencia",
+        "cliente_nome",
+        "criado_em",
+        "atualizado_em",
+    ]
+
+    vals = [
         paciente_id,
         plano_id,
+        "plano",
+        "plano",
         plano_id,
+        "entrada",
+        "Serviços clínicos",
+        "Combo/Plano",
         descricao,
         valor_total,
+        "pendente",
         forma_pagamento,
+        1,
+        1,
         data_mov,
         data_mov,
         competencia,
         paciente_nome,
         _now_iso(),
         _now_iso(),
-    ))
+    ]
+
+    cols, vals = _add_clinica_insert(conn, "financeiro_lancamentos", cols, vals)
+
+    _execute(conn, f"""
+        INSERT INTO financeiro_lancamentos (
+            {", ".join(cols)}
+        ) VALUES ({", ".join(["?"] * len(cols))})
+    """, vals)
 
 
 @financeiro_bp.get("/api/pacientes-planos")
+@require_permission("financeiro", "ver")
 def api_listar_pacientes_planos():
     ensure_financeiro_schema()
 
@@ -707,46 +880,54 @@ def api_listar_pacientes_planos():
     paciente_id = request.args.get("paciente_id")
 
     try:
-        sql = """
-            SELECT *
-            FROM financeiro_paciente_planos
-            WHERE 1 = 1
-        """
-
+        where = ["1 = 1"]
         params = []
+
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
 
         if q:
             like = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
             q_digits = _normalize_digits(q)
 
-            sql += f"""
-                AND (
+            where.append(f"""
+                (
                     COALESCE(paciente_nome, '') {like} ?
                     OR COALESCE(combo_nome, '') {like} ?
                     OR COALESCE(nome_plano, '') {like} ?
                     OR REPLACE(REPLACE(REPLACE(COALESCE(paciente_cpf, ''), '.', ''), '-', ''), ' ', '') {like} ?
                     OR REPLACE(REPLACE(REPLACE(COALESCE(paciente_cns, ''), '.', ''), '-', ''), ' ', '') {like} ?
                 )
-            """
+            """)
 
             params += [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"]
 
         if status:
-            sql += " AND status = ?"
+            where.append("status = ?")
             params.append(status)
 
         if tipo:
-            sql += " AND tipo = ?"
+            where.append("tipo = ?")
             params.append(tipo)
 
         if paciente_id:
-            sql += " AND paciente_id = ?"
+            where.append("paciente_id = ?")
             params.append(_to_int(paciente_id))
 
-        sql += " ORDER BY criado_em DESC, id DESC"
+        cur = _execute(conn, f"""
+            SELECT *
+            FROM financeiro_paciente_planos
+            WHERE {" AND ".join(where)}
+            ORDER BY criado_em DESC, id DESC
+        """, params)
 
-        cur = _execute(conn, sql, params)
         items = [_enriquecer_plano(conn, row) for row in _fetchall_dict(cur)]
+
+        _registrar_log(
+            conn,
+            "LISTAR_PLANOS_PACIENTES",
+            detalhes=f"q={q}; status={status}; tipo={tipo}; paciente_id={paciente_id}",
+        )
+        conn.commit()
 
         return _ok(items=items)
 
@@ -758,32 +939,51 @@ def api_listar_pacientes_planos():
 
 
 @financeiro_bp.get("/api/pacientes-planos/<int:plano_id>")
+@require_permission("financeiro", "ver")
 def api_obter_paciente_plano(plano_id: int):
     ensure_financeiro_schema()
 
     conn = _conn()
 
     try:
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [plano_id]
+
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_paciente_planos
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
             LIMIT 1
-        """, (plano_id,))
+        """, params)
 
         item = _fetchone_dict(cur)
 
         if not item:
-            return _fail("Plano não encontrado.", 404)
+            return _fail("Plano não encontrado para esta clínica.", 404)
 
         item = _enriquecer_plano(conn, item)
 
-        cur = _execute(conn, """
+        lanc_where = ["plano_id = ?"]
+        lanc_params = [plano_id]
+
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", lanc_where, lanc_params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_lancamentos
-            WHERE plano_id = ?
+            WHERE {" AND ".join(lanc_where)}
             ORDER BY parcela_numero ASC, vencimento ASC, id ASC
-        """, (plano_id,))
+        """, lanc_params)
+
+        _registrar_log(
+            conn,
+            "OBTER_PLANO_PACIENTE",
+            referencia_id=plano_id,
+            detalhes=f"Plano visualizado. id={plano_id}",
+        )
+        conn.commit()
 
         return _ok(
             item=item,
@@ -795,9 +995,8 @@ def api_obter_paciente_plano(plano_id: int):
 
     finally:
         conn.close()
-
-
 @financeiro_bp.post("/api/pacientes-planos")
+@require_permission("financeiro", "editar")
 def api_criar_paciente_plano():
     ensure_financeiro_schema()
 
@@ -835,7 +1034,7 @@ def api_criar_paciente_plano():
         paciente = _buscar_paciente_por_id(conn, paciente_id)
 
         if not paciente:
-            return _fail("Paciente não encontrado.", 404)
+            return _fail("Paciente não encontrado para esta clínica.", 404)
 
         paciente_nome = paciente.get("nome") or ""
         paciente_cpf = paciente.get("cpf") or ""
@@ -844,17 +1043,21 @@ def api_criar_paciente_plano():
         combo_nome = None
 
         if tipo == "combo":
-            cur = _execute(conn, """
+            where_combo = ["id = ?"]
+            params_combo = [combo_id]
+            _add_clinica_where(conn, "financeiro_combos", "financeiro_combos", where_combo, params_combo)
+
+            cur = _execute(conn, f"""
                 SELECT *
                 FROM financeiro_combos
-                WHERE id = ?
+                WHERE {" AND ".join(where_combo)}
                 LIMIT 1
-            """, (combo_id,))
+            """, params_combo)
 
             combo = _fetchone_dict(cur)
 
             if not combo:
-                return _fail("Combo não encontrado.", 404)
+                return _fail("Combo não encontrado para esta clínica.", 404)
 
             combo_nome = combo.get("nome")
 
@@ -867,108 +1070,74 @@ def api_criar_paciente_plano():
         if tipo == "plano" and not nome_plano:
             nome_plano = "Particular"
 
+        cols = [
+            "paciente_id",
+            "paciente_nome",
+            "paciente_cpf",
+            "paciente_cns",
+            "tipo",
+            "combo_id",
+            "combo_nome",
+            "nome_plano",
+            "descricao",
+            "sessoes_contratadas",
+            "sessoes_usadas",
+            "valor_total",
+            "recorrente",
+            "renovacao_automatica",
+            "frequencia",
+            "forma_pagamento",
+            "observacoes",
+            "data_inicio",
+            "data_fim",
+            "status",
+            "criado_em",
+            "atualizado_em",
+        ]
+
+        vals = [
+            paciente_id,
+            paciente_nome,
+            paciente_cpf,
+            paciente_cns,
+            tipo,
+            combo_id,
+            combo_nome,
+            nome_plano,
+            descricao,
+            sessoes_contratadas,
+            0,
+            valor_total,
+            recorrente,
+            renovacao_automatica,
+            frequencia,
+            forma_pagamento,
+            observacoes,
+            data_inicio,
+            data_fim,
+            status,
+            _now_iso(),
+            _now_iso(),
+        ]
+
+        cols, vals = _add_clinica_insert(conn, "financeiro_paciente_planos", cols, vals)
+
         if _is_postgres_conn(conn):
-            cur = _execute(conn, """
+            cur = _execute(conn, f"""
                 INSERT INTO financeiro_paciente_planos (
-                    paciente_id,
-                    paciente_nome,
-                    paciente_cpf,
-                    paciente_cns,
-                    tipo,
-                    combo_id,
-                    combo_nome,
-                    nome_plano,
-                    descricao,
-                    sessoes_contratadas,
-                    sessoes_usadas,
-                    valor_total,
-                    recorrente,
-                    renovacao_automatica,
-                    frequencia,
-                    forma_pagamento,
-                    observacoes,
-                    data_inicio,
-                    data_fim,
-                    status,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    {", ".join(cols)}
+                ) VALUES ({", ".join(["?"] * len(cols))})
                 RETURNING id
-            """, (
-                paciente_id,
-                paciente_nome,
-                paciente_cpf,
-                paciente_cns,
-                tipo,
-                combo_id,
-                combo_nome,
-                nome_plano,
-                descricao,
-                sessoes_contratadas,
-                valor_total,
-                recorrente,
-                renovacao_automatica,
-                frequencia,
-                forma_pagamento,
-                observacoes,
-                data_inicio,
-                data_fim,
-                status,
-                _now_iso(),
-                _now_iso(),
-            ))
+            """, vals)
 
             plano_id = _fetchone_dict(cur)["id"]
 
         else:
-            cur = _execute(conn, """
+            cur = _execute(conn, f"""
                 INSERT INTO financeiro_paciente_planos (
-                    paciente_id,
-                    paciente_nome,
-                    paciente_cpf,
-                    paciente_cns,
-                    tipo,
-                    combo_id,
-                    combo_nome,
-                    nome_plano,
-                    descricao,
-                    sessoes_contratadas,
-                    sessoes_usadas,
-                    valor_total,
-                    recorrente,
-                    renovacao_automatica,
-                    frequencia,
-                    forma_pagamento,
-                    observacoes,
-                    data_inicio,
-                    data_fim,
-                    status,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                paciente_id,
-                paciente_nome,
-                paciente_cpf,
-                paciente_cns,
-                tipo,
-                combo_id,
-                combo_nome,
-                nome_plano,
-                descricao,
-                sessoes_contratadas,
-                valor_total,
-                recorrente,
-                renovacao_automatica,
-                frequencia,
-                forma_pagamento,
-                observacoes,
-                data_inicio,
-                data_fim,
-                status,
-                _now_iso(),
-                _now_iso(),
-            ))
+                    {", ".join(cols)}
+                ) VALUES ({", ".join(["?"] * len(cols))})
+            """, vals)
 
             plano_id = cur.lastrowid
 
@@ -986,13 +1155,24 @@ def api_criar_paciente_plano():
             descricao=desc_fin,
         )
 
+        _registrar_log(
+            conn,
+            "CRIAR_PLANO_PACIENTE",
+            referencia_id=plano_id,
+            detalhes=f"Plano/combo vinculado. paciente_id={paciente_id}; tipo={tipo}; valor={valor_total}",
+        )
+
         conn.commit()
 
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [plano_id]
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_paciente_planos
-            WHERE id = ?
-        """, (plano_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_enriquecer_plano(conn, _fetchone_dict(cur)),
@@ -1012,6 +1192,7 @@ def api_criar_paciente_plano():
 # ============================================================
 
 @financeiro_bp.get("/api/lancamentos")
+@require_permission("financeiro", "ver")
 def api_listar_lancamentos():
     ensure_financeiro_schema()
 
@@ -1039,6 +1220,8 @@ def api_listar_lancamentos():
     try:
         where = ["1 = 1"]
         params = []
+
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
 
         if tipo in ("entrada", "saida"):
             where.append("tipo = ?")
@@ -1097,6 +1280,13 @@ def api_listar_lancamentos():
             LIMIT ? OFFSET ?
         """, params + [per_page, offset])
 
+        _registrar_log(
+            conn,
+            "LISTAR_LANCAMENTOS",
+            detalhes=f"tipo={tipo}; status={status}; categoria={categoria}; competencia={competencia}; q={q}",
+        )
+        conn.commit()
+
         return _ok(
             items=_fetchall_dict(cur),
             total=total,
@@ -1110,7 +1300,9 @@ def api_listar_lancamentos():
     finally:
         conn.close()
 
+
 @financeiro_bp.post("/api/lancamentos")
+@require_permission("financeiro", "editar")
 def api_criar_lancamento():
     ensure_financeiro_schema()
 
@@ -1158,126 +1350,99 @@ def api_criar_lancamento():
     conn = _conn()
 
     try:
+        cols = [
+            "paciente_id",
+            "plano_id",
+            "origem",
+            "referencia_tipo",
+            "referencia_id",
+            "tipo",
+            "categoria",
+            "subcategoria",
+            "descricao",
+            "valor",
+            "status",
+            "forma_pagamento",
+            "parcela_numero",
+            "parcelas_total",
+            "vencimento",
+            "data_pagamento",
+            "data_movimento",
+            "competencia",
+            "fornecedor",
+            "cliente_nome",
+            "documento",
+            "observacoes",
+            "criado_em",
+            "atualizado_em",
+        ]
+
+        vals = [
+            paciente_id,
+            plano_id,
+            origem,
+            referencia_tipo,
+            referencia_id,
+            tipo,
+            categoria,
+            subcategoria,
+            descricao,
+            valor,
+            status,
+            forma_pagamento,
+            1,
+            1,
+            vencimento,
+            data_pagamento,
+            data_movimento,
+            competencia,
+            fornecedor,
+            cliente_nome,
+            documento,
+            observacoes,
+            _now_iso(),
+            _now_iso(),
+        ]
+
+        cols, vals = _add_clinica_insert(conn, "financeiro_lancamentos", cols, vals)
+
         if _is_postgres_conn(conn):
-            cur = _execute(conn, """
+            cur = _execute(conn, f"""
                 INSERT INTO financeiro_lancamentos (
-                    paciente_id,
-                    plano_id,
-                    origem,
-                    referencia_tipo,
-                    referencia_id,
-                    tipo,
-                    categoria,
-                    subcategoria,
-                    descricao,
-                    valor,
-                    status,
-                    forma_pagamento,
-                    parcela_numero,
-                    parcelas_total,
-                    vencimento,
-                    data_pagamento,
-                    data_movimento,
-                    competencia,
-                    fornecedor,
-                    cliente_nome,
-                    documento,
-                    observacoes,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    {", ".join(cols)}
+                ) VALUES ({", ".join(["?"] * len(cols))})
                 RETURNING id
-            """, (
-                paciente_id,
-                plano_id,
-                origem,
-                referencia_tipo,
-                referencia_id,
-                tipo,
-                categoria,
-                subcategoria,
-                descricao,
-                valor,
-                status,
-                forma_pagamento,
-                vencimento,
-                data_pagamento,
-                data_movimento,
-                competencia,
-                fornecedor,
-                cliente_nome,
-                documento,
-                observacoes,
-                _now_iso(),
-                _now_iso(),
-            ))
+            """, vals)
 
             lanc_id = _fetchone_dict(cur)["id"]
 
         else:
-            cur = _execute(conn, """
+            cur = _execute(conn, f"""
                 INSERT INTO financeiro_lancamentos (
-                    paciente_id,
-                    plano_id,
-                    origem,
-                    referencia_tipo,
-                    referencia_id,
-                    tipo,
-                    categoria,
-                    subcategoria,
-                    descricao,
-                    valor,
-                    status,
-                    forma_pagamento,
-                    parcela_numero,
-                    parcelas_total,
-                    vencimento,
-                    data_pagamento,
-                    data_movimento,
-                    competencia,
-                    fornecedor,
-                    cliente_nome,
-                    documento,
-                    observacoes,
-                    criado_em,
-                    atualizado_em
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                paciente_id,
-                plano_id,
-                origem,
-                referencia_tipo,
-                referencia_id,
-                tipo,
-                categoria,
-                subcategoria,
-                descricao,
-                valor,
-                status,
-                forma_pagamento,
-                vencimento,
-                data_pagamento,
-                data_movimento,
-                competencia,
-                fornecedor,
-                cliente_nome,
-                documento,
-                observacoes,
-                _now_iso(),
-                _now_iso(),
-            ))
+                    {", ".join(cols)}
+                ) VALUES ({", ".join(["?"] * len(cols))})
+            """, vals)
 
             lanc_id = cur.lastrowid
 
+        _registrar_log(
+            conn,
+            "CRIAR_LANCAMENTO",
+            referencia_id=lanc_id,
+            detalhes=f"{tipo} · {descricao} · valor={valor}",
+        )
+
         conn.commit()
 
-        cur = _execute(conn, """
+        where = ["id = ?"]
+        params = [lanc_id]
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_lancamentos
-            WHERE id = ?
-        """, (lanc_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -1293,6 +1458,7 @@ def api_criar_lancamento():
 
 
 @financeiro_bp.put("/api/lancamentos/<int:lancamento_id>")
+@require_permission("financeiro", "editar")
 def api_editar_lancamento(lancamento_id):
     ensure_financeiro_schema()
 
@@ -1329,7 +1495,21 @@ def api_editar_lancamento(lancamento_id):
     conn = _conn()
 
     try:
-        _execute(conn, """
+        where = ["id = ?"]
+        params = [lancamento_id]
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
+
+        cur = _execute(conn, f"""
+            SELECT id
+            FROM financeiro_lancamentos
+            WHERE {" AND ".join(where)}
+            LIMIT 1
+        """, params)
+
+        if not cur.fetchone():
+            return _fail("Lançamento não encontrado para esta clínica.", 404)
+
+        _execute(conn, f"""
             UPDATE financeiro_lancamentos
             SET
                 tipo = ?,
@@ -1348,7 +1528,7 @@ def api_editar_lancamento(lancamento_id):
                 documento = ?,
                 observacoes = ?,
                 atualizado_em = ?
-            WHERE id = ?
+            WHERE {" AND ".join(where)}
         """, (
             tipo,
             categoria,
@@ -1366,16 +1546,23 @@ def api_editar_lancamento(lancamento_id):
             documento,
             observacoes,
             _now_iso(),
-            lancamento_id,
+            *params,
         ))
+
+        _registrar_log(
+            conn,
+            "EDITAR_LANCAMENTO",
+            referencia_id=lancamento_id,
+            detalhes=f"{tipo} · {descricao} · valor={valor}",
+        )
 
         conn.commit()
 
-        cur = _execute(conn, """
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_lancamentos
-            WHERE id = ?
-        """, (lancamento_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -1391,16 +1578,38 @@ def api_editar_lancamento(lancamento_id):
 
 
 @financeiro_bp.delete("/api/lancamentos/<int:lancamento_id>")
+@require_permission("financeiro", "editar")
 def api_excluir_lancamento(lancamento_id):
     ensure_financeiro_schema()
 
     conn = _conn()
 
     try:
-        _execute(conn, """
+        where = ["id = ?"]
+        params = [lancamento_id]
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
+
+        cur = _execute(conn, f"""
+            SELECT id
+            FROM financeiro_lancamentos
+            WHERE {" AND ".join(where)}
+            LIMIT 1
+        """, params)
+
+        if not cur.fetchone():
+            return _fail("Lançamento não encontrado para esta clínica.", 404)
+
+        _execute(conn, f"""
             DELETE FROM financeiro_lancamentos
-            WHERE id = ?
-        """, (lancamento_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
+
+        _registrar_log(
+            conn,
+            "EXCLUIR_LANCAMENTO",
+            referencia_id=lancamento_id,
+            detalhes="Lançamento excluído.",
+        )
 
         conn.commit()
 
@@ -1415,6 +1624,7 @@ def api_excluir_lancamento(lancamento_id):
 
 
 @financeiro_bp.post("/api/lancamentos/<int:lancamento_id>/pagar")
+@require_permission("financeiro", "editar")
 def api_marcar_pago(lancamento_id):
     ensure_financeiro_schema()
 
@@ -1426,8 +1636,22 @@ def api_marcar_pago(lancamento_id):
     conn = _conn()
 
     try:
+        where = ["id = ?"]
+        params = [lancamento_id]
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
+
+        cur = _execute(conn, f"""
+            SELECT id
+            FROM financeiro_lancamentos
+            WHERE {" AND ".join(where)}
+            LIMIT 1
+        """, params)
+
+        if not cur.fetchone():
+            return _fail("Lançamento não encontrado para esta clínica.", 404)
+
         if forma_pagamento:
-            _execute(conn, """
+            _execute(conn, f"""
                 UPDATE financeiro_lancamentos
                 SET
                     status = 'pago',
@@ -1435,37 +1659,44 @@ def api_marcar_pago(lancamento_id):
                     data_movimento = ?,
                     forma_pagamento = ?,
                     atualizado_em = ?
-                WHERE id = ?
+                WHERE {" AND ".join(where)}
             """, (
                 data_pagamento,
                 data_pagamento,
                 forma_pagamento,
                 _now_iso(),
-                lancamento_id,
+                *params,
             ))
         else:
-            _execute(conn, """
+            _execute(conn, f"""
                 UPDATE financeiro_lancamentos
                 SET
                     status = 'pago',
                     data_pagamento = ?,
                     data_movimento = ?,
                     atualizado_em = ?
-                WHERE id = ?
+                WHERE {" AND ".join(where)}
             """, (
                 data_pagamento,
                 data_pagamento,
                 _now_iso(),
-                lancamento_id,
+                *params,
             ))
+
+        _registrar_log(
+            conn,
+            "MARCAR_LANCAMENTO_PAGO",
+            referencia_id=lancamento_id,
+            detalhes=f"Pagamento em {data_pagamento}; forma={forma_pagamento}",
+        )
 
         conn.commit()
 
-        cur = _execute(conn, """
+        cur = _execute(conn, f"""
             SELECT *
             FROM financeiro_lancamentos
-            WHERE id = ?
-        """, (lancamento_id,))
+            WHERE {" AND ".join(where)}
+        """, params)
 
         return _ok(
             item=_fetchone_dict(cur),
@@ -1485,6 +1716,7 @@ def api_marcar_pago(lancamento_id):
 # ============================================================
 
 @financeiro_bp.get("/api/resumo")
+@require_permission("financeiro", "ver")
 def api_resumo_financeiro():
     ensure_financeiro_schema()
 
@@ -1494,20 +1726,28 @@ def api_resumo_financeiro():
     data_ini = (request.args.get("data_ini") or "").strip()
     data_fim = (request.args.get("data_fim") or "").strip()
 
+    data_ref = (
+        "COALESCE(data_movimento, data_pagamento, vencimento, criado_em::text)"
+        if _is_postgres_conn(conn)
+        else "COALESCE(data_movimento, data_pagamento, vencimento, criado_em)"
+    )
+
     try:
         where = ["1 = 1"]
         params = []
+
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
 
         if competencia:
             where.append("competencia = ?")
             params.append(competencia)
 
         if data_ini:
-            where.append("COALESCE(data_movimento, data_pagamento, vencimento, criado_em) >= ?")
+            where.append(f"{data_ref} >= ?")
             params.append(data_ini)
 
         if data_fim:
-            where.append("COALESCE(data_movimento, data_pagamento, vencimento, criado_em) <= ?")
+            where.append(f"{data_ref} <= ?")
             params.append(data_fim)
 
         where_sql = " AND ".join(where)
@@ -1532,11 +1772,15 @@ def api_resumo_financeiro():
         entradas_total = _to_float(r.get("entradas_total"), 0)
         saidas_total = _to_float(r.get("saidas_total"), 0)
 
-        cur = _execute(conn, """
+        planos_where = ["status = 'ativo'"]
+        planos_params = []
+        _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", planos_where, planos_params)
+
+        cur = _execute(conn, f"""
             SELECT COUNT(*) AS total
             FROM financeiro_paciente_planos
-            WHERE status = 'ativo'
-        """)
+            WHERE {" AND ".join(planos_where)}
+        """, planos_params)
 
         planos_ativos = _to_int((_fetchone_dict(cur) or {}).get("total"), 0)
 
@@ -1561,6 +1805,7 @@ def api_resumo_financeiro():
 
 
 @financeiro_bp.get("/api/fechamento")
+@require_permission("financeiro", "ver")
 def api_fechamento():
     ensure_financeiro_schema()
 
@@ -1574,7 +1819,12 @@ def api_fechamento():
     )
 
     try:
-        cur = _execute(conn, """
+        where = ["competencia = ?"]
+        params = [competencia]
+
+        _add_clinica_where(conn, "financeiro_lancamentos", "financeiro_lancamentos", where, params)
+
+        cur = _execute(conn, f"""
             SELECT
                 categoria,
                 tipo,
@@ -1583,10 +1833,10 @@ def api_fechamento():
                 SUM(valor) AS total_geral,
                 COUNT(*) AS quantidade
             FROM financeiro_lancamentos
-            WHERE competencia = ?
+            WHERE {" AND ".join(where)}
             GROUP BY categoria, tipo
             ORDER BY tipo ASC, categoria ASC
-        """, (competencia,))
+        """, params)
 
         por_categoria = _fetchall_dict(cur)
 
@@ -1596,10 +1846,10 @@ def api_fechamento():
                 SUM(CASE WHEN tipo = 'entrada' AND status = 'pago' THEN valor ELSE 0 END) AS entradas,
                 SUM(CASE WHEN tipo = 'saida' AND status = 'pago' THEN valor ELSE 0 END) AS saidas
             FROM financeiro_lancamentos
-            WHERE competencia = ?
+            WHERE {" AND ".join(where)}
             GROUP BY SUBSTR({data_ref}, 1, 10)
             ORDER BY data_ref ASC
-        """, (competencia,))
+        """, params)
 
         fluxo_diario = _fetchall_dict(cur)
 
@@ -1618,6 +1868,13 @@ def api_fechamento():
             dia["saldo_dia"] = entradas_dia - saidas_dia
             dia["saldo_acumulado"] = saldo_acumulado
 
+        _registrar_log(
+            conn,
+            "GERAR_FECHAMENTO",
+            detalhes=f"competencia={competencia}",
+        )
+        conn.commit()
+
         return _ok(fechamento={
             "competencia": competencia,
             "entradas": entradas,
@@ -1634,12 +1891,12 @@ def api_fechamento():
         conn.close()
 
 
-
 # ============================================================
 # CATEGORIAS PADRÃO PARA O FRONT
 # ============================================================
 
 @financeiro_bp.get("/api/categorias")
+@require_permission("financeiro", "ver")
 def api_categorias_financeiras():
     return _ok(
         receitas=[

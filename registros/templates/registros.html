@@ -8,158 +8,179 @@
 {% endblock %}
 
 {% block content %}
-<header class="page-head">
-  <div>
-    <h2>Registros de Atendimentos</h2>
-    <p class="subtitle">Filtre por paciente, profissional, período, status, sexo, CID e cidade.</p>
-  </div>
+<div class="reg-page">
 
-  <div class="head-actions">
-    <button id="btnExportarEvoGeralPdf" class="btn ghost" type="button">
-      Evoluções gerais
-    </button>
-
-    <button id="btnExportarEvoPacientePdf" class="btn ghost" type="button">
-      Evoluções do paciente
-    </button>
-
-    <button id="btnExportar" class="btn" type="button">
-      Exportar
-    </button>
-
-    <button class="btn primary" type="button" id="btnExportBPAI">
-      Exportar BPA-i
-    </button>
-  </div>
-</header>
-
-<section class="card" aria-label="Filtros de pesquisa">
-  <form id="frmFiltros" class="filtros-grid">
-
-    <div class="field" style="grid-column: span 4">
-      <label for="f_busca">Paciente</label>
-      <input
-        id="f_busca"
-        name="q"
-        placeholder="Nome, CPF, CNS..."
-        autocomplete="off"
-      >
+  <header class="reg-hero">
+    <div class="reg-hero-text">
+      <span class="reg-kicker">SGD · Registros</span>
+      <h2>Registros de Atendimentos</h2>
+      <p>
+        Consulte evoluções, atendimentos, pacientes, profissionais e exporte relatórios
+        com filtros rápidos e visual organizado.
+      </p>
     </div>
 
-    <div class="field" id="f_prof_wrap" style="grid-column: span 3">
-      <label for="f_prof">Profissional</label>
+    <div class="reg-hero-actions">
+      <button id="btnExportarEvoGeralPdf" class="reg-btn reg-btn-soft" type="button">
+        📄 Evoluções gerais
+      </button>
 
-      <div class="prof-ac">
-        <input
-          id="f_prof"
-          name="f_prof_text"
-          type="text"
-          placeholder="Digite 3+ letras..."
-          autocomplete="off"
-        >
-        <input id="f_prof_id" name="prof" type="hidden" value="">
+      <button id="btnExportarEvoPacientePdf" class="reg-btn reg-btn-soft" type="button">
+        👤 Evoluções do paciente
+      </button>
 
-        <div
-          id="f_prof_sugestoes"
-          class="prof-sugs hide"
-          role="listbox"
-          aria-label="Sugestões de profissionais"
-        ></div>
+      <button id="btnExportar" class="reg-btn reg-btn-light" type="button">
+        📊 Exportar
+      </button>
+
+      <button class="reg-btn reg-btn-primary" type="button" id="btnExportBPAI">
+        🚀 Exportar BPA-i
+      </button>
+    </div>
+  </header>
+
+  <section class="reg-card reg-filter-card" aria-label="Filtros de pesquisa">
+    <div class="reg-card-head">
+      <div>
+        <h3>Filtros de pesquisa</h3>
+        <p>Use os campos abaixo para localizar registros com precisão.</p>
       </div>
     </div>
 
-    <div class="field" style="grid-column: span 1">
-      <label for="f_sexo">Sexo</label>
-      <select id="f_sexo" name="sexo">
-        <option value="">Todos</option>
-        <option value="F">Feminino</option>
-        <option value="M">Masculino</option>
-        <option value="O">Outro/Nd</option>
-      </select>
+    <form id="frmFiltros" class="filtros-grid">
+
+      <div class="field field-lg">
+        <label for="f_busca">Paciente</label>
+        <input
+          id="f_busca"
+          name="q"
+          placeholder="Nome, CPF, CNS..."
+          autocomplete="off"
+        >
+      </div>
+
+      <div class="field field-md" id="f_prof_wrap">
+        <label for="f_prof">Profissional</label>
+
+        <div class="prof-ac">
+          <input
+            id="f_prof"
+            name="f_prof_text"
+            type="text"
+            placeholder="Digite 3+ letras..."
+            autocomplete="off"
+          >
+          <input id="f_prof_id" name="prof" type="hidden" value="">
+
+          <div
+            id="f_prof_sugestoes"
+            class="prof-sugs hide"
+            role="listbox"
+            aria-label="Sugestões de profissionais"
+          ></div>
+        </div>
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_sexo">Sexo</label>
+        <select id="f_sexo" name="sexo">
+          <option value="">Todos</option>
+          <option value="F">Feminino</option>
+          <option value="M">Masculino</option>
+          <option value="O">Outro/Nd</option>
+        </select>
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_data_ini">Data inicial</label>
+        <input id="f_data_ini" name="data_ini" type="date">
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_data_fim">Data final</label>
+        <input id="f_data_fim" name="data_fim" type="date">
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_status">Status</label>
+        <select id="f_status" name="status">
+          <option value="">Todos</option>
+          <option value="Realizado">Realizado</option>
+          <option value="Presente">Presente</option>
+          <option value="Falta">Falta</option>
+          <option value="Faltoso">Faltoso</option>
+          <option value="Justificado">Justificado</option>
+          <option value="Remarcado">Remarcado</option>
+          <option value="Admissão">Admissão</option>
+          <option value="Desligamento">Desligamento</option>
+          <option value="Alta">Alta</option>
+          <option value="Óbito">Óbito</option>
+        </select>
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_cid">CID</label>
+        <input id="f_cid" name="cid" placeholder="Ex.: F84.0">
+      </div>
+
+      <div class="field field-sm">
+        <label for="f_cidade">Cidade</label>
+        <input id="f_cidade" name="cidade" placeholder="Ex.: Maceió">
+      </div>
+
+      <div class="filtros-actions">
+        <button id="btnFiltrar" class="reg-btn reg-btn-primary" type="submit">
+          🔎 Filtrar
+        </button>
+
+        <button id="btnLimpar" class="reg-btn reg-btn-light" type="button">
+          🧹 Limpar
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="reg-card" aria-label="Resultados">
+    <div class="result-toolbar">
+      <div>
+        <h3>Resultados</h3>
+        <p class="muted" id="lblResumo"></p>
+      </div>
+
+      <div class="field small">
+        <label for="f_ordem">Ordenar</label>
+        <select id="f_ordem" name="ordem">
+          <option value="data_desc">Mais recentes</option>
+          <option value="data_asc">Mais antigos</option>
+          <option value="paciente_az">Paciente A-Z</option>
+          <option value="paciente_za">Paciente Z-A</option>
+          <option value="prof_az">Profissional A-Z</option>
+        </select>
+      </div>
     </div>
 
-    <div class="field" style="grid-column: span 2">
-      <label for="f_data_ini">Data inicial</label>
-      <input id="f_data_ini" name="data_ini" type="date">
+    <div id="cardsRegistros" class="registros-cards"></div>
+
+    <div class="paginacao" id="paginacao" aria-label="Paginação">
+      <div class="pag-info">
+        <span id="pagInfo">Mostrando 0–0 de 0 registro(s)</span>
+      </div>
+
+      <div class="pag-controls">
+        <button type="button" class="reg-btn reg-btn-page" data-page="first" id="pagFirst">&laquo;</button>
+        <button type="button" class="reg-btn reg-btn-page" data-page="prev" id="pagPrev">&lsaquo;</button>
+
+        <span class="pag-status">
+          Página <span id="pagAtual">1</span> de <span id="pagTotal">1</span>
+        </span>
+
+        <button type="button" class="reg-btn reg-btn-page" data-page="next" id="pagNext">&rsaquo;</button>
+        <button type="button" class="reg-btn reg-btn-page" data-page="last" id="pagLast">&raquo;</button>
+      </div>
     </div>
+  </section>
 
-    <div class="field" style="grid-column: span 2">
-      <label for="f_data_fim">Data final</label>
-      <input id="f_data_fim" name="data_fim" type="date">
-    </div>
-
-    <div class="field" style="grid-column: span 2">
-      <label for="f_status">Status</label>
-      <select id="f_status" name="status">
-        <option value="">Todos</option>
-        <option value="Realizado">Realizado</option>
-        <option value="Presente">Presente</option>
-        <option value="Falta">Falta</option>
-        <option value="Faltoso">Faltoso</option>
-        <option value="Justificado">Justificado</option>
-        <option value="Remarcado">Remarcado</option>
-        <option value="Admissão">Admissão</option>
-        <option value="Desligamento">Desligamento</option>
-        <option value="Alta">Alta</option>
-        <option value="Óbito">Óbito</option>
-      </select>
-    </div>
-
-    <div class="field" style="grid-column: span 2">
-      <label for="f_cid">CID</label>
-      <input id="f_cid" name="cid" placeholder="Ex.: F84.0">
-    </div>
-
-    <div class="field" style="grid-column: span 2">
-      <label for="f_cidade">Cidade</label>
-      <input id="f_cidade" name="cidade" placeholder="Ex.: Maceió">
-    </div>
-
-    <div class="filtros-actions" style="grid-column: span 8">
-      <button id="btnFiltrar" class="btn primary" type="submit">Filtrar</button>
-      <button id="btnLimpar" class="btn" type="button">Limpar</button>
-    </div>
-  </form>
-</section>
-
-<section class="card" aria-label="Resultados">
-  <div class="muted" id="lblResumo"></div>
-
-  <div class="result-toolbar">
-    <div class="muted" id="lblResumo"></div>
-
-    <div class="field small">
-      <label for="f_ordem">Ordenar</label>
-      <select id="f_ordem" name="ordem">
-        <option value="data_desc">Mais recentes</option>
-        <option value="data_asc">Mais antigos</option>
-        <option value="paciente_az">Paciente A-Z</option>
-        <option value="paciente_za">Paciente Z-A</option>
-        <option value="prof_az">Profissional A-Z</option>
-      </select>
-    </div>
-  </div>
-
-<div id="cardsRegistros" class="registros-cards"></div>
-
-  <div class="paginacao" id="paginacao" aria-label="Paginação">
-    <div class="pag-info">
-      <span id="pagInfo">Mostrando 0–0 de 0 registro(s)</span>
-    </div>
-
-    <div class="pag-controls">
-      <button type="button" class="btn ghost" data-page="first" id="pagFirst">&laquo;</button>
-      <button type="button" class="btn ghost" data-page="prev" id="pagPrev">&lsaquo;</button>
-
-      <span class="pag-status">
-        Página <span id="pagAtual">1</span> de <span id="pagTotal">1</span>
-      </span>
-
-      <button type="button" class="btn ghost" data-page="next" id="pagNext">&rsaquo;</button>
-      <button type="button" class="btn ghost" data-page="last" id="pagLast">&raquo;</button>
-    </div>
-  </div>
-</section>
+</div>
 
 {% include "_modal_registro.html" %}
 {% endblock %}

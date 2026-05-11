@@ -1,0 +1,227 @@
+{% extends "layout.html" %}
+
+{% block title %}Selecionar Clínica{% endblock %}
+
+{% block content %}
+
+<section class="ambiente-page">
+
+  <div class="ambiente-hero">
+    <span>Ambiente Master</span>
+    <h1>Escolha uma clínica para entrar</h1>
+    <p>
+      Tudo que você cadastrar, editar ou visualizar será feito dentro da clínica selecionada.
+    </p>
+  </div>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="flash-wrap">
+        {% for cat, msg in msgs %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="clinicas-grid">
+
+    {% for c in clinicas %}
+      <label class="clinica-option">
+        <input type="radio" name="clinica_id" value="{{ c.id }}" required>
+
+        <div class="clinica-card">
+          <div class="avatar">
+            {% if c.is_matriz or c.id == 1 %}
+              ★
+            {% else %}
+              {{ (c.nome or 'C')[:1]|upper }}
+            {% endif %}
+          </div>
+
+          <div>
+            <h2>{{ c.nome }}</h2>
+
+            <p>
+              {% if c.is_matriz or c.id == 1 %}
+                Matriz administrativa
+              {% else %}
+                {{ c.tipo_clinica or 'Clínica cliente' }}
+              {% endif %}
+            </p>
+
+            <small>
+              CNPJ: {{ c.cnpj or 'Não informado' }}
+            </small>
+          </div>
+        </div>
+      </label>
+    {% endfor %}
+
+    <div class="actions">
+      <button type="submit">
+        Entrar na clínica selecionada
+      </button>
+    </div>
+
+  </form>
+
+</section>
+
+<style>
+.ambiente-page {
+  min-height: 100vh;
+  padding: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(20,184,166,.18), transparent 35%),
+    linear-gradient(135deg, #f8fafc, #eef6f6);
+}
+
+.ambiente-hero {
+  color: white;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  border-radius: 28px;
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 20px 45px rgba(15,118,110,.24);
+}
+
+.ambiente-hero span {
+  text-transform: uppercase;
+  font-size: .75rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.ambiente-hero h1 {
+  margin: 8px 0;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+}
+
+.ambiente-hero p {
+  margin: 0;
+  opacity: .92;
+}
+
+.flash-wrap {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.flash {
+  padding: 13px 16px;
+  border-radius: 16px;
+  font-weight: 800;
+}
+
+.flash.success {
+  color: #065f46;
+  background: rgba(16,185,129,.12);
+}
+
+.flash.error {
+  color: #991b1b;
+  background: rgba(239,68,68,.12);
+}
+
+.clinicas-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.clinica-option {
+  cursor: pointer;
+}
+
+.clinica-option input {
+  display: none;
+}
+
+.clinica-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: 0 14px 34px rgba(15,23,42,.07);
+  transition: .2s ease;
+}
+
+.clinica-option input:checked + .clinica-card {
+  border-color: #0f766e;
+  background: #f0fdfa;
+  transform: translateY(-2px);
+}
+
+.avatar {
+  width: 62px;
+  height: 62px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 1000;
+  flex: 0 0 auto;
+}
+
+.clinica-card h2 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.clinica-card p {
+  margin: 4px 0;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.clinica-card small {
+  color: #64748b;
+}
+
+.actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.actions button {
+  border: none;
+  border-radius: 18px;
+  padding: 14px 22px;
+  background: #0f766e;
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(15,118,110,.24);
+}
+
+@media (max-width: 1000px) {
+  .clinicas-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .ambiente-page {
+    padding: 16px;
+  }
+
+  .clinicas-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions button {
+    width: 100%;
+  }
+}
+</style>
+
+{% endblock %}

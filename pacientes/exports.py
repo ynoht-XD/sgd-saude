@@ -7,7 +7,12 @@ import re
 from datetime import datetime
 from typing import Any
 
-from flask import send_file, request
+from flask import (
+    send_file,
+    request,
+    session,
+    abort,
+)
 
 from . import pacientes_bp
 from .helpers import (
@@ -21,20 +26,89 @@ from .helpers import (
     fmt,
     join_addr,
     tags_human,
+    table_columns,
 )
+
+try:
+    from admin.modulos import require_permission
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+try:
+    from log import registrar_log, log_erro
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
 
 
 # =============================================================================
-# HELPERS DE EXPORTAÇÃO
+# MULTI-CLÍNICA
+# =============================================================================
+
+def _clinica_id_atual() -> int:
+    clinica_id = session.get("clinica_id")
+
+    if not clinica_id:
+        abort(403)
+
+    try:
+        return int(clinica_id)
+    except Exception:
+        abort(403)
+
+
+def _ensure_export_schema(conn):
+    ensure_pacientes_schema(conn)
+
+    cols = table_columns(conn, "pacientes")
+
+    if "clinica_id" not in cols:
+        cur = conn.cursor()
+        cur.execute("""
+            ALTER TABLE pacientes
+            ADD COLUMN IF NOT EXISTS clinica_id INTEGER DEFAULT 1;
+        """)
+        conn.commit()
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_pacientes_export_clinica
+        ON pacientes(clinica_id);
+    """)
+
+    conn.commit()
+
+
+def _buscar_paciente_clinica(conn, paciente_id: int):
+    clinica_id = _clinica_id_atual()
+
+    _ensure_export_schema(conn)
+
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+          FROM pacientes
+         WHERE id = %s
+           AND clinica_id = %s
+         LIMIT 1;
+    """, (paciente_id, clinica_id))
+
+    return fetchone_dict(cur)
+
+
+# =============================================================================
+# HELPERS EXPORTAÇÃO
 # =============================================================================
 
 def export_header_order() -> list[str]:
-    """
-    Ordem preferida das colunas no arquivo.
-    O que não existir no row vai ser ignorado; o resto entra no final.
-    """
     return [
         "id",
+        "clinica_id",
         "prontuario",
         "nome",
         "nascimento",
@@ -71,7 +145,7 @@ def export_header_order() -> list[str]:
         "aviso",
         "comorbidades_json",
 
-        # derivados do agendamento
+        # derivados
         "terapeuta",
         "cbo",
         "ag_dia",
@@ -84,6 +158,7 @@ def export_header_order() -> list[str]:
 def pretty_header(col: str) -> str:
     mapa = {
         "id": "ID",
+        "clinica_id": "Clínica ID",
         "prontuario": "Prontuário",
         "nome": "Nome",
         "nascimento": "Nascimento",
@@ -112,29 +187,32 @@ def pretty_header(col: str) -> str:
         "nome_pai": "Nome do pai",
         "pai": "Pai",
 
-        "end_prontuario": "END (Prontuário físico)",
+        "end_prontuario": "END (Prontuário)",
         "alergias": "Alergias",
-        "aviso": "Aviso / Situação",
-        "comorbidades_json": "Comorbidades (JSON)",
+        "aviso": "Aviso",
+        "comorbidades_json": "Comorbidades",
 
         "terapeuta": "Terapeuta(s)",
         "cbo": "CBO(s)",
-        "ag_dia": "Agendamento (Dia)",
-        "ag_hora_ini": "Agendamento (Início)",
-        "ag_hora_fim": "Agendamento (Fim)",
-        "ag_resumo": "Agendamento (Resumo)",
+        "ag_dia": "Dia",
+        "ag_hora_ini": "Hora início",
+        "ag_hora_fim": "Hora fim",
+        "ag_resumo": "Resumo agenda",
     }
+
     return mapa.get(col, col.replace("_", " ").strip().title())
 
 
 def normalize_cell_value(v: Any) -> str:
     if v is None:
         return ""
+
     if isinstance(v, (dict, list)):
         try:
             return json.dumps(v, ensure_ascii=False)
         except Exception:
             return str(v)
+
     return str(v)
 
 
@@ -143,417 +221,601 @@ def normalize_cell_value(v: Any) -> str:
 # =============================================================================
 
 @pacientes_bp.route("/exportar_xls")
+@require_permission("pacientes", "exportar")
 def exportar_xls():
-    rows = fetch_pacientes_list(request.args)
-
-    keys_all: set[str] = set()
-    for r in rows:
-        if isinstance(r, dict):
-            keys_all.update(r.keys())
-
-    preferred = export_header_order()
-    cols = [c for c in preferred if c in keys_all]
-    resto = sorted([c for c in keys_all if c not in cols])
-    cols.extend(resto)
-
-    headers = [pretty_header(c) for c in cols]
+    clinica_id = _clinica_id_atual()
 
     try:
-        from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Font
-        from openpyxl.utils import get_column_letter
+        rows = fetch_pacientes_list(request.args)
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Pacientes"
-
-        ws.append(headers)
-        for cell in ws[1]:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        keys_all: set[str] = set()
 
         for r in rows:
-            ws.append([normalize_cell_value(r.get(c)) for c in cols])
+            if isinstance(r, dict):
+                keys_all.update(r.keys())
 
-        for idx, _col_name in enumerate(cols, start=1):
-            letter = get_column_letter(idx)
-            max_len = len(headers[idx - 1])
-            for cell in ws[letter]:
-                if cell.value is None:
-                    continue
-                max_len = max(max_len, len(str(cell.value)))
-            ws.column_dimensions[letter].width = min(max_len + 2, 60)
+        preferred = export_header_order()
 
-        ws.freeze_panes = "A2"
+        cols = [c for c in preferred if c in keys_all]
 
-        bio = io.BytesIO()
-        wb.save(bio)
-        bio.seek(0)
+        resto = sorted([c for c in keys_all if c not in cols])
 
-        filename = f"pacientes_full_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-        return send_file(
-            bio,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        cols.extend(resto)
+
+        headers = [pretty_header(c) for c in cols]
+
+        registrar_log(
+            modulo="pacientes",
+            acao="exportar",
+            entidade="pacientes",
+            descricao="Exportou pacientes XLS/CSV.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "total": len(rows),
+                "filtros": dict(request.args),
+            },
         )
 
-    except ImportError:
-        import csv
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Font
+            from openpyxl.utils import get_column_letter
 
-        bio_txt = io.StringIO()
-        writer = csv.writer(bio_txt, delimiter=";")
-        writer.writerow(headers)
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Pacientes"
 
-        for r in rows:
-            writer.writerow([normalize_cell_value(r.get(c)) for c in cols])
+            ws.append(headers)
 
-        data = io.BytesIO(bio_txt.getvalue().encode("utf-8-sig"))
-        filename = f"pacientes_full_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-        return send_file(
-            data,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="text/csv"
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+                cell.alignment = Alignment(
+                    horizontal="center",
+                    vertical="center",
+                    wrap_text=True,
+                )
+
+            for r in rows:
+                ws.append([
+                    normalize_cell_value(r.get(c))
+                    for c in cols
+                ])
+
+            for idx, _col_name in enumerate(cols, start=1):
+                letter = get_column_letter(idx)
+
+                max_len = len(headers[idx - 1])
+
+                for cell in ws[letter]:
+                    if cell.value is None:
+                        continue
+
+                    max_len = max(max_len, len(str(cell.value)))
+
+                ws.column_dimensions[letter].width = min(max_len + 2, 60)
+
+            ws.freeze_panes = "A2"
+
+            bio = io.BytesIO()
+            wb.save(bio)
+            bio.seek(0)
+
+            filename = (
+                f"pacientes_"
+                f"{clinica_id}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+            )
+
+            return send_file(
+                bio,
+                as_attachment=True,
+                download_name=filename,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        except ImportError:
+            import csv
+
+            bio_txt = io.StringIO()
+
+            writer = csv.writer(bio_txt, delimiter=";")
+
+            writer.writerow(headers)
+
+            for r in rows:
+                writer.writerow([
+                    normalize_cell_value(r.get(c))
+                    for c in cols
+                ])
+
+            data = io.BytesIO(
+                bio_txt.getvalue().encode("utf-8-sig")
+            )
+
+            filename = (
+                f"pacientes_"
+                f"{clinica_id}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+            )
+
+            return send_file(
+                data,
+                as_attachment=True,
+                download_name=filename,
+                mimetype="text/csv",
+            )
+
+    except Exception as e:
+        log_erro(
+            "pacientes",
+            e,
+            entidade="pacientes",
+            descricao="Erro ao exportar XLS/CSV.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "filtros": dict(request.args),
+            },
         )
+
+        return f"Erro ao exportar: {e}", 500
 
 
 # =============================================================================
-# PDF DO PRONTUÁRIO INDIVIDUAL
+# PDF PRONTUÁRIO COM TIMBRE
 # =============================================================================
+
+def _row_to_dict(row, cur=None):
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return dict(row)
+    cols = [d[0] for d in cur.description] if cur and cur.description else []
+    return dict(zip(cols, row))
+
+
+def _normalizar_img_bin(v):
+    try:
+        from clinica_config.timbre import normalizar_binario_imagem
+        return normalizar_binario_imagem(v)
+    except Exception:
+        if isinstance(v, memoryview):
+            return v.tobytes()
+        if isinstance(v, bytearray):
+            return bytes(v)
+        if isinstance(v, bytes):
+            return v
+        return None
+
+
+def _buscar_timbre_pdf(conn, clinica_id: int) -> dict:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT *
+          FROM clinica_configuracoes
+         WHERE clinica_id = %s
+         ORDER BY id DESC
+         LIMIT 1;
+    """, (clinica_id,))
+
+    cfg = _row_to_dict(cur.fetchone(), cur) or {}
+
+    return {
+        "cabecalho_texto": cfg.get("cabecalho_texto") or "",
+        "rodape_texto": cfg.get("rodape_texto") or "",
+        "cor_listra_topo": cfg.get("cor_listra_topo") or "#0f766e",
+        "mostrar_linha_cabecalho": cfg.get("mostrar_linha_cabecalho", True),
+        "mostrar_linha_rodape": cfg.get("mostrar_linha_rodape", True),
+        "logo": _normalizar_img_bin(cfg.get("logo_bin")),
+        "cabecalho": _normalizar_img_bin(cfg.get("cabecalho_img_bin")),
+        "rodape1": _normalizar_img_bin(cfg.get("rodape_img_bin")),
+        "rodape2": _normalizar_img_bin(cfg.get("rodape_img_2_bin")),
+        "rodape3": _normalizar_img_bin(cfg.get("rodape_img_3_bin")),
+    }
+
+
+def _draw_img_fit(c, img_bytes, x, y, w, h):
+    if not img_bytes:
+        return
+
+    try:
+        import io
+        from reportlab.lib.utils import ImageReader
+
+        img = ImageReader(io.BytesIO(img_bytes))
+        iw, ih = img.getSize()
+        scale = min(w / iw, h / ih)
+        nw, nh = iw * scale, ih * scale
+        c.drawImage(img, x + (w - nw) / 2, y + (h - nh) / 2, nw, nh, mask="auto")
+    except Exception:
+        pass
+
+
+def _pdf_wrap(c, text, max_w, font="Helvetica", size=9):
+    text = fmt(text)
+
+    if text == "—":
+        return ["—"]
+
+    c.setFont(font, size)
+
+    words = text.split()
+    lines = []
+    current = ""
+
+    for word in words:
+        test = f"{current} {word}".strip()
+
+        if c.stringWidth(test, font, size) <= max_w:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+
+    if current:
+        lines.append(current)
+
+    return lines or ["—"]
+
+
+def _draw_timbre(c, W, H, timbre, pagina=1):
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+
+    margin = 14 * mm
+
+    try:
+        cor = colors.HexColor(timbre.get("cor_listra_topo") or "#0f766e")
+    except Exception:
+        cor = colors.HexColor("#0f766e")
+
+    c.setFillColor(cor)
+    c.rect(0, H - 5 * mm, W, 5 * mm, stroke=0, fill=1)
+
+    if timbre.get("cabecalho"):
+        _draw_img_fit(
+            c,
+            timbre["cabecalho"],
+            margin,
+            H - 34 * mm,
+            W - 2 * margin,
+            25 * mm,
+        )
+        header_bottom = H - 39 * mm
+    else:
+        if timbre.get("logo"):
+            _draw_img_fit(
+                c,
+                timbre["logo"],
+                margin,
+                H - 32 * mm,
+                30 * mm,
+                23 * mm,
+            )
+
+        texto = timbre.get("cabecalho_texto") or "PRONTUÁRIO DO PACIENTE"
+
+        c.setFillColor(colors.HexColor("#0f172a"))
+        c.setFont("Helvetica-Bold", 10)
+
+        y = H - 16 * mm
+        for ln in _pdf_wrap(c, texto, W - 58 * mm, "Helvetica-Bold", 10)[:3]:
+            c.drawString(margin + 36 * mm, y, ln)
+            y -= 4.5 * mm
+
+        header_bottom = H - 36 * mm
+
+    if timbre.get("mostrar_linha_cabecalho", True):
+        c.setStrokeColor(colors.HexColor("#e2e8f0"))
+        c.line(margin, header_bottom, W - margin, header_bottom)
+
+    footer_top = 22 * mm
+
+    if timbre.get("mostrar_linha_rodape", True):
+        c.setStrokeColor(colors.HexColor("#e2e8f0"))
+        c.line(margin, footer_top + 5 * mm, W - margin, footer_top + 5 * mm)
+
+    rodapes = [
+        timbre.get("rodape1"),
+        timbre.get("rodape2"),
+        timbre.get("rodape3"),
+    ]
+
+    imgs = [r for r in rodapes if r]
+
+    if imgs:
+        img_w = (W - 2 * margin) / len(imgs)
+
+        for idx, img in enumerate(imgs):
+            _draw_img_fit(
+                c,
+                img,
+                margin + idx * img_w,
+                6 * mm,
+                img_w - 3 * mm,
+                15 * mm,
+            )
+    else:
+        c.setFont("Helvetica", 7.5)
+        c.setFillColor(colors.HexColor("#64748b"))
+
+        texto = timbre.get("rodape_texto") or f"Gerado pelo SGD Saúde em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        c.drawCentredString(W / 2, 12 * mm, texto[:170])
+
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#94a3b8"))
+    c.drawRightString(W - margin, 6 * mm, f"Página {pagina}")
+
+    return header_bottom - 8 * mm, footer_top + 11 * mm
+
+
+def _draw_section_box(c, x, y, w, title, items, cols=2):
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+
+    title_h = 8 * mm
+    row_h = 12.5 * mm
+    rows = max(1, (len(items) + cols - 1) // cols)
+    h = title_h + rows * row_h + 6 * mm
+
+    c.setFillColor(colors.white)
+    c.setStrokeColor(colors.HexColor("#e2e8f0"))
+    c.roundRect(x, y - h, w, h, 8, stroke=1, fill=1)
+
+    c.setFillColor(colors.HexColor("#0f172a"))
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x + 5 * mm, y - 5.5 * mm, title)
+
+    col_w = (w - 10 * mm) / cols
+    start_y = y - title_h - 4 * mm
+
+    for idx, (label, value) in enumerate(items):
+        cx = x + 5 * mm + (idx % cols) * col_w
+        cy = start_y - (idx // cols) * row_h
+
+        c.setFillColor(colors.HexColor("#64748b"))
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(cx, cy, str(label).upper())
+
+        c.setFillColor(colors.HexColor("#0f172a"))
+        c.setFont("Helvetica", 9)
+
+        yy = cy - 4 * mm
+        for ln in _pdf_wrap(c, value, col_w - 4 * mm, "Helvetica", 9)[:2]:
+            c.drawString(cx, yy, ln)
+            yy -= 3.8 * mm
+
+    return y - h - 5 * mm
+
 
 @pacientes_bp.route("/exportar_prontuario_pdf/<int:id>")
+@require_permission("pacientes", "exportar")
 def exportar_prontuario_pdf(id: int):
-    """
-    Exporta PDF do prontuário individual do paciente.
-    """
+    clinica_id = _clinica_id_atual()
+
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen import canvas
         from reportlab.lib.units import mm
         from reportlab.lib import colors
     except ImportError:
-        return ("⚠️ Para exportar PDF, instale o pacote 'reportlab' (pip install reportlab).", 501)
+        return "⚠️ Instale reportlab: pip install reportlab", 501
 
-    with get_conn() as conn:
-        ensure_pacientes_schema(conn)
+    try:
+        with get_conn() as conn:
+            paciente = _buscar_paciente_clinica(conn, id)
+            timbre = _buscar_timbre_pdf(conn, clinica_id)
 
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM pacientes WHERE id = %s LIMIT 1", (id,))
-        row = fetchone_dict(cur)
+        if not paciente:
+            return "Paciente não encontrado nesta clínica.", 404
 
-    if not row:
-        return ("Paciente não encontrado.", 404)
+        p = dict(paciente)
 
-    p = dict(row)
+        if not (p.get("telefone") or "").strip():
+            p["telefone"] = (p.get("telefone1") or "").strip()
 
-    if not (p.get("telefone") or "").strip():
-        p["telefone"] = (p.get("telefone1") or "").strip()
-    if not (p.get("nome_mae") or "").strip():
-        p["nome_mae"] = (p.get("mae") or "").strip()
-    if not (p.get("nome_pai") or "").strip():
-        p["nome_pai"] = (p.get("pai") or "").strip()
+        if not (p.get("nome_mae") or "").strip():
+            p["nome_mae"] = (p.get("mae") or "").strip()
 
-    if p.get("idade") is None:
-        p["idade"] = calc_idade(p.get("nascimento"))
+        if not (p.get("nome_pai") or "").strip():
+            p["nome_pai"] = (p.get("pai") or "").strip()
 
-    ag_map = get_primeiro_agendamento_por_paciente()
-    info_ag = ag_map.get((p.get("nome") or "").strip().upper(), {}) if p.get("nome") else {}
+        if p.get("idade") is None:
+            p["idade"] = calc_idade(p.get("nascimento"))
 
-    terapeuta = (info_ag.get("terapeuta_str") or "").strip()
-    cbo_str = (info_ag.get("cbo_str") or "").strip()
-    ag_resumo = (info_ag.get("agenda_str") or "").strip()
+        try:
+            ag_map = get_primeiro_agendamento_por_paciente()
+            info_ag = ag_map.get((p.get("nome") or "").strip().upper(), {})
+        except Exception:
+            info_ag = {}
 
-    agds = fetch_agendamentos_por_paciente(p.get("nome") or "")
-    agds_upcoming = agds.get("agds_upcoming", [])
+        try:
+            agds = fetch_agendamentos_por_paciente(
+                p.get("nome") or "",
+                clinica_id=clinica_id,
+            )
+        except TypeError:
+            agds = fetch_agendamentos_por_paciente(p.get("nome") or "")
 
-    bio = io.BytesIO()
-    c = canvas.Canvas(bio, pagesize=A4)
-    W, H = A4
+        agds_upcoming = agds.get("agds_upcoming", [])
 
-    margin = 14 * mm
-    x0 = margin
-    y = H - margin
-    page_no = 1
+        bio = io.BytesIO()
+        c = canvas.Canvas(bio, pagesize=A4)
 
-    C_BORDER = colors.HexColor("#E5E7EB")
-    C_SOFT = colors.HexColor("#F8FAFC")
-    C_SOFT2 = colors.HexColor("#F1F5F9")
-    C_TEXT = colors.HexColor("#0F172A")
-    C_MUTED = colors.HexColor("#475569")
+        W, H = A4
+        margin = 14 * mm
+        box_w = W - 2 * margin
+        page = 1
 
-    def new_page():
-        nonlocal y, page_no
-        c.showPage()
-        page_no += 1
-        y = H - margin
-        draw_header()
+        def iniciar_pagina():
+            return _draw_timbre(c, W, H, timbre, page)
 
-    def ensure_space(mm_needed: float):
-        nonlocal y
-        if y < margin + (mm_needed * mm):
-            new_page()
+        y, content_bottom = iniciar_pagina()
 
-    def wrap_text(text: str, max_w: float, font="Helvetica", size=10) -> list[str]:
-        c.setFont(font, size)
-        text = (text or "").strip()
-        if not text:
-            return ["—"]
-        words = text.split()
-        lines = []
-        curw = words[0]
-        for w in words[1:]:
-            test = curw + " " + w
-            if c.stringWidth(test, font, size) <= max_w:
-                curw = test
-            else:
-                lines.append(curw)
-                curw = w
-        lines.append(curw)
-        return lines
+        def nova_pagina():
+            nonlocal page, y, content_bottom
+            c.showPage()
+            page += 1
+            y, content_bottom = iniciar_pagina()
 
-    def draw_header():
-        nonlocal y
-        c.setFillColor(C_TEXT)
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(x0, y, "Prontuário do Paciente")
-        c.setFont("Helvetica", 9)
-        c.setFillColor(C_MUTED)
-        c.drawRightString(W - margin, y, f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        y -= 7 * mm
+        def precisa(altura_mm):
+            if y - altura_mm * mm < content_bottom:
+                nova_pagina()
 
-        c.setFillColor(C_TEXT)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(x0, y, fmt(p.get("nome")))
-        c.setFont("Helvetica", 9)
-        c.setFillColor(C_MUTED)
-        c.drawRightString(W - margin, y, f"Página {page_no}")
-        y -= 6 * mm
+        c.setFillColor(colors.HexColor("#0f172a"))
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(margin, y, "Prontuário do Paciente")
 
-        c.setStrokeColor(C_BORDER)
-        c.setLineWidth(0.8)
-        c.line(x0, y, W - margin, y)
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.HexColor("#64748b"))
+        c.drawRightString(W - margin, y, f"Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
         y -= 8 * mm
 
-    def card_box(title: str, mm_h: float):
-        nonlocal y
-        ensure_space(mm_h + 10)
-        w = W - 2 * margin
-        h = mm_h * mm
-        y_top = y
+        c.setFillColor(colors.HexColor("#111827"))
+        c.setFont("Helvetica-Bold", 13)
 
-        c.setFillColor(C_SOFT)
-        c.setStrokeColor(C_BORDER)
-        c.setLineWidth(0.8)
-        c.roundRect(x0, y_top - h, w, h, 10, stroke=1, fill=1)
+        for ln in _pdf_wrap(c, p.get("nome"), box_w, "Helvetica-Bold", 13)[:2]:
+            c.drawString(margin, y, ln)
+            y -= 6 * mm
 
-        c.setFillColor(C_TEXT)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(x0 + 10, y_top - 16, title)
+        y -= 2 * mm
 
-        y = y_top - 26
-        return (x0 + 10, y, w - 20, h - 26)
+        precisa(42)
+        y = _draw_section_box(c, margin, y, box_w, "Identificação", [
+            ("Prontuário", p.get("prontuario")),
+            ("Modalidade", p.get("mod")),
+            ("Status", p.get("status")),
+            ("Nascimento", p.get("nascimento")),
+            ("Idade", p.get("idade")),
+            ("Sexo", p.get("sexo")),
+            ("CPF", p.get("cpf")),
+            ("CNS", p.get("cns")),
+        ], cols=4)
 
-    def draw_chip(x, y, label: str, value: Any, max_w: float):
-        lab = (label or "").upper()
-        val = fmt(value)
-        text = f"{lab}: {val}"
+        precisa(42)
+        y = _draw_section_box(c, margin, y, box_w, "Contato e Endereço", [
+            ("Telefone", p.get("telefone")),
+            ("Telefone 2", p.get("telefone2")),
+            ("Telefone 3", p.get("telefone3")),
+            ("E-mail", p.get("email")),
+            ("Logradouro", p.get("logradouro") or p.get("rua")),
+            ("Número", p.get("numero") or p.get("numero_casa")),
+            ("Bairro", p.get("bairro")),
+            ("Cidade / UF", f"{fmt(p.get('municipio') or p.get('cidade'))} / {fmt(p.get('uf'))}"),
+            ("CEP", p.get("cep")),
+        ], cols=3)
 
-        c.setFont("Helvetica", 9)
-        w = min(max_w, c.stringWidth(text, "Helvetica", 9) + 16)
+        precisa(34)
+        y = _draw_section_box(c, margin, y, box_w, "Documentos e Dados Sociais", [
+            ("RG", p.get("rg")),
+            ("Órgão RG", p.get("orgao_rg")),
+            ("Estado civil", p.get("estado_civil")),
+            ("NIS", p.get("nis")),
+            ("Raça/Cor", p.get("raca")),
+        ], cols=3)
 
-        c.setFillColor(C_SOFT2)
-        c.setStrokeColor(C_BORDER)
-        c.roundRect(x, y - 12, w, 16, 8, stroke=1, fill=1)
+        precisa(44)
+        y = _draw_section_box(c, margin, y, box_w, "Família e Responsável", [
+            ("Mãe", p.get("nome_mae") or p.get("mae")),
+            ("CPF mãe", p.get("cpf_mae")),
+            ("RG mãe", p.get("rg_mae")),
+            ("Pai", p.get("nome_pai") or p.get("pai")),
+            ("CPF pai", p.get("cpf_pai")),
+            ("RG pai", p.get("rg_pai")),
+            ("Responsável", p.get("responsavel")),
+            ("CPF responsável", p.get("cpf_responsavel")),
+            ("RG responsável", p.get("rg_responsavel")),
+        ], cols=3)
 
-        c.setFillColor(C_TEXT)
-        c.drawString(x + 8, y, text)
-        return w + 6
+        precisa(44)
+        y = _draw_section_box(c, margin, y, box_w, "Dados Clínicos", [
+            ("CID principal", p.get("cid")),
+            ("CID secundário", p.get("cid2")),
+            ("Alergias", p.get("alergias")),
+            ("Comorbidades", tags_human(p)),
+            ("Aviso / Situação", p.get("aviso")),
+            ("END prontuário físico", p.get("end_prontuario")),
+        ], cols=2)
 
-    def draw_kv(x, y, label: str, value: Any, col_w: float):
-        c.setFillColor(C_MUTED)
-        c.setFont("Helvetica", 8)
-        c.drawString(x, y, (label or "").upper())
-        y2 = y - 4.2 * mm
+        precisa(34)
+        y = _draw_section_box(c, margin, y, box_w, "Agenda / Terapias", [
+            ("Terapeuta(s)", info_ag.get("terapeuta_str") or p.get("terapeuta")),
+            ("CBO(s)", info_ag.get("cbo_str") or p.get("cbo")),
+            ("Resumo", info_ag.get("agenda_str") or p.get("ag_resumo")),
+        ], cols=1)
 
-        c.setFillColor(C_TEXT)
-        lines = wrap_text(fmt(value), col_w, "Helvetica", 10)
-        for ln in lines:
-            c.setFont("Helvetica", 10)
-            c.drawString(x, y2, ln)
-            y2 -= 4.6 * mm
+        if agds_upcoming:
+            precisa(38)
 
-        return (y - y2) + (1.5 * mm)
+            c.setFillColor(colors.HexColor("#0f172a"))
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(margin, y, "Próximos agendamentos")
+            y -= 6 * mm
 
-    def draw_note_box(x, y, w, title: str, text: Any):
-        c.setFillColor(C_SOFT2)
-        c.setStrokeColor(C_BORDER)
-        c.roundRect(x, y - 70, w, 70, 10, stroke=1, fill=1)
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#111827"))
 
-        c.setFillColor(C_TEXT)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(x + 10, y - 16, title)
+            for a in agds_upcoming[:25]:
+                precisa(10)
 
-        c.setFillColor(C_TEXT)
-        lines = wrap_text(fmt(text), w - 20, "Helvetica", 10)
-        yy = y - 28
-        for ln in lines[:6]:
-            c.drawString(x + 10, yy, ln)
-            yy -= 4.6 * mm
-        if len(lines) > 6:
-            c.setFont("Helvetica-Oblique", 9)
-            c.setFillColor(C_MUTED)
-            c.drawString(x + 10, yy, "… (texto cortado)")
-        return 75
+                linha = (
+                    f"{fmt(a.get('dia_semana'))} • "
+                    f"{fmt(a.get('data_br'))} • "
+                    f"{fmt(a.get('hora_ini'))}"
+                    f"{'–' + a.get('hora_fim') if a.get('hora_fim') else ''}"
+                    f" — {fmt(a.get('profissional'))}"
+                )
 
-    draw_header()
+                for ln in _pdf_wrap(c, linha, box_w, "Helvetica", 9)[:2]:
+                    c.drawString(margin, y, ln)
+                    y -= 4.5 * mm
 
-    # 1) Identificação
-    x, y_in, w_in, _ = card_box("Identificação", mm_h=56)
+                y -= 1 * mm
 
-    col_gap = 12
-    col_w = (w_in - col_gap) / 2
-    left_x = x
-    right_x = x + col_w + col_gap
+        c.save()
+        bio.seek(0)
 
-    yy = y_in
-    used = 0
-    used += draw_chip(left_x, yy, "CPF", p.get("cpf"), col_w)
-    used += draw_chip(left_x + used, yy, "CNS", p.get("cns"), col_w - used)
+        registrar_log(
+            modulo="pacientes",
+            acao="exportar",
+            entidade="pacientes",
+            entidade_id=id,
+            descricao="Exportou prontuário PDF com timbre.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "paciente_id": id,
+                "nome": p.get("nome"),
+                "com_timbre": True,
+            },
+        )
 
-    used2 = 0
-    used2 += draw_chip(right_x, yy, "Nascimento", p.get("nascimento"), col_w)
-    used2 += draw_chip(right_x + used2, yy, "Idade", p.get("idade"), col_w - used2)
+        nome_slug = re.sub(
+            r"[^A-Za-z0-9]+",
+            "_",
+            (p.get("nome") or "paciente").strip(),
+        ).strip("_")
 
-    yy -= 10 * mm
-    h1 = draw_kv(left_x, yy, "Prontuário (código)", p.get("prontuario"), col_w)
-    h2 = draw_kv(right_x, yy, "Sexo", p.get("sexo"), col_w)
-    yy -= max(h1, h2)
+        filename = f"prontuario_{nome_slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
 
-    h1 = draw_kv(left_x, yy, "Telefone", p.get("telefone"), col_w)
-    h2 = draw_kv(right_x, yy, "END (Prontuário físico)", p.get("end_prontuario"), col_w)
-    yy -= max(h1, h2)
+        return send_file(
+            bio,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/pdf",
+        )
 
-    y = (y_in - (56 * mm)) - 10
+    except Exception as e:
+        log_erro(
+            "pacientes",
+            e,
+            entidade="pacientes",
+            entidade_id=id,
+            descricao="Erro ao exportar prontuário PDF com timbre.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "paciente_id": id,
+            },
+        )
 
-    # 2) Status e Classificação
-    x, y_in, w_in, _ = card_box("Status e Classificação", mm_h=44)
-
-    yy = y_in
-    used = 0
-    used += draw_chip(x, yy, "Status", p.get("status"), w_in)
-    used += draw_chip(x + used, yy, "Modalidade", p.get("mod"), w_in - used)
-
-    cid_combo = fmt(p.get("cid"))
-    if (p.get("cid2") or "").strip():
-        cid_combo = f"{cid_combo} | CID2: {fmt(p.get('cid2'))}"
-
-    yy -= 10 * mm
-    draw_kv(x, yy, "CID", cid_combo, w_in)
-
-    y = (y_in - (44 * mm)) - 10
-
-    # 3) Endereço e Família
-    x, y_in, w_in, _ = card_box("Endereço e Família", mm_h=52)
-
-    yy = y_in
-    h1 = draw_kv(x, yy, "Endereço", join_addr(p), w_in)
-    yy -= h1
-
-    col_gap = 12
-    col_w = (w_in - col_gap) / 2
-    left_x = x
-    right_x = x + col_w + col_gap
-
-    h1 = draw_kv(left_x, yy, "Nome da mãe", p.get("nome_mae"), col_w)
-    h2 = draw_kv(right_x, yy, "Nome do pai", p.get("nome_pai"), col_w)
-    yy -= max(h1, h2)
-
-    y = (y_in - (52 * mm)) - 10
-
-    # 4) Evolução / Observações
-    x, y_in, w_in, _ = card_box("Evolução / Observações", mm_h=78)
-
-    col_gap = 12
-    col_w = (w_in - col_gap) / 2
-    left_x = x
-    right_x = x + col_w + col_gap
-    yy = y_in + 6
-
-    draw_note_box(left_x, yy, col_w, "Alergias", p.get("alergias"))
-    draw_note_box(right_x, yy, col_w, "Aviso / Situação", p.get("aviso"))
-
-    yy -= 78
-    c.setFillColor(C_MUTED)
-    c.setFont("Helvetica", 8)
-    c.drawString(left_x, yy, "COMORBIDADES / PROJETOS")
-    c.setFillColor(C_TEXT)
-    c.setFont("Helvetica", 10)
-    for ln in wrap_text(tags_human(p), w_in, "Helvetica", 10)[:2]:
-        yy -= 5 * mm
-        c.drawString(left_x, yy, ln)
-
-    y = (y_in - (78 * mm)) - 10
-
-    # 5) Agenda / Terapias
-    x, y_in, w_in, _ = card_box("Agenda / Terapias", mm_h=60)
-
-    yy = y_in
-    if terapeuta:
-        draw_chip(x, yy, "Terapeuta(s)", terapeuta, w_in)
-
-    if cbo_str:
-        yy -= 10 * mm
-        draw_chip(x, yy, "CBO(s)", cbo_str, w_in)
-
-    yy -= 12 * mm
-    draw_kv(x, yy, "Resumo do agendamento", fmt(ag_resumo), w_in)
-
-    y = (y_in - (60 * mm)) - 10
-
-    # 6) Próximos agendamentos
-    if agds_upcoming:
-        x, y_in, w_in, _ = card_box("Próximos agendamentos", mm_h=80)
-        yy = y_in
-
-        c.setFont("Helvetica", 10)
-        c.setFillColor(C_TEXT)
-
-        max_items = 20
-        count = 0
-        for a in agds_upcoming:
-            if count >= max_items:
-                c.setFont("Helvetica-Oblique", 9)
-                c.setFillColor(C_MUTED)
-                c.drawString(x, yy, "… (lista cortada para manter o PDF leve)")
-                yy -= 6 * mm
-                break
-
-            dia = fmt(a.get("dia_semana"))
-            data_br = fmt(a.get("data_br"))
-            hi = fmt(a.get("hora_ini"))
-            hf = (a.get("hora_fim") or "").strip()
-            faixa = f"{hi}–{hf}" if hf else hi
-            prof = fmt(a.get("profissional"))
-
-            linha = f"{dia} • {data_br} • {faixa} — {prof}"
-            for ln in wrap_text(linha, w_in, "Helvetica", 10)[:2]:
-                c.drawString(x, yy, ln)
-                yy -= 5 * mm
-            yy -= 1.5 * mm
-
-            count += 1
-            if yy < (y_in - (80 * mm) + 18):
-                new_page()
-                x, y_in, w_in, _ = card_box("Próximos agendamentos (continuação)", mm_h=80)
-                yy = y_in
-
-        y = (y_in - (80 * mm)) - 10
-
-    c.showPage()
-    c.save()
-    bio.seek(0)
-
-    nome_slug = re.sub(r"[^A-Za-z0-9]+", "_", (p.get("nome") or "paciente").strip()).strip("_")
-    filename = f"prontuario_{nome_slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-    return send_file(bio, as_attachment=True, download_name=filename, mimetype="application/pdf")
+        return f"Erro ao gerar PDF: {e}", 500

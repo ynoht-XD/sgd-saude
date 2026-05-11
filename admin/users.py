@@ -4,11 +4,34 @@ from __future__ import annotations
 from datetime import datetime
 import json
 
-from flask import render_template, request, redirect, url_for, flash, jsonify
+from flask import render_template, request, redirect, url_for, flash, jsonify, session, abort, g
 from werkzeug.security import generate_password_hash
 
 from . import admin_bp, admin_required
 from .helpers import db_conn, only_digits, list_columns
+
+try:
+    from .modulos import require_permission, usuario_eh_master, get_clinica_id_contexto
+except Exception:
+    def require_permission(modulo_codigo: str, acao: str = "ver"):
+        def deco(fn):
+            return fn
+        return deco
+
+    def usuario_eh_master():
+        return bool(session.get("is_master") or session.get("is_superuser"))
+
+    def get_clinica_id_contexto(default=1):
+        return int(session.get("clinica_id") or default)
+
+try:
+    from log import registrar_log, log_erro, log_criacao, log_edicao, log_exclusao
+except Exception:
+    def registrar_log(*args, **kwargs): pass
+    def log_erro(*args, **kwargs): pass
+    def log_criacao(*args, **kwargs): pass
+    def log_edicao(*args, **kwargs): pass
+    def log_exclusao(*args, **kwargs): pass
 
 
 NIVEIS = [
@@ -81,9 +104,7 @@ def _normalize_bool(v) -> bool:
     if isinstance(v, bool):
         return v
 
-    return str(v).strip().lower() in {
-        "1", "true", "t", "yes", "sim", "ativo"
-    }
+    return str(v).strip().lower() in {"1", "true", "t", "yes", "sim", "ativo", "on"}
 
 
 def _nz(v):
@@ -107,14 +128,74 @@ def _integrity_error_class():
     return Exception
 
 
+def _current_user_id():
+    return session.get("usuario_id") or session.get("user_id")
+
+
+def _current_clinica_id():
+    return int(session.get("clinica_id") or get_clinica_id_contexto() or 1)
+
+
+def _normalizar_role(role: str | None) -> str:
+    role = (role or "").strip().upper()
+
+    if role == "RECEPÇÃO":
+        return "RECEPCAO"
+
+    if role == "PROFISSIONAIS":
+        return "PROFISSIONAL"
+
+    if role not in {"ADMIN", "RECEPCAO", "PROFISSIONAL", "MASTER", "ROOT", "SUPERADMIN"}:
+        return "RECEPCAO"
+
+    return role
+
+
+def _usuario_pode_manipular_clinica(clinica_id: int) -> bool:
+    if usuario_eh_master():
+        return True
+
+    return int(session.get("clinica_id") or 0) == int(clinica_id or 0)
+
+
+def _resolver_clinica_alvo():
+    """
+    Regra:
+    - MASTER usa a clínica escolhida no painel pós-login.
+    - Usuário comum usa a própria clínica da sessão.
+    """
+    clinica_id = _current_clinica_id()
+
+    if not clinica_id:
+        abort(403)
+
+    return int(clinica_id)
+
+
+def _row_id(row):
+    if isinstance(row, dict):
+        return row.get("id")
+    return row[0]
+
+
 # =============================================================================
 # SCHEMA
 # =============================================================================
 
 def ensure_users_table():
+    cache_key = "_ensure_users_table_ok"
+
+    if getattr(g, cache_key, False):
+        return
+
     conn = db_conn(False)
 
     try:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         cur.execute("""
@@ -135,6 +216,10 @@ def ensure_users_table():
                 telefone          TEXT,
                 role              TEXT,
                 is_active         BOOLEAN DEFAULT TRUE,
+                clinica_id        INTEGER,
+                perfil_id         INTEGER,
+                is_master         BOOLEAN DEFAULT FALSE,
+                is_superuser      BOOLEAN DEFAULT FALSE,
                 cep               TEXT,
                 logradouro        TEXT,
                 numero            TEXT,
@@ -156,6 +241,7 @@ def ensure_users_table():
             nonlocal cols
             if name not in cols:
                 cur.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {ddl};")
+                conn.commit()
                 cols = list_columns(conn, "usuarios")
 
         add_col("nome", "nome TEXT")
@@ -173,6 +259,10 @@ def ensure_users_table():
         add_col("telefone", "telefone TEXT")
         add_col("role", "role TEXT")
         add_col("is_active", "is_active BOOLEAN DEFAULT TRUE")
+        add_col("clinica_id", "clinica_id INTEGER")
+        add_col("perfil_id", "perfil_id INTEGER")
+        add_col("is_master", "is_master BOOLEAN DEFAULT FALSE")
+        add_col("is_superuser", "is_superuser BOOLEAN DEFAULT FALSE")
         add_col("cep", "cep TEXT")
         add_col("logradouro", "logradouro TEXT")
         add_col("numero", "numero TEXT")
@@ -219,26 +309,45 @@ def ensure_users_table():
                AND (password_hash IS NOT NULL AND BTRIM(password_hash) <> '');
         """)
 
-        # Índices únicos parciais
+        # Remove índices globais antigos.
+        cur.execute("DROP INDEX IF EXISTS idx_usuarios_email;")
+        cur.execute("DROP INDEX IF EXISTS idx_usuarios_cpf;")
+        cur.execute("DROP INDEX IF EXISTS idx_usuarios_cpf_digits;")
+
+        # Índices multi-clínica.
         cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_email
-                ON usuarios(email)
-                WHERE email IS NOT NULL AND BTRIM(email) <> '';
+            CREATE INDEX IF NOT EXISTS idx_usuarios_clinica_id
+                ON usuarios(clinica_id);
         """)
 
         cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_cpf
-                ON usuarios(cpf)
-                WHERE cpf IS NOT NULL AND BTRIM(cpf) <> '';
+            CREATE INDEX IF NOT EXISTS idx_usuarios_clinica_role
+                ON usuarios(clinica_id, role);
         """)
 
         cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_cpf_digits
-                ON usuarios(cpf_digits)
-                WHERE cpf_digits IS NOT NULL AND BTRIM(cpf_digits) <> '';
+            CREATE INDEX IF NOT EXISTS idx_usuarios_active
+                ON usuarios(is_active);
+        """)
+
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_clinica_cpf_digits
+                ON usuarios(clinica_id, cpf_digits)
+                WHERE clinica_id IS NOT NULL
+                  AND cpf_digits IS NOT NULL
+                  AND BTRIM(cpf_digits) <> '';
+        """)
+
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_clinica_email
+                ON usuarios(clinica_id, email)
+                WHERE clinica_id IS NOT NULL
+                  AND email IS NOT NULL
+                  AND BTRIM(email) <> '';
         """)
 
         conn.commit()
+        setattr(g, cache_key, True)
 
     except Exception:
         conn.rollback()
@@ -246,10 +355,6 @@ def ensure_users_table():
 
     finally:
         conn.close()
-
-
-ensure_users_table()
-
 
 # =============================================================================
 # CBO
@@ -260,6 +365,11 @@ def get_cbo_descricao(codigo: str | None) -> str:
 
     if not codigo:
         return ""
+
+    cache_key = f"cbo_desc_{codigo}"
+
+    if hasattr(g, cache_key):
+        return getattr(g, cache_key)
 
     conn = db_conn(True)
 
@@ -277,7 +387,9 @@ def get_cbo_descricao(codigo: str | None) -> str:
             row = _fetchone_as_dict(cur)
 
             if row and (row.get("descricao") or "").strip():
-                return row["descricao"].strip()
+                desc = row["descricao"].strip()
+                setattr(g, cache_key, desc)
+                return desc
 
         except Exception:
             conn.rollback()
@@ -292,13 +404,14 @@ def get_cbo_descricao(codigo: str | None) -> str:
 
             row = _fetchone_as_dict(cur)
 
-            if row:
-                return (row.get("descricao") or "").strip()
+            desc = (row.get("descricao") or "").strip() if row else ""
+            setattr(g, cache_key, desc)
+            return desc
 
         except Exception:
             conn.rollback()
-
-        return ""
+            setattr(g, cache_key, "")
+            return ""
 
     finally:
         conn.close()
@@ -309,6 +422,11 @@ def cbo_existe_no_catalogo(codigo: str | None) -> bool:
 
     if not codigo:
         return False
+
+    cache_key = f"cbo_existe_{codigo}"
+
+    if hasattr(g, cache_key):
+        return getattr(g, cache_key)
 
     conn = db_conn(True)
 
@@ -324,6 +442,7 @@ def cbo_existe_no_catalogo(codigo: str | None) -> bool:
             """, (codigo,))
 
             if cur.fetchone():
+                setattr(g, cache_key, True)
                 return True
 
         except Exception:
@@ -337,10 +456,13 @@ def cbo_existe_no_catalogo(codigo: str | None) -> bool:
                  LIMIT 1;
             """, (codigo,))
 
-            return cur.fetchone() is not None
+            ok = cur.fetchone() is not None
+            setattr(g, cache_key, ok)
+            return ok
 
         except Exception:
             conn.rollback()
+            setattr(g, cache_key, False)
             return False
 
     finally:
@@ -348,6 +470,11 @@ def cbo_existe_no_catalogo(codigo: str | None) -> bool:
 
 
 def get_cbos_catalogo_local(q: str | None = None, limit: int = 200):
+    cache_key = f"cbos_catalogo_{(q or '').strip().lower()}_{limit}"
+
+    if hasattr(g, cache_key):
+        return getattr(g, cache_key)
+
     conn = db_conn(True)
 
     try:
@@ -386,16 +513,14 @@ def get_cbos_catalogo_local(q: str | None = None, limit: int = 200):
                 """
                 params.extend([f"%{q_digits or q_norm}%", f"%{q_norm}%"])
 
-            sql += """
-                 ORDER BY codigo ASC
-                 LIMIT %s;
-            """
+            sql += " ORDER BY codigo ASC LIMIT %s;"
             params.append(int(limit))
 
             cur.execute(sql, params)
             items = montar_items(_fetchall_as_dicts(cur))
 
             if items:
+                setattr(g, cache_key, items)
                 return items
 
         except Exception:
@@ -420,17 +545,17 @@ def get_cbos_catalogo_local(q: str | None = None, limit: int = 200):
                 """
                 params.extend([f"%{q_digits or q_norm}%", f"%{q_norm}%"])
 
-            sql += """
-                 ORDER BY codigo ASC
-                 LIMIT %s;
-            """
+            sql += " ORDER BY codigo ASC LIMIT %s;"
             params.append(int(limit))
 
             cur.execute(sql, params)
-            return montar_items(_fetchall_as_dicts(cur))
+            items = montar_items(_fetchall_as_dicts(cur))
+            setattr(g, cache_key, items)
+            return items
 
         except Exception:
             conn.rollback()
+            setattr(g, cache_key, [])
             return []
 
     finally:
@@ -441,24 +566,28 @@ def get_cbos_catalogo_local(q: str | None = None, limit: int = 200):
 # USER HELPERS
 # =============================================================================
 
-def load_user(uid: int):
+def load_user(uid: int, exigir_mesma_clinica=True):
+    ensure_users_table()
+
     conn = db_conn(True)
 
     try:
-        # limpa qualquer transação abortada anterior
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-
         cur = conn.cursor()
 
-        cur.execute("""
+        params = [uid]
+        filtro = ""
+
+        if exigir_mesma_clinica and not usuario_eh_master():
+            filtro = "AND COALESCE(clinica_id, 1) = %s"
+            params.append(_current_clinica_id())
+
+        cur.execute(f"""
             SELECT *
               FROM usuarios
              WHERE id = %s
+               {filtro}
              LIMIT 1;
-        """, (uid,))
+        """, params)
 
         return _fetchone_as_dict(cur)
 
@@ -475,12 +604,84 @@ def load_user(uid: int):
         except Exception:
             pass
 
+
+def _montar_permissoes_json():
+    permissoes = []
+
+    for k in request.form.keys():
+        if k.startswith("perm_") and request.form.get(k) == "1":
+            permissoes.append(k.replace("perm_", "", 1))
+
+    return json.dumps(permissoes, ensure_ascii=False) if permissoes else None
+
+
+def _montar_payload_usuario(row_atual=None):
+    nome = (request.form.get("nome") or "").strip()
+    cpf = (request.form.get("cpf") or "").strip()
+    role = _normalizar_role((request.form.get("role") or "").strip() or (row_atual or {}).get("role") or "RECEPCAO")
+    is_active_raw = request.form.get("is_active") or "1"
+
+    if not nome or not cpf or not role:
+        raise ValueError("Preencha ao menos Nome, CPF e Nível.")
+
+    cpf_digits = only_digits(cpf)
+
+    if len(cpf_digits) != 11:
+        raise ValueError("CPF inválido. Informe 11 dígitos.")
+
+    if role in {"MASTER", "ROOT", "SUPERADMIN"} and not usuario_eh_master():
+        raise PermissionError("Apenas o Master pode criar ou editar usuário Master.")
+
+    cbo = _nz(only_digits(request.form.get("cbo"))[:6])
+
+    if cbo and not cbo_existe_no_catalogo(cbo):
+        raise ValueError("O CBO informado não existe no catálogo local.")
+
+    cbo_descricao = get_cbo_descricao(cbo) if cbo else None
+
+    clinica_id = _resolver_clinica_alvo()
+
+    return {
+        "nome": nome,
+        "email": _nz(request.form.get("email")),
+        "cpf": cpf,
+        "cpf_digits": cpf_digits,
+        "cns": _nz(request.form.get("cns")),
+        "nascimento": _nz(request.form.get("nascimento")),
+        "sexo": _nz(request.form.get("sexo")),
+        "conselho": _nz(request.form.get("conselho")),
+        "registro_conselho": _nz(request.form.get("registro_conselho")),
+        "uf_conselho": _nz(request.form.get("uf_conselho")),
+        "cbo": cbo,
+        "cbo_descricao": cbo_descricao,
+        "telefone": _nz(request.form.get("telefone")),
+        "role": role,
+        "is_active": str(is_active_raw) == "1",
+        "clinica_id": clinica_id,
+        "cep": _nz(request.form.get("cep")),
+        "logradouro": _nz(request.form.get("logradouro")),
+        "numero": _nz(request.form.get("numero")),
+        "complemento": _nz(request.form.get("complemento")),
+        "bairro": _nz(request.form.get("bairro")),
+        "municipio": _nz(request.form.get("municipio")),
+        "uf": _nz(request.form.get("uf")),
+        "permissoes_json": _montar_permissoes_json(),
+        "is_master": role in {"MASTER", "ROOT", "SUPERADMIN"},
+        "is_superuser": role in {"MASTER", "ROOT", "SUPERADMIN"},
+    }
+
+
+def _redirect_usuarios():
+    return redirect(url_for("admin.usuarios_listar"))
+
+
 # =============================================================================
 # API CBO
 # =============================================================================
 
 @admin_bp.route("/api/cbos-catalogo/buscar")
 @admin_required
+@require_permission("admin_usuarios", "ver")
 def cbos_catalogo_buscar():
     q = (request.args.get("q") or "").strip()
 
@@ -497,9 +698,11 @@ def cbos_catalogo_buscar():
 
 @admin_bp.route("/")
 @admin_required
+@require_permission("admin_painel", "ver")
 def admin_home():
     total_usuarios = 0
     usuarios_ativos = 0
+    clinica_id = _current_clinica_id()
 
     conn = None
 
@@ -513,17 +716,34 @@ def admin_home():
             SELECT
                 COUNT(1) AS total_usuarios,
                 SUM(CASE WHEN COALESCE(is_active, FALSE) = TRUE THEN 1 ELSE 0 END) AS usuarios_ativos
-              FROM usuarios;
-        """)
+              FROM usuarios
+             WHERE COALESCE(clinica_id, 1) = %s;
+        """, (clinica_id,))
 
         row = _fetchone_as_dict(cur) or {}
 
         total_usuarios = int(row.get("total_usuarios") or 0)
         usuarios_ativos = int(row.get("usuarios_ativos") or 0)
 
-    except Exception:
+        log_visualizacao = registrar_log
+        log_visualizacao(
+            modulo="admin_painel",
+            acao="visualizar",
+            entidade="admin",
+            descricao="Visualizou painel administrativo.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
+    except Exception as e:
         if conn:
             conn.rollback()
+
+        log_erro(
+            "admin_painel",
+            e,
+            descricao="Erro ao carregar painel administrativo.",
+            detalhes={"clinica_id": clinica_id},
+        )
 
     finally:
         if conn:
@@ -534,6 +754,8 @@ def admin_home():
         "usuarios_ativos": usuarios_ativos,
         "modulos_habilitados": 3,
         "ultimo_backup": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "clinica_id": clinica_id,
+        "clinica_nome": session.get("clinica_nome"),
     }
 
     return render_template("admin.html", **ctx)
@@ -545,33 +767,23 @@ def admin_home():
 
 @admin_bp.route("/usuarios")
 @admin_required
+@require_permission("admin_usuarios", "ver")
 def usuarios_listar():
     usuarios = []
     conn = None
+    clinica_id = _current_clinica_id()
 
     try:
         ensure_users_table()
 
         conn = db_conn(True)
-        cur = conn.cursor()
-
-        mapa_cbo = {}
 
         try:
-            cur.execute("""
-                SELECT
-                    BTRIM(COALESCE(codigo, '')) AS codigo,
-                    BTRIM(COALESCE(descricao, '')) AS descricao
-                  FROM cbo_catalogo
-                 WHERE BTRIM(COALESCE(codigo, '')) <> '';
-            """)
-
-            for r in _fetchall_as_dicts(cur):
-                mapa_cbo[(r.get("codigo") or "").strip()] = (r.get("descricao") or "").strip()
-
-        except Exception:
             conn.rollback()
-            mapa_cbo = {}
+        except Exception:
+            pass
+
+        cur = conn.cursor()
 
         cur.execute("""
             SELECT
@@ -584,19 +796,20 @@ def usuarios_listar():
                 is_active,
                 criado_em,
                 cbo,
-                cbo_descricao
+                cbo_descricao,
+                clinica_id
               FROM usuarios
+             WHERE clinica_id = %s
+               AND COALESCE(is_master, FALSE) = FALSE
+               AND COALESCE(is_superuser, FALSE) = FALSE
              ORDER BY id DESC;
-        """)
+        """, (clinica_id,))
 
         rows = _fetchall_as_dicts(cur)
 
         for r in rows:
             cbo_codigo = (r.get("cbo") or "").strip()
             cbo_descricao = (r.get("cbo_descricao") or "").strip()
-
-            if not cbo_descricao:
-                cbo_descricao = mapa_cbo.get(cbo_codigo, "")
 
             usuarios.append({
                 "id": r.get("id"),
@@ -609,12 +822,37 @@ def usuarios_listar():
                 "criado_em": r.get("criado_em"),
                 "cbo": cbo_codigo,
                 "cbo_descricao": cbo_descricao,
-                "cbo_label": f"{cbo_codigo} — {cbo_descricao}" if cbo_codigo and cbo_descricao else (cbo_codigo or "—"),
+                "cbo_label": (
+                    f"{cbo_codigo} — {cbo_descricao}"
+                    if cbo_codigo and cbo_descricao
+                    else (cbo_codigo or "—")
+                ),
+                "clinica_id": r.get("clinica_id"),
             })
+
+        registrar_log(
+            modulo="admin_usuarios",
+            acao="visualizar",
+            entidade="usuarios",
+            descricao="Visualizou lista de usuários.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "total": len(usuarios),
+            },
+        )
 
     except Exception as e:
         if conn:
             conn.rollback()
+
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            descricao="Falha ao carregar usuários.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
         flash(f"Falha ao carregar usuários: {e}", "error")
 
     finally:
@@ -625,9 +863,11 @@ def usuarios_listar():
         "admin-usuarios.html",
         usuarios=usuarios,
         niveis=NIVEIS,
-        cbos_catalogo=get_cbos_catalogo_local(limit=200),
+        cbos_catalogo=get_cbos_catalogo_local(limit=120),
+        clinica_id=clinica_id,
+        clinica_nome=session.get("clinica_nome"),
+        is_master=usuario_eh_master(),
     )
-
 
 # =============================================================================
 # USUÁRIOS - CRIAR
@@ -635,38 +875,25 @@ def usuarios_listar():
 
 @admin_bp.route("/usuarios/novo", methods=["GET", "POST"])
 @admin_required
+@require_permission("admin_usuarios", "editar")
 def usuarios_criar():
     if request.method != "POST":
         return redirect(url_for("admin.usuarios_listar"))
 
     conn = None
+    clinica_id = _resolver_clinica_alvo()
 
     try:
-        nome = (request.form.get("nome") or "").strip()
-        cpf = (request.form.get("cpf") or "").strip()
-        role = (request.form.get("role") or "").strip() or "RECEPCAO"
-        is_active_raw = request.form.get("is_active") or "1"
-
-        if not nome or not cpf or not role:
-            flash("Preencha ao menos Nome, CPF e Nível.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
-
-        cpf_digits = only_digits(cpf)
-
-        if len(cpf_digits) != 11:
-            flash("CPF inválido. Informe 11 dígitos.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
+        payload = _montar_payload_usuario()
 
         senha = request.form.get("senha") or ""
         senha2 = request.form.get("senha2") or ""
 
         if not senha or len(senha) < 6:
-            flash("Defina uma senha com pelo menos 6 caracteres.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
+            raise ValueError("Defina uma senha com pelo menos 6 caracteres.")
 
         if senha != senha2:
-            flash("A confirmação da senha não confere.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
+            raise ValueError("A confirmação da senha não confere.")
 
         senha_hash = generate_password_hash(
             senha,
@@ -674,46 +901,10 @@ def usuarios_criar():
             salt_length=16,
         )
 
-        email = _nz(request.form.get("email"))
-        cns = _nz(request.form.get("cns"))
-        nascimento = _nz(request.form.get("nascimento"))
-        sexo = _nz(request.form.get("sexo"))
-
-        conselho = _nz(request.form.get("conselho"))
-        registro_conselho = _nz(request.form.get("registro_conselho"))
-        uf_conselho = _nz(request.form.get("uf_conselho"))
-
-        cbo = _nz(only_digits(request.form.get("cbo"))[:6])
-
-        if cbo and not cbo_existe_no_catalogo(cbo):
-            flash("O CBO informado não existe no catálogo local.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
-
-        cbo_descricao = get_cbo_descricao(cbo) if cbo else None
-
-        telefone = _nz(request.form.get("telefone"))
-        cep = _nz(request.form.get("cep"))
-        logradouro = _nz(request.form.get("logradouro"))
-        numero = _nz(request.form.get("numero"))
-        complemento = _nz(request.form.get("complemento"))
-        bairro = _nz(request.form.get("bairro"))
-        municipio = _nz(request.form.get("municipio"))
-        uf = _nz(request.form.get("uf"))
-
-        permissoes = []
-
-        for k in request.form.keys():
-            if k.startswith("perm_") and request.form.get(k) == "1":
-                permissoes.append(k.replace("perm_", "", 1))
-
-        permissoes_json = json.dumps(permissoes, ensure_ascii=False) if permissoes else None
-
         ensure_users_table()
 
         conn = db_conn(False)
         cur = conn.cursor()
-
-        is_active = str(is_active_raw) == "1"
 
         cur.execute("""
             INSERT INTO usuarios (
@@ -732,6 +923,9 @@ def usuarios_criar():
                 telefone,
                 role,
                 is_active,
+                clinica_id,
+                is_master,
+                is_superuser,
                 cep,
                 logradouro,
                 numero,
@@ -748,43 +942,60 @@ def usuarios_criar():
             VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             RETURNING id;
         """, (
-            nome,
-            email,
-            cpf,
-            cpf_digits,
-            cns,
-            nascimento,
-            sexo,
-            conselho,
-            registro_conselho,
-            uf_conselho,
-            cbo,
-            cbo_descricao,
-            telefone,
-            role,
-            is_active,
-            cep,
-            logradouro,
-            numero,
-            complemento,
-            bairro,
-            municipio,
-            uf,
-            permissoes_json,
+            payload["nome"],
+            payload["email"],
+            payload["cpf"],
+            payload["cpf_digits"],
+            payload["cns"],
+            payload["nascimento"],
+            payload["sexo"],
+            payload["conselho"],
+            payload["registro_conselho"],
+            payload["uf_conselho"],
+            payload["cbo"],
+            payload["cbo_descricao"],
+            payload["telefone"],
+            payload["role"],
+            payload["is_active"],
+            payload["clinica_id"],
+            payload["is_master"],
+            payload["is_superuser"],
+            payload["cep"],
+            payload["logradouro"],
+            payload["numero"],
+            payload["complemento"],
+            payload["bairro"],
+            payload["municipio"],
+            payload["uf"],
+            payload["permissoes_json"],
             senha_hash,
             senha_hash,
         ))
 
-        cur.fetchone()
+        novo_id = _row_id(cur.fetchone())
         conn.commit()
 
+        log_criacao(
+            modulo="admin_usuarios",
+            entidade="usuarios",
+            entidade_id=novo_id,
+            descricao="Usuário criado.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "nome": payload["nome"],
+                "role": payload["role"],
+            },
+        )
+
         flash("Usuário criado com sucesso.", "success")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
 
     except _integrity_error_class() as e:
         if conn:
@@ -792,23 +1003,37 @@ def usuarios_criar():
 
         msg = str(e).lower()
 
-        if "cpf_digits" in msg or "idx_usuarios_cpf_digits" in msg:
-            flash("Já existe um usuário com esse CPF.", "error")
-        elif "idx_usuarios_cpf" in msg or "usuarios_cpf_key" in msg:
+        if "cpf_digits" in msg or "idx_usuarios_cpf_digits" in msg or "usuarios_cpf_key" in msg:
             flash("Já existe um usuário com esse CPF.", "error")
         elif "idx_usuarios_email" in msg or "usuarios_email_key" in msg:
             flash("Já existe um usuário com esse e-mail.", "error")
         else:
             flash(f"Erro de integridade ao salvar o usuário: {e}", "error")
 
-        return redirect(url_for("admin.usuarios_listar"))
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            descricao="Erro de integridade ao criar usuário.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
+        return _redirect_usuarios()
 
     except Exception as e:
         if conn:
             conn.rollback()
 
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            descricao="Erro ao criar usuário.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
         flash(f"Erro ao criar usuário: {e}", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
 
     finally:
         if conn:
@@ -821,43 +1046,62 @@ def usuarios_criar():
 
 @admin_bp.route("/usuarios/<int:uid>.json")
 @admin_required
+@require_permission("admin_usuarios", "ver")
 def usuarios_json(uid):
-    row = load_user(uid)
+    try:
+        row = load_user(uid)
 
-    if not row:
-        return jsonify({"error": "Usuário não encontrado"}), 404
+        if not row:
+            return jsonify({"error": "Usuário não encontrado"}), 404
 
-    data = dict(row)
+        data = dict(row)
 
-    # Nunca enviar hashes para o front
-    data.pop("senha_hash", None)
-    data.pop("password_hash", None)
+        data.pop("senha_hash", None)
+        data.pop("password_hash", None)
 
-    # Converte datas/timestamps para texto
-    for campo in ("criado_em", "atualizado_em", "nascimento", "last_login_at", "created_at"):
-        if campo in data and data[campo] is not None:
-            try:
-                data[campo] = data[campo].isoformat()
-            except Exception:
-                data[campo] = str(data[campo])
+        for campo in ("criado_em", "atualizado_em", "nascimento", "last_login_at", "created_at"):
+            if campo in data and data[campo] is not None:
+                try:
+                    data[campo] = data[campo].isoformat()
+                except Exception:
+                    data[campo] = str(data[campo])
 
-    # Normaliza booleano
-    data["is_active"] = _normalize_bool(data.get("is_active"))
+        data["is_active"] = _normalize_bool(data.get("is_active"))
 
-    cbo_codigo = (data.get("cbo") or "").strip()
-    cbo_descricao = (data.get("cbo_descricao") or "").strip()
+        cbo_codigo = (data.get("cbo") or "").strip()
+        cbo_descricao = (data.get("cbo_descricao") or "").strip()
 
-    if cbo_codigo and not cbo_descricao:
-        cbo_descricao = get_cbo_descricao(cbo_codigo)
+        if cbo_codigo and not cbo_descricao:
+            cbo_descricao = get_cbo_descricao(cbo_codigo)
 
-    data["cbo_descricao"] = cbo_descricao
-    data["cbo_label"] = (
-        f"{cbo_codigo} — {cbo_descricao}"
-        if cbo_codigo and cbo_descricao
-        else (cbo_codigo or "")
-    )
+        data["cbo_descricao"] = cbo_descricao
+        data["cbo_label"] = (
+            f"{cbo_codigo} — {cbo_descricao}"
+            if cbo_codigo and cbo_descricao
+            else (cbo_codigo or "")
+        )
 
-    return jsonify(data)
+        registrar_log(
+            modulo="admin_usuarios",
+            acao="visualizar",
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Carregou JSON de usuário.",
+            detalhes={"clinica_id": _current_clinica_id()},
+        )
+
+        return jsonify(data)
+
+    except Exception as e:
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Erro ao carregar JSON de usuário.",
+        )
+        return jsonify({"error": str(e)}), 500
+
 
 # =============================================================================
 # USUÁRIOS - EDITAR
@@ -865,70 +1109,25 @@ def usuarios_json(uid):
 
 @admin_bp.route("/usuarios/<int:uid>/editar", methods=["POST"])
 @admin_required
+@require_permission("admin_usuarios", "editar")
 def usuarios_editar(uid):
     conn = None
+    clinica_id = _current_clinica_id()
 
     try:
-        # 🔥 carrega o usuário com proteção contra transação abortada
         row = load_user(uid)
 
         if not row:
             flash("Usuário não encontrado.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
+            return _redirect_usuarios()
 
-        nome = (request.form.get("nome") or "").strip()
-        cpf = (request.form.get("cpf") or "").strip()
-        role = (request.form.get("role") or "").strip() or row.get("role")
-        is_active_raw = request.form.get("is_active") or "1"
+        if not _usuario_pode_manipular_clinica(row.get("clinica_id")):
+            abort(403)
 
-        if not nome or not cpf or not role:
-            flash("Preencha Nome, CPF e Nível.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
-
-        cpf_digits = only_digits(cpf)
-
-        if len(cpf_digits) != 11:
-            flash("CPF inválido. Informe 11 dígitos.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
-
-        email = _nz(request.form.get("email"))
-        cns = _nz(request.form.get("cns"))
-        nascimento = _nz(request.form.get("nascimento"))
-        sexo = _nz(request.form.get("sexo"))
-
-        conselho = _nz(request.form.get("conselho"))
-        registro_conselho = _nz(request.form.get("registro_conselho"))
-        uf_conselho = _nz(request.form.get("uf_conselho"))
-
-        cbo = _nz(only_digits(request.form.get("cbo"))[:6])
-
-        if cbo and not cbo_existe_no_catalogo(cbo):
-            flash("O CBO informado não existe no catálogo local.", "error")
-            return redirect(url_for("admin.usuarios_listar"))
-
-        cbo_descricao = get_cbo_descricao(cbo) if cbo else None
-
-        telefone = _nz(request.form.get("telefone"))
-        cep = _nz(request.form.get("cep"))
-        logradouro = _nz(request.form.get("logradouro"))
-        numero = _nz(request.form.get("numero"))
-        complemento = _nz(request.form.get("complemento"))
-        bairro = _nz(request.form.get("bairro"))
-        municipio = _nz(request.form.get("municipio"))
-        uf = _nz(request.form.get("uf"))
-
-        permissoes = []
-
-        for k in request.form.keys():
-            if k.startswith("perm_") and request.form.get(k) == "1":
-                permissoes.append(k.replace("perm_", "", 1))
-
-        permissoes_json = json.dumps(permissoes, ensure_ascii=False)
-        is_active = str(is_active_raw) == "1"
+        payload = _montar_payload_usuario(row)
 
         conn = db_conn(False)
 
-        # 🔥 garante que a conexão não esteja abortada
         try:
             conn.rollback()
         except Exception:
@@ -953,6 +1152,9 @@ def usuarios_editar(uid):
                 telefone = %s,
                 role = %s,
                 is_active = %s,
+                clinica_id = %s,
+                is_master = %s,
+                is_superuser = %s,
                 cep = %s,
                 logradouro = %s,
                 numero = %s,
@@ -962,35 +1164,53 @@ def usuarios_editar(uid):
                 uf = %s,
                 permissoes_json = %s,
                 atualizado_em = CURRENT_TIMESTAMP
-            WHERE id = %s;
+            WHERE id = %s
+              AND COALESCE(clinica_id, 1) = %s;
         """, (
-            nome,
-            email,
-            cpf,
-            cpf_digits,
-            cns,
-            nascimento,
-            sexo,
-            conselho,
-            registro_conselho,
-            uf_conselho,
-            cbo,
-            cbo_descricao,
-            telefone,
-            role,
-            is_active,
-            cep,
-            logradouro,
-            numero,
-            complemento,
-            bairro,
-            municipio,
-            uf,
-            permissoes_json,
+            payload["nome"],
+            payload["email"],
+            payload["cpf"],
+            payload["cpf_digits"],
+            payload["cns"],
+            payload["nascimento"],
+            payload["sexo"],
+            payload["conselho"],
+            payload["registro_conselho"],
+            payload["uf_conselho"],
+            payload["cbo"],
+            payload["cbo_descricao"],
+            payload["telefone"],
+            payload["role"],
+            payload["is_active"],
+            payload["clinica_id"],
+            payload["is_master"],
+            payload["is_superuser"],
+            payload["cep"],
+            payload["logradouro"],
+            payload["numero"],
+            payload["complemento"],
+            payload["bairro"],
+            payload["municipio"],
+            payload["uf"],
+            payload["permissoes_json"],
             uid,
+            clinica_id,
         ))
 
         conn.commit()
+
+        log_edicao(
+            modulo="admin_usuarios",
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Usuário atualizado.",
+            detalhes={
+                "clinica_id": clinica_id,
+                "nome": payload["nome"],
+                "role": payload["role"],
+            },
+        )
+
         flash("Usuário atualizado com sucesso.", "success")
 
     except _integrity_error_class() as e:
@@ -1006,9 +1226,27 @@ def usuarios_editar(uid):
         else:
             flash(f"Erro de integridade: {e}", "error")
 
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Erro de integridade ao atualizar usuário.",
+            detalhes={"clinica_id": clinica_id},
+        )
+
     except Exception as e:
         if conn:
             conn.rollback()
+
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Erro ao atualizar usuário.",
+            detalhes={"clinica_id": clinica_id},
+        )
 
         flash(f"Erro ao atualizar usuário: {e}", "error")
 
@@ -1016,7 +1254,8 @@ def usuarios_editar(uid):
         if conn:
             conn.close()
 
-    return redirect(url_for("admin.usuarios_listar"))
+    return _redirect_usuarios()
+
 
 # =============================================================================
 # USUÁRIOS - MUDAR SENHA
@@ -1024,23 +1263,27 @@ def usuarios_editar(uid):
 
 @admin_bp.route("/usuarios/<int:uid>/senha", methods=["POST"])
 @admin_required
+@require_permission("admin_usuarios", "editar")
 def usuarios_mudar_senha(uid):
     row = load_user(uid)
 
     if not row:
         flash("Usuário não encontrado.", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
+
+    if not _usuario_pode_manipular_clinica(row.get("clinica_id")):
+        abort(403)
 
     senha = request.form.get("senha") or ""
     senha2 = request.form.get("senha2") or ""
 
     if not senha or len(senha) < 6:
         flash("Defina uma senha com pelo menos 6 caracteres.", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
 
     if senha != senha2:
         flash("A confirmação da senha não confere.", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
 
     conn = None
 
@@ -1059,10 +1302,19 @@ def usuarios_mudar_senha(uid):
                SET senha_hash = %s,
                    password_hash = %s,
                    atualizado_em = CURRENT_TIMESTAMP
-             WHERE id = %s;
-        """, (senha_hash, senha_hash, uid))
+             WHERE id = %s
+               AND COALESCE(clinica_id, 1) = %s;
+        """, (senha_hash, senha_hash, uid, _current_clinica_id()))
 
         conn.commit()
+
+        log_edicao(
+            modulo="admin_usuarios",
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Senha de usuário atualizada.",
+            detalhes={"clinica_id": _current_clinica_id()},
+        )
 
         flash("Senha atualizada com sucesso.", "success")
 
@@ -1070,13 +1322,22 @@ def usuarios_mudar_senha(uid):
         if conn:
             conn.rollback()
 
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Erro ao atualizar senha de usuário.",
+            detalhes={"clinica_id": _current_clinica_id()},
+        )
+
         flash(f"Erro ao atualizar senha: {e}", "error")
 
     finally:
         if conn:
             conn.close()
 
-    return redirect(url_for("admin.usuarios_listar"))
+    return _redirect_usuarios()
 
 
 # =============================================================================
@@ -1085,12 +1346,16 @@ def usuarios_mudar_senha(uid):
 
 @admin_bp.route("/usuarios/<int:uid>/remover", methods=["POST"])
 @admin_required
+@require_permission("admin_usuarios", "editar")
 def usuarios_remover(uid):
     row = load_user(uid)
 
     if not row:
         flash("Usuário não encontrado.", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
+
+    if not _usuario_pode_manipular_clinica(row.get("clinica_id")):
+        abort(403)
 
     conn = None
 
@@ -1098,8 +1363,27 @@ def usuarios_remover(uid):
         conn = db_conn(False)
         cur = conn.cursor()
 
-        cur.execute("DELETE FROM usuarios WHERE id = %s;", (uid,))
+        cur.execute("""
+            DELETE FROM usuarios
+             WHERE id = %s
+               AND COALESCE(clinica_id, 1) = %s
+               AND COALESCE(is_master, FALSE) = FALSE
+               AND COALESCE(is_superuser, FALSE) = FALSE;
+        """, (uid, _current_clinica_id()))
+
         conn.commit()
+
+        log_exclusao(
+            modulo="admin_usuarios",
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Usuário removido.",
+            detalhes={
+                "clinica_id": _current_clinica_id(),
+                "nome": row.get("nome"),
+                "role": row.get("role"),
+            },
+        )
 
         flash("Usuário removido com sucesso.", "success")
 
@@ -1107,13 +1391,22 @@ def usuarios_remover(uid):
         if conn:
             conn.rollback()
 
+        log_erro(
+            "admin_usuarios",
+            e,
+            entidade="usuarios",
+            entidade_id=uid,
+            descricao="Erro ao remover usuário.",
+            detalhes={"clinica_id": _current_clinica_id()},
+        )
+
         flash(f"Erro ao remover usuário: {e}", "error")
 
     finally:
         if conn:
             conn.close()
 
-    return redirect(url_for("admin.usuarios_listar"))
+    return _redirect_usuarios()
 
 
 # =============================================================================
@@ -1122,13 +1415,26 @@ def usuarios_remover(uid):
 
 @admin_bp.route("/usuarios/niveis/criar", methods=["POST"])
 @admin_required
+@require_permission("admin_usuarios", "editar")
 def niveis_criar():
     nome = request.form.get("nome_nivel", "").strip()
     slug = request.form.get("slug", "").strip()
 
     if not nome or not slug:
         flash("Informe Nome do nível e Slug.", "error")
-        return redirect(url_for("admin.usuarios_listar"))
+        return _redirect_usuarios()
+
+    registrar_log(
+        modulo="admin_usuarios",
+        acao="criar_nivel_preview",
+        entidade="niveis",
+        descricao="Criou preview de nível de usuário.",
+        detalhes={
+            "nome": nome,
+            "slug": slug,
+            "clinica_id": _current_clinica_id(),
+        },
+    )
 
     flash(f"Nível '{nome}' ({slug}) criado (preview).", "success")
-    return redirect(url_for("admin.usuarios_listar"))
+    return _redirect_usuarios()

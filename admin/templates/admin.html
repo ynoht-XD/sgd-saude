@@ -491,6 +491,16 @@
       min-height: 70px;
     }
 
+    .admin-card.is-logs .admin-card-icon{
+      background: linear-gradient(135deg, rgba(15,23,42,.14), rgba(59,130,246,.24));
+      color: #1e3a8a;
+    }
+
+    .admin-card.is-logs::before{
+      background: linear-gradient(135deg, rgba(15,23,42,.88), rgba(59,130,246,.72));
+    }
+
+
     .admin-content-slot:empty{
       display: none;
     }
@@ -570,13 +580,28 @@
       }
 
     }
+    
+    .admin-card.is-users-master .admin-card-icon{
+      background: linear-gradient(135deg, rgba(147,51,234,.14), rgba(236,72,153,.24));
+      color: #7e22ce;
+    }
 
+    .admin-card.is-users-master::before{
+      background: linear-gradient(135deg, rgba(147,51,234,.88), rgba(236,72,153,.72));
+    }
     .admin-card.is-cep .admin-card-icon{
       background: linear-gradient(135deg, rgba(16,185,129,.14), rgba(45,212,191,.26));
       color: #0f766e;
     }
     .admin-card.is-cep::before{
       background: linear-gradient(135deg, rgba(16,185,129,.84), rgba(45,212,191,.76));
+    }
+    .admin-card.is-clinica .admin-card-icon{
+      background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(168,85,247,.26));
+      color: #6d28d9;
+    }
+    .admin-card.is-clinica::before{
+      background: linear-gradient(135deg, rgba(124,58,237,.84), rgba(168,85,247,.76));
     }
 
   </style>
@@ -770,6 +795,68 @@
             </span>
           </div>
         </a>
+
+        <a class="admin-card is-clinica" href="{{ url_for('clinica_config.index') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">🏥</div>
+            <span class="admin-card-tag">Clínica</span>
+          </div>
+          <div class="admin-card-bottom">
+            <h3>Dados da Clínica</h3>
+            <p>
+              Configure nome, CNPJ, contatos, logo, cabeçalho e rodapé usados nos relatórios do sistema.
+            </p>
+            <span class="admin-card-foot">
+              Abrir configurações
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
+
+
+        {% if is_master %}
+        <a class="admin-card is-users-master" href="{{ url_for('admin.usuarios_master') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">👑</div>
+            <span class="admin-card-tag">Master</span>
+          </div>
+          <div class="admin-card-bottom">
+            <h3>Usuários Master</h3>
+            <p>
+              Veja todos os usuários do sistema, corrija vínculos no limbo e designe clínicas sem acessar o banco.
+            </p>
+            <span class="admin-card-foot">
+              Abrir painel master
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
+
+        <a class="admin-card is-modules" href="{{ url_for('logs.index') }}">
+          <div class="admin-card-top">
+            <div class="admin-card-icon">📜</div>
+            <span class="admin-card-tag">Auditoria</span>
+          </div>
+
+          <div class="admin-card-bottom">
+            <h3>Central de Logs</h3>
+
+            <p>
+              Acompanhe ações do sistema em tempo real: exportações,
+              alterações, acessos, movimentações e atividades por usuário,
+              clínica, paciente e módulo.
+            </p>
+
+            <span class="admin-card-foot">
+              Abrir logs
+              <span class="arrow">→</span>
+            </span>
+          </div>
+        </a>
+        {% endif %}
+
+
+
 
       </section>
 

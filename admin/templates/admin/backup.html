@@ -1,0 +1,434 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin · Backups{% endblock %}
+
+{% block content %}
+<section class="bk-page">
+  <header class="bk-hero">
+    <div>
+      <span class="bk-kicker">🛡️ SGD · PostgreSQL</span>
+      <h1>Backups do sistema</h1>
+      <p>Gere, importe, baixe, restaure e exclua backups com segurança.</p>
+
+      <div class="bk-hero__chips">
+        <span class="bk-chip">🏥 Clínica: .zip</span>
+        <span class="bk-chip">👑 Geral: .backup</span>
+        <span class="bk-chip">📥 Importação</span>
+        <span class="bk-chip">🗑️ Exclusão segura</span>
+      </div>
+    </div>
+
+    <div class="bk-hero__side">
+      <article class="bk-highlight">
+        <span>Backups disponíveis</span>
+        <strong>{{ arquivos|length if arquivos else 0 }}</strong>
+      </article>
+
+      <article class="bk-highlight">
+        <span>Retenção por clínica</span>
+        <strong>{{ keep_clinica or 5 }} cópias</strong>
+      </article>
+    </div>
+  </header>
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% if msgs %}
+      <div class="bk-flashes">
+        {% for cat, msg in msgs %}
+          <article class="bk-flash {{ cat }}">
+            <span>{% if cat == "success" %}✅{% elif cat in ["danger", "error"] %}⚠️{% else %}ℹ️{% endif %}</span>
+            <strong>{{ msg }}</strong>
+            <button type="button" data-close-flash>×</button>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="bk-stats">
+    <article class="bk-stat">
+      <div class="bk-stat__icon">🏥</div>
+      <div><span>Backup da clínica</span><strong>Manual</strong><small>Gerado apenas ao clicar.</small></div>
+    </article>
+
+    <article class="bk-stat">
+      <div class="bk-stat__icon">👑</div>
+      <div><span>Backup geral</span><strong>Master</strong><small>Somente master gera/restaura.</small></div>
+    </article>
+
+    <article class="bk-stat">
+      <div class="bk-stat__icon">📥</div>
+      <div><span>Importação</span><strong>.backup</strong><small>Importe um backup baixado.</small></div>
+    </article>
+  </section>
+
+  <section class="bk-actions-grid">
+    <article class="bk-action-card bk-action-card--primary">
+      <div class="bk-action-card__top">
+        <div class="bk-action-card__icon">🏥</div>
+        <span class="bk-action-card__tag">Clínica atual</span>
+      </div>
+
+      <div class="bk-action-card__body">
+        <h2>Gerar backup da clínica</h2>
+        <p>Cria um arquivo .zip com dados filtrados pelo clinica_id.</p>
+      </div>
+
+      <a href="{{ url_for('admin.backup_criar_clinica_atual') }}" class="bk-btn bk-btn--primary bk-btn--full">
+        Gerar backup da clínica
+      </a>
+    </article>
+
+    {% if master %}
+    <article class="bk-action-card">
+      <div class="bk-action-card__top">
+        <div class="bk-action-card__icon">👑</div>
+        <span class="bk-action-card__tag">Master</span>
+      </div>
+
+      <div class="bk-action-card__body">
+        <h2>Gerar backup geral</h2>
+        <p>Cria um backup completo do PostgreSQL em formato .backup.</p>
+      </div>
+
+      <a href="{{ url_for('admin.backup_criar') }}" class="bk-btn bk-btn--dark bk-btn--full">
+        Gerar backup geral
+      </a>
+    </article>
+
+    <article class="bk-action-card bk-action-card--import">
+      <div class="bk-action-card__top">
+        <div class="bk-action-card__icon">📥</div>
+        <span class="bk-action-card__tag">Importar</span>
+      </div>
+
+      <div class="bk-action-card__body">
+        <h2>Importar backup baixado</h2>
+        <p>Envie um arquivo .backup para voltar a aparecer na biblioteca e poder restaurar.</p>
+      </div>
+
+      <form method="post"
+            action="{{ url_for('admin.backup_importar') }}"
+            enctype="multipart/form-data"
+            class="bk-import-form">
+
+        <label class="bk-file-picker">
+          <input type="file" name="arquivo_backup" id="arquivo_backup" accept=".backup" required>
+          <span>📎</span>
+          <strong id="fileLabel">Selecionar arquivo .backup</strong>
+        </label>
+
+        <button type="submit" class="bk-btn bk-btn--import bk-btn--full">
+          Importar backup
+        </button>
+      </form>
+    </article>
+    {% endif %}
+  </section>
+
+  {% if master %}
+  <section class="bk-warning">
+    <div class="bk-warning__icon">⚠️</div>
+    <div>
+      <strong>Restauração é uma ação crítica</strong>
+      <p>Restaurar um backup geral substitui o banco atual. O sistema cria um backup preventivo antes.</p>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="bk-panel">
+    <div class="bk-panel__head">
+      <div>
+        <span class="bk-panel__eyebrow">Arquivos disponíveis</span>
+        <h2>Biblioteca de backups</h2>
+        <p>Backups gerais/preventivos aparecem apenas para master. Clínicas veem somente seus próprios backups.</p>
+      </div>
+
+      <div class="bk-search">
+        <span>🔎</span>
+        <input type="search" id="bkSearch" placeholder="Pesquisar backup...">
+      </div>
+    </div>
+
+    {% if arquivos %}
+      <div class="bk-table-wrap">
+        <table class="bk-table">
+          <thead>
+            <tr>
+              <th>Arquivo</th>
+              <th>Tipo</th>
+              <th>Clínica</th>
+              <th>Tamanho</th>
+              <th>Data</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for item in arquivos %}
+              <tr class="bk-row" data-search="{{ (item.nome ~ ' ' ~ item.tipo ~ ' ' ~ (item.clinica_id or '') ~ ' ' ~ item.data)|lower }}">
+                <td data-label="Arquivo">
+                  <div class="bk-file">
+                    <span class="bk-file__icon">
+                      {% if item.tipo == "geral" %}👑{% elif item.tipo == "preventivo" %}🛟{% else %}🏥{% endif %}
+                    </span>
+                    <div>
+                      <strong>{{ item.nome }}</strong>
+                      <small>
+                        {% if item.tipo == "geral" %}
+                          Backup completo PostgreSQL
+                        {% elif item.tipo == "preventivo" %}
+                          Backup preventivo antes de restore
+                        {% else %}
+                          Backup filtrado por clínica
+                        {% endif %}
+                      </small>
+                    </div>
+                  </div>
+                </td>
+
+                <td data-label="Tipo">
+                  {% if item.tipo == "geral" %}
+                    <span class="bk-pill bk-pill--master">Geral</span>
+                  {% elif item.tipo == "preventivo" %}
+                    <span class="bk-pill bk-pill--safe">Preventivo</span>
+                  {% else %}
+                    <span class="bk-pill bk-pill--clinic">Clínica</span>
+                  {% endif %}
+                </td>
+
+                <td data-label="Clínica"><span class="bk-pill">{{ item.clinica_id or "—" }}</span></td>
+                <td data-label="Tamanho"><span class="bk-pill">{{ item.tamanho }} MB</span></td>
+                <td data-label="Data"><span class="bk-pill bk-pill--date">{{ item.data }}</span></td>
+
+                <td data-label="Ações" class="bk-actions-cell">
+                  <div class="bk-actions">
+                    <a class="bk-btn bk-btn--soft" href="{{ url_for('admin.backup_download_arquivo', nome=item.nome) }}">
+                      Baixar
+                    </a>
+
+                    {% if master and item.tipo in ["geral", "preventivo"] %}
+                      <form method="post"
+                            action="{{ url_for('admin.backup_restaurar_salvo', nome=item.nome) }}"
+                            class="bk-restore-form"
+                            data-backup-name="{{ item.nome }}">
+                        <button type="submit" class="bk-btn bk-btn--danger">Restaurar</button>
+                      </form>
+                    {% endif %}
+
+                    <form method="post"
+                          action="{{ url_for('admin.backup_excluir', nome=item.nome) }}"
+                          class="bk-delete-form"
+                          data-backup-name="{{ item.nome }}">
+                      <button type="submit" class="bk-btn bk-btn--delete">Excluir</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bk-empty-search" id="emptySearch" hidden>
+        <div>🫥</div>
+        <h3>Nenhum backup encontrado</h3>
+        <p>Limpe a busca ou tente outro termo.</p>
+      </div>
+    {% else %}
+      <div class="bk-empty">
+        <div>🫙</div>
+        <h3>Nenhum backup encontrado</h3>
+        <p>Gere ou importe um backup para iniciar a biblioteca.</p>
+      </div>
+    {% endif %}
+  </section>
+</section>
+
+<style>
+  :root{
+    --bk-text:#0f172a;--bk-muted:#64748b;--bk-border:rgba(148,163,184,.22);
+    --bk-shadow:0 18px 50px rgba(15,23,42,.07);--bk-primary:#2563eb;
+    --bk-indigo:#4f46e5;--bk-danger:#dc2626;
+  }
+
+  .bk-page{max-width:1380px;margin:0 auto;padding:24px 16px 42px;display:grid;gap:20px;color:var(--bk-text);}
+  .bk-hero{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.6fr);gap:18px;padding:28px;border-radius:30px;background:radial-gradient(circle at top right,rgba(37,99,235,.14),transparent 30%),linear-gradient(135deg,#fff,#f8fbff);border:1px solid var(--bk-border);box-shadow:var(--bk-shadow);}
+  .bk-kicker{display:inline-flex;padding:9px 14px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:900;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;}
+  .bk-hero h1{margin:0 0 10px;font-size:clamp(2rem,3vw,2.8rem);letter-spacing:-.04em;}
+  .bk-hero p{margin:0;max-width:800px;color:var(--bk-muted);line-height:1.7;}
+  .bk-hero__chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
+  .bk-chip{padding:10px 14px;border-radius:999px;background:#fff;border:1px solid var(--bk-border);font-weight:800;box-shadow:0 8px 22px rgba(15,23,42,.04);}
+  .bk-hero__side{display:grid;gap:12px;}
+  .bk-highlight{background:rgba(255,255,255,.84);border:1px solid var(--bk-border);border-radius:22px;padding:18px;box-shadow:0 10px 28px rgba(15,23,42,.05);}
+  .bk-highlight span{display:block;color:var(--bk-muted);font-weight:900;text-transform:uppercase;font-size:.78rem;margin-bottom:8px;}
+  .bk-highlight strong{display:block;font-size:1.5rem;}
+
+  .bk-flashes{display:grid;gap:10px;}
+  .bk-flash{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:14px 16px;border-radius:18px;background:#eff6ff;color:#1d4ed8;border:1px solid #dbeafe;}
+  .bk-flash.success{background:#ecfdf5;color:#065f46;border-color:#bbf7d0;}
+  .bk-flash.danger,.bk-flash.error{background:#fef2f2;color:#991b1b;border-color:#fecaca;}
+  .bk-flash button{border:0;background:transparent;font-size:1.4rem;cursor:pointer;color:inherit;}
+
+  .bk-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+  .bk-stat{display:grid;grid-template-columns:auto 1fr;gap:14px;padding:20px;background:#fff;border:1px solid var(--bk-border);border-radius:22px;box-shadow:0 10px 28px rgba(15,23,42,.05);}
+  .bk-stat__icon{width:54px;height:54px;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,#dbeafe,#e0e7ff);font-size:1.35rem;}
+  .bk-stat span{display:block;color:var(--bk-muted);font-weight:900;text-transform:uppercase;font-size:.78rem;margin-bottom:6px;}
+  .bk-stat strong{display:block;font-size:1.3rem;margin-bottom:5px;}
+  .bk-stat small{color:var(--bk-muted);line-height:1.5;}
+
+  .bk-actions-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+  .bk-action-card{display:flex;flex-direction:column;gap:18px;min-height:250px;padding:22px;background:#fff;border:1px solid var(--bk-border);border-radius:24px;box-shadow:0 10px 28px rgba(15,23,42,.05);}
+  .bk-action-card--primary{background:linear-gradient(135deg,#fff,#f8fbff);}
+  .bk-action-card--import{background:linear-gradient(135deg,#fff,#f8fffb);}
+  .bk-action-card__top{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .bk-action-card__icon{width:58px;height:58px;display:grid;place-items:center;border-radius:18px;background:linear-gradient(135deg,#dbeafe,#e0e7ff);font-size:1.5rem;}
+  .bk-action-card__tag{padding:8px 12px;border-radius:999px;background:#f8fafc;border:1px solid var(--bk-border);font-size:.75rem;font-weight:900;text-transform:uppercase;}
+  .bk-action-card__body h2{margin:0 0 8px;font-size:1.3rem;}
+  .bk-action-card__body p{margin:0;color:var(--bk-muted);line-height:1.7;}
+
+  .bk-file-picker{position:relative;display:flex;align-items:center;gap:10px;min-height:48px;padding:0 14px;border:1.5px dashed #cbd5e1;border-radius:14px;background:#f8fafc;cursor:pointer;}
+  .bk-file-picker input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .bk-file-picker strong{font-size:.9rem;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .bk-warning{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;padding:18px 20px;border-radius:22px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;}
+  .bk-warning__icon{font-size:1.6rem;}
+  .bk-warning strong{display:block;margin-bottom:4px;}
+  .bk-warning p{margin:0;line-height:1.6;}
+
+  .bk-btn{border:0;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:14px;font-weight:900;cursor:pointer;transition:.18s ease;white-space:nowrap;}
+  .bk-btn:hover{transform:translateY(-1px);}
+  .bk-btn--full{width:100%;margin-top:auto;}
+  .bk-btn--primary{color:#fff;background:linear-gradient(135deg,var(--bk-primary),var(--bk-indigo));box-shadow:0 14px 30px rgba(37,99,235,.2);}
+  .bk-btn--dark{color:#fff;background:linear-gradient(135deg,#0f172a,#334155);}
+  .bk-btn--soft{color:#3730a3;background:#eef2ff;}
+  .bk-btn--danger{color:#fff;background:linear-gradient(135deg,#dc2626,#991b1b);}
+  .bk-btn--delete{color:#991b1b;background:#fee2e2;}
+  .bk-btn--import{color:#065f46;background:#dcfce7;}
+
+  .bk-panel{background:#fff;border:1px solid var(--bk-border);border-radius:26px;padding:22px;box-shadow:0 10px 28px rgba(15,23,42,.05);}
+  .bk-panel__head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+  .bk-panel__eyebrow{color:var(--bk-primary);font-weight:900;text-transform:uppercase;font-size:.78rem;}
+  .bk-panel h2{margin:6px 0;}
+  .bk-panel p{margin:0;color:var(--bk-muted);line-height:1.6;}
+  .bk-search{display:flex;align-items:center;gap:10px;width:min(100%,340px);min-height:48px;padding:0 14px;border-radius:16px;background:#f8fafc;border:1px solid var(--bk-border);}
+  .bk-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;}
+
+  .bk-table-wrap{overflow:auto;border-radius:20px;border:1px solid #e5e7eb;}
+  .bk-table{width:100%;min-width:980px;border-collapse:collapse;}
+  .bk-table th{text-align:left;padding:14px 16px;background:#f8fafc;color:#475569;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;}
+  .bk-table td{padding:16px;border-top:1px solid #eef2f7;vertical-align:middle;}
+  .bk-file{display:flex;align-items:center;gap:12px;}
+  .bk-file__icon{width:46px;height:46px;display:grid;place-items:center;border-radius:16px;background:#eff6ff;font-size:1.15rem;}
+  .bk-file small{display:block;color:var(--bk-muted);margin-top:3px;}
+  .bk-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:999px;background:#f8fafc;border:1px solid #e5e7eb;font-weight:800;color:#334155;}
+  .bk-pill--date{color:#1d4ed8;background:#eff6ff;border-color:#dbeafe;}
+  .bk-pill--master{color:#581c87;background:#faf5ff;border-color:#e9d5ff;}
+  .bk-pill--clinic{color:#065f46;background:#ecfdf5;border-color:#bbf7d0;}
+  .bk-pill--safe{color:#92400e;background:#fffbeb;border-color:#fde68a;}
+
+  .bk-actions-cell{text-align:right;}
+  .bk-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+  .bk-actions form,.bk-import-form{margin:0;}
+
+  .bk-empty,.bk-empty-search{text-align:center;padding:42px 18px;border-radius:22px;background:#f8fafc;border:1px dashed #cbd5e1;}
+  .bk-empty div,.bk-empty-search div{font-size:2rem;margin-bottom:10px;}
+  .bk-empty h3,.bk-empty-search h3{margin:0 0 6px;}
+  .bk-row[hidden]{display:none!important;}
+
+  @media(max-width:1100px){
+    .bk-hero,.bk-actions-grid{grid-template-columns:1fr;}
+    .bk-stats{grid-template-columns:1fr;}
+  }
+
+  @media(max-width:760px){
+    .bk-page{padding:16px 12px 30px;}
+    .bk-hero{padding:20px;border-radius:24px;}
+    .bk-chip{width:100%;}
+    .bk-panel{padding:16px;}
+    .bk-table-wrap{border:0;overflow:visible;}
+    .bk-table,.bk-table tbody,.bk-table tr,.bk-table td{display:block;width:100%;}
+    .bk-table{min-width:0;}
+    .bk-table thead{display:none;}
+    .bk-table tbody{display:grid;gap:12px;}
+    .bk-table tr{border:1px solid #e5e7eb;border-radius:18px;overflow:hidden;background:#fff;}
+    .bk-table td{border:0;padding:14px;}
+    .bk-table td::before{content:attr(data-label);display:block;color:#64748b;font-size:.75rem;font-weight:900;text-transform:uppercase;margin-bottom:8px;}
+    .bk-actions-cell{text-align:left;}
+    .bk-actions{flex-direction:column;}
+    .bk-actions .bk-btn,.bk-actions form{width:100%;}
+  }
+</style>
+
+<script>
+(() => {
+  const searchInput = document.getElementById("bkSearch");
+  const rows = Array.from(document.querySelectorAll(".bk-row"));
+  const emptySearch = document.getElementById("emptySearch");
+  const fileInput = document.getElementById("arquivo_backup");
+  const fileLabel = document.getElementById("fileLabel");
+
+  if (searchInput && rows.length) {
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim().toLowerCase();
+      let visible = 0;
+
+      rows.forEach(row => {
+        const hay = row.dataset.search || "";
+        const match = !q || hay.includes(q);
+        row.hidden = !match;
+        if (match) visible++;
+      });
+
+      if (emptySearch) emptySearch.hidden = visible !== 0;
+    });
+  }
+
+  if (fileInput && fileLabel) {
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileLabel.textContent = file ? file.name : "Selecionar arquivo .backup";
+    });
+  }
+
+  document.querySelectorAll("[data-close-flash]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const flash = btn.closest(".bk-flash");
+      if (flash) flash.remove();
+    });
+  });
+
+  document.querySelectorAll(".bk-restore-form").forEach(form => {
+    form.addEventListener("submit", ev => {
+      const nome = form.dataset.backupName || "este backup";
+      const ok = confirm(
+        "Restaurar backup geral?\n\n" +
+        "Arquivo: " + nome + "\n\n" +
+        "Essa ação vai substituir o banco atual. Um backup preventivo será criado antes."
+      );
+
+      if (!ok) ev.preventDefault();
+    });
+  });
+
+  document.querySelectorAll(".bk-delete-form").forEach(form => {
+    form.addEventListener("submit", ev => {
+      const nome = form.dataset.backupName || "este backup";
+      const ok = confirm("Excluir backup?\n\nArquivo: " + nome + "\n\nEssa ação não poderá ser desfeita.");
+      if (!ok) ev.preventDefault();
+    });
+  });
+
+  document.querySelectorAll(".bk-import-form").forEach(form => {
+    form.addEventListener("submit", ev => {
+      const ok = confirm("Importar este backup para a biblioteca?");
+      if (!ok) ev.preventDefault();
+    });
+  });
+
+  setTimeout(() => {
+    document.querySelectorAll(".bk-flash").forEach(flash => flash.remove());
+  }, 6000);
+})();
+</script>
+{% endblock %}
