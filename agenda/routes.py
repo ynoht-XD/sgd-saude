@@ -676,7 +676,7 @@ def api_agregados():
                 ORDER BY dow ASC, hora_ini ASC, a.profissional ASC, a.paciente ASC;
             """
 
-            cur.execute(sql, params + params_fin)
+            cur.execute(sql, params_fin + params)
             rows = _fetchall_dicts(cur)
 
             out = []

@@ -737,7 +737,7 @@ def fetch_pacientes_list(args=None):
             SELECT {', '.join(select_cols)}
               FROM pacientes
               {clause}
-             ORDER BY id DESC
+             ORDER BY UPPER(nome) ASC
             """,
             params,
         )
