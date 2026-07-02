@@ -8,6 +8,12 @@
       <h2>📋 Visualização de APACs</h2>
       <p class="muted">Filtre, edite, exporte para Excel/TXT e gere o PDF da APAC.</p>
     </div>
+
+    <div class="head-actions">
+      <a href="{{ url_for('export.apac_cadastro') }}" class="btn primary">
+        ➕ Cadastrar APAC
+      </a>
+    </div>
   </div>
 
   <!-- Filtros -->
@@ -40,99 +46,158 @@
     </div>
   </form>
 
-  <!-- Tabela -->
-  <div class="table-wrap">
-    <table class="apac-table">
-      <thead>
-        <tr>
-          <th>Pront.</th>
-          <th>Nome</th>
-          <th>Nº APAC</th>
-          <th>Competência</th>
-          <th>Procedimento</th>
-          <th>Cód. Proc.</th>
-          <th>Qtd</th>
-          <th style="width:260px">Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for apac in apacs %}
-        <tr class="{% if apac.status == 'Em aberto' %}vermelho-claro
-                   {% elif apac.status == 'Pago' and apac.status_entrega == 'Entregue' %}verde-claro
-                   {% elif apac.status == 'Pago' and apac.status_entrega == 'Na instituição' %}azul-claro
-                   {% elif apac.status == 'Pago' %}laranja-claro
-                   {% endif %}">
-          <td>{{ apac.prontuario }}</td>
-          <td>{{ apac.nome_paciente }}</td>
-          <td>{{ apac.numero_apac }}</td>
-          <td>{{ apac.competencia }}</td>
-          <td>{{ apac.procedimento }}</td>
-          <td>{{ apac.codigo_procedimento }}</td>
-          <td>{{ apac.quantidade }}</td>
-          <td class="actions-col">
-            <button class="btn xs btn-editar"
-              data-id="{{ apac.id }}"
-              data-numero_apac="{{ apac.numero_apac }}"
-              data-competencia="{{ apac.competencia }}"
-              data-procedimento="{{ apac.procedimento }}"
-              data-codigo_procedimento="{{ apac.codigo_procedimento }}"
-              data-quantidade="{{ apac.quantidade }}"
-              data-cnes="{{ apac.cnes }}"
-              data-data_inicial="{{ apac.data_inicial }}"
-              data-data_final="{{ apac.data_final }}"
-              data-tipo_apac="{{ apac.tipo_apac }}"
-              data-nacionalidade="{{ apac.nacionalidade }}"
-              data-nome_paciente="{{ apac.nome_paciente }}"
-              data-cns_paciente="{{ apac.cns }}"
-              data-cpf_paciente="{{ apac.cpf or '' }}"
-              data-data_nascimento="{{ apac.data_nascimento }}"
-              data-nome_mae="{{ apac.nome_mae }}"
-              data-sexo="{{ apac.sexo }}"
-              data-raca="{{ apac.raca }}"
-              data-endereco="{{ apac.endereco }}"
-              data-numero="{{ apac.numero }}"
-              data-bairro="{{ apac.bairro }}"
-              data-cep="{{ apac.cep }}"
-              data-status="{{ apac.status }}"
-              data-nota_fiscal="{{ apac.nota_fiscal }}"
-              data-data_nota_fiscal="{{ apac.data_nota_fiscal }}"
-              data-data_entrada_nf="{{ apac.data_entrada_nf }}"
-              data-competencia_nota="{{ apac.competencia_nota }}"
-              data-protocolo_nota="{{ apac.protocolo_nota }}"
-              data-obs_nota="{{ apac.obs_nota }}"
-              data-data_pedido="{{ apac.data_pedido }}"
-              data-fornecedor="{{ apac.fornecedor }}"
-              data-obs_pedido="{{ apac.obs_pedido }}"
-              data-data_entrega="{{ apac.data_entrega }}"
-              data-local_entrega="{{ apac.local_entrega }}"
-              data-status_entrega="{{ apac.status_entrega }}"
-              data-obs_entrega="{{ apac.obs_entrega }}"
-              data-cbo_executante="{{ apac.cbo_executante }}"
-              data-cns_executante="{{ apac.cns_executante }}"
-              data-servico="{{ apac.servico }}"
-              data-classificacao="{{ apac.classificacao }}">
-              ✏️ Editar
-            </button>
+  <!-- cards -->
+  <div class="apac-cards">
+    {% for apac in apacs %}
+    <div class="apac-card
+      {% if apac.status == 'Em aberto' %}card-aberto
+      {% elif apac.status == 'Pago' and apac.status_entrega == 'Entregue' %}card-entregue
+      {% elif apac.status == 'Pago' and apac.status_entrega == 'Na instituição' %}card-instituicao
+      {% elif apac.status == 'Pago' %}card-pago
+      {% endif %}">
 
-            <form method="POST" action="{{ url_for('export.apac_duplicar') }}" style="display:inline;">
-              <input type="hidden" name="id_apac" value="{{ apac.id }}">
-              <button class="btn xs" type="submit">📋 Duplicar</button>
-            </form>
+      <div class="card-top">
+        <div>
+          <h3>{{ apac.nome_paciente or apac.nome }}</h3>
+          <p>{{ apac.procedimento or 'Procedimento não informado' }}</p>
+        </div>
 
-            <form method="POST" action="{{ url_for('export.apac_excluir') }}"
-                  onsubmit="return confirm('Excluir esta APAC?');" style="display:inline;">
-              <input type="hidden" name="id_apac" value="{{ apac.id }}">
-              <button class="btn xs danger" type="submit">🗑️ Excluir</button>
-            </form>
+        <div class="card-badges">
+          <span class="badge nf">
+            NF: {{ apac.nota_fiscal or 'Sem NF' }}
+          </span>
 
-            <a class="btn xs ghost" href="{{ url_for('export.apac_pdf', apac_id=apac.id) }}">📄 APAC</a>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="muted" style="text-align:center;">Nenhum registro encontrado.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+          <span class="badge entrega">
+            {{ apac.status_entrega or 'Entrega pendente' }}
+          </span>
+        </div>
+      </div>
+
+      <div class="card-grid">
+        <div><strong>Prontuário</strong><span>{{ apac.prontuario or '-' }}</span></div>
+        <div><strong>Nº APAC</strong><span>{{ apac.numero_apac or '-' }}</span></div>
+        <div><strong>Competência</strong><span>{{ apac.competencia or '-' }}</span></div>
+        <div><strong>Cód. Proc.</strong><span>{{ apac.codigo_procedimento or '-' }}</span></div>
+        <div><strong>Qtd</strong><span>{{ apac.quantidade or '-' }}</span></div>
+        <div><strong>Status Nota</strong><span>{{ apac.status or '-' }}</span></div>
+      </div>
+
+      <div class="card-checks">
+        <label>
+          <input type="checkbox"
+                class="js-toggle"
+                data-id="{{ apac.id }}"
+                data-campo="processado"
+                {% if apac.processado %}checked{% endif %}>
+          Processado
+        </label>
+
+        <label>
+          <input type="checkbox"
+                class="js-toggle"
+                data-id="{{ apac.id }}"
+                data-campo="sms_enviado"
+                {% if apac.sms_enviado %}checked{% endif %}>
+          Enviado
+        </label>
+
+        <label>
+          <input type="checkbox"
+                class="js-toggle"
+                data-id="{{ apac.id }}"
+                data-campo="bpai"
+                {% if apac.bpai %}checked{% endif %}>
+          BPAi
+        </label>
+      </div>
+
+      <div class="card-obs">
+        <label>Observações</label>
+        <textarea class="js-obs"
+                  data-id="{{ apac.id }}"
+                  placeholder="Adicionar observação...">{{ apac.obs_geral or '' }}</textarea>
+      </div>
+
+      <div class="card-actions">
+        <button class="btn xs btn-editar"
+          data-id="{{ apac.id }}"
+          data-numero_apac="{{ apac.numero_apac }}"
+          data-competencia="{{ apac.competencia }}"
+          data-procedimento="{{ apac.procedimento }}"
+          data-codigo_procedimento="{{ apac.codigo_procedimento }}"
+          data-quantidade="{{ apac.quantidade }}"
+          data-cnes="{{ apac.cnes }}"
+          data-data_inicial="{{ apac.data_inicial }}"
+          data-data_final="{{ apac.data_final }}"
+          data-tipo_apac="{{ apac.tipo_apac }}"
+          data-nacionalidade="{{ apac.nacionalidade }}"
+          data-nome_paciente="{{ apac.nome_paciente or apac.nome }}"
+          data-cns_paciente="{{ apac.cns }}"
+          data-cpf_paciente="{{ apac.cpf or '' }}"
+          data-data_nascimento="{{ apac.data_nascimento }}"
+          data-nome_mae="{{ apac.nome_mae or apac.mae }}"
+          data-responsavel="{{ apac.responsavel }}"
+          data-prontuario="{{ apac.prontuario }}"
+          data-cid="{{ apac.cid }}"
+          data-cid2="{{ apac.cid2 }}"
+          data-descricao_diagnostico="{{ apac.descricao_diagnostico }}"
+          data-obs_geral="{{ apac.obs_geral }}"
+          data-nome_solicitante="{{ apac.nome_solicitante }}"
+          data-cns_solicitante="{{ apac.cns_solicitante }}"
+          data-data_solicitacao="{{ apac.data_solicitacao }}"
+          data-nome_autorizador="{{ apac.nome_autorizador }}"
+          data-cns_autorizador="{{ apac.cns_autorizador }}"
+          data-data_autorizacao="{{ apac.data_autorizacao }}"
+          data-orgao_emissor="{{ apac.orgao_emissor }}"
+          data-sexo="{{ apac.sexo }}"
+          data-raca="{{ apac.raca }}"
+          data-endereco="{{ apac.endereco }}"
+          data-numero="{{ apac.numero }}"
+          data-bairro="{{ apac.bairro }}"
+          data-cep="{{ apac.cep }}"
+          data-status="{{ apac.status }}"
+          data-nota_fiscal="{{ apac.nota_fiscal }}"
+          data-data_nota_fiscal="{{ apac.data_nota_fiscal }}"
+          data-data_entrada_nf="{{ apac.data_entrada_nf }}"
+          data-competencia_nota="{{ apac.competencia_nota }}"
+          data-protocolo_nota="{{ apac.protocolo_nota }}"
+          data-obs_nota="{{ apac.obs_nota }}"
+          data-data_pedido="{{ apac.data_pedido }}"
+          data-fornecedor="{{ apac.fornecedor }}"
+          data-obs_pedido="{{ apac.obs_pedido }}"
+          data-data_entrega="{{ apac.data_entrega }}"
+          data-local_entrega="{{ apac.local_entrega }}"
+          data-status_entrega="{{ apac.status_entrega }}"
+          data-obs_entrega="{{ apac.obs_entrega }}"
+          data-cbo_executante="{{ apac.cbo_executante or apac.cbo }}"
+          data-cns_executante="{{ apac.cns_executante }}"
+          data-servico="{{ apac.servico }}"
+          data-classificacao="{{ apac.classificacao }}"
+          data-carater_atendimento="{{ apac.carater_atendimento }}">
+          ✏️ Editar
+        </button>
+
+        <form method="POST" action="{{ url_for('export.apac_duplicar') }}">
+          <input type="hidden" name="id_apac" value="{{ apac.id }}">
+          <button class="btn xs" type="submit">📋 Duplicar</button>
+        </form>
+
+        <form method="POST" action="{{ url_for('export.apac_excluir') }}"
+              onsubmit="return confirm('Excluir esta APAC?');">
+          <input type="hidden" name="id_apac" value="{{ apac.id }}">
+          <button class="btn xs danger" type="submit">🗑️ Excluir</button>
+        </form>
+
+        <a class="btn xs ghost" href="{{ url_for('export.apac_pdf', apac_id=apac.id) }}">
+          📄 APAC
+        </a>
+      </div>
+    </div>
+    {% else %}
+      <div class="empty-state">
+        Nenhum registro encontrado.
+      </div>
+    {% endfor %}
   </div>
 
 </div>

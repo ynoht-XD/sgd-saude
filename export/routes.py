@@ -1,29 +1,57 @@
 # -*- coding: utf-8 -*-
 """
 Rotas do módulo Export ➜ BPA-i
-- GET  /export/bpa           → formulário (bpa.html)
-- POST /export/bpa/convert   → recebe XLS/XLSX/CSV e devolve TXT no layout BPA-i
-- GET  /export/bpa/modelo    → baixa planilha modelo com colunas esperadas
+
+- GET  /export/bpa
+- POST /export/bpa/convert
+- POST /export/bpa/auditoria
+- POST /export/bpa/download
+- GET  /export/bpa/modelo
 """
+
 import io
+import os
 import re
 import math
-from datetime import datetime
-from db import conectar_db
+import uuid
+import pickle
+import tempfile
+import unicodedata
+from datetime import date, datetime
+
 import pandas as pd
-from flask import request, render_template, abort, send_file, flash, redirect, url_for
-from flask import request, render_template, abort, send_file, redirect, url_for, flash
-from db import conectar_db
-import sqlite3
-import csv
-import io
-from datetime import datetime
-from . import export_bp  # blueprint
+from flask import (
+    abort, flash, redirect, render_template, request,
+    send_file, url_for, session
+)
+
+from . import export_bp
+from .auditoria import auditar_dataframe_bpa
+from .apac import *
+from .apac_cadastro import *
+from .apac_exporta import *
+
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+)
+
+
+
+
+
+
+
+
 
 # ============== Config / Colunas esperadas ==============
 REQUIRED_COLUMNS = [
     "prd-ident", "prd-cnes", "prd-cnsmed", "prd-cbo", "prd-dtaten", "prd-pa",
-    "prd-cnspac", "prd-sexo", "prd-ibge", "prd-cid", "prd-idade", "prd-qt",
+    "prd-cnspac", "prd-cpfpac", "prd-sexo", "prd-ibge", "prd-cid", "prd-idade", "prd-qt",
     "prd-caten", "prd-naut", "prd-org", "prd-nmpac", "prd-raca", "prd-etnia",
     "prd-nac", "prd-srv", "prd-clf", "prd-equipe-seq", "prd-equipe-area",
     "prd-cnpj", "prd-cep-pcnte", "prd-lograd-pcnte", "prd-end-pcnte",
@@ -33,12 +61,8 @@ REQUIRED_COLUMNS = [
 
 ALLOWED_EXT = {".xls", ".xlsx", ".csv"}
 
-# ======================= Helpers genéricos =======================
-import re
-import pandas as pd
-from datetime import date, datetime
-import unicodedata
 
+# ======================= Helpers genéricos =======================
 def _is_nan_like(x) -> bool:
     try:
         if pd.isna(x):
@@ -51,24 +75,45 @@ def _is_nan_like(x) -> bool:
         return True
     return False
 
+
 def _clean(x) -> str:
     if _is_nan_like(x):
         return ""
     return str(x).strip()
 
+
 def _digits(s: str) -> str:
     return re.sub(r"\D+", "", s or "")
+
 
 def _pad_left_zeros(val: str, width: int) -> str:
     v = _digits(val)
     return v.zfill(width)[:width]
 
+
 def _pad_right(s: str, width: int) -> str:
     s = (s or "")
     return (s[:width]).ljust(width, " ")
 
+
+def _txt_safe(s: str, upper: bool = False) -> str:
+    s = _clean(s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+
+    if upper:
+        s = s.upper()
+
+    s = re.sub(r"[\r\n\t]+", " ", s)
+    s = re.sub(r"[^A-Za-z0-9 @._\-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+
+    return s
+
+
 def _upper(s: str) -> str:
     return (s or "").strip().upper()
+
 
 def _competencia_to_yyyymm(competencia_mm_aaaa: str) -> str:
     s = _clean(competencia_mm_aaaa)
@@ -78,28 +123,19 @@ def _competencia_to_yyyymm(competencia_mm_aaaa: str) -> str:
     mm, aaaa = m.group(1), m.group(2)
     return f"{aaaa}{mm}"
 
-# -------------------------------
-# PARSER DE DATA CONFIÁVEL
-# -------------------------------
+
 def _parse_to_date(x):
-    """
-    Converte x em datetime.date com detecção explícita:
-    - ISO: YYYY-MM-DD ou YYYY-MM-DD HH:MM[:SS]
-    - BR : DD/MM/YYYY ou DD-MM-YYYY
-    - Dígitos: DDMMAAAA ou AAAAMMDD (ano >= 1900)
-    Retorna None se inválido.
-    """
     if _is_nan_like(x):
         return None
 
     if isinstance(x, date) and not isinstance(x, datetime):
         return x
+
     if isinstance(x, datetime):
         return x.date()
 
     s = _clean(x)
 
-    # 1) ISO: YYYY-MM-DD [HH:MM[:SS]]
     m = re.match(r"^\s*(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?\s*$", s)
     if m:
         yyyy, mm, dd = m.group(1), m.group(2), m.group(3)
@@ -108,7 +144,6 @@ def _parse_to_date(x):
         except Exception:
             return None
 
-    # 2) BR: DD/MM/YYYY ou DD-MM-YYYY
     m = re.match(r"^\s*(\d{2})[\/-](\d{2})[\/-](\d{4})\s*$", s)
     if m:
         dd, mm, yyyy = m.group(1), m.group(2), m.group(3)
@@ -117,23 +152,20 @@ def _parse_to_date(x):
         except Exception:
             return None
 
-    # 3) Apenas dígitos (8)
     d = _digits(s)
     if len(d) == 8:
-        # AAAAMMDD se prefixo parece ano
-        if d[:4].isdigit() and int(d[:4]) >= 1900:
+        if int(d[:4]) >= 1900:
             yyyy, mm, dd = d[:4], d[4:6], d[6:8]
-        # DDMMAAAA se sufixo parece ano
-        elif d[4:].isdigit() and int(d[4:]) >= 1900:
+        elif int(d[4:]) >= 1900:
             dd, mm, yyyy = d[:2], d[2:4], d[4:]
         else:
             return None
+
         try:
             return date(int(yyyy), int(mm), int(dd))
         except Exception:
             return None
 
-    # 4) Fallback controlado: pandas com dayfirst=True
     try:
         ts = pd.to_datetime(s, dayfirst=True, errors="raise")
         if pd.isna(ts):
@@ -142,67 +174,24 @@ def _parse_to_date(x):
     except Exception:
         return None
 
-# -------------------------------
-# FORMATADORES DE DATA
-# -------------------------------
+
 def _date_to_yyyymmdd(x) -> str:
-    """Retorna AAAAMMDD, sem ambiguidades."""
     dt = _parse_to_date(x)
     return dt.strftime("%Y%m%d") if dt else ""
 
-def _date_to_ddmmaaaa(x) -> str:
-    """Retorna DDMMAAAA (formato exigido no BPA-I)."""
-    dt = _parse_to_date(x)
-    return dt.strftime("%d%m%Y") if dt else ""
 
-# -------------------------------
-# NORMALIZAÇÃO DE CABEÇALHO
-# -------------------------------
 def _normalize_header(col: str) -> str:
-    """
-    Normaliza cabeçalhos para comparação:
-      - strip + lower
-      - troca '_' por '-'
-      - colapsa múltiplos espaços/traços/underscores
-    """
     col = (col or "").strip().lower()
     col = col.replace("_", "-")
     col = re.sub(r"[\s]+", " ", col)
     col = re.sub(r"[-]{2,}", "-", col)
     return col
 
+
 def _ext(filename: str) -> str:
     m = re.search(r"\.[^.]+$", filename or "", flags=re.I)
     return (m.group(0) if m else "").lower()
 
-# ===============================
-# (Opcional) HELPERS POR BYTES
-# Use no export FIXED-WIDTH p/ evitar desalinhamento por UTF-8/acentos
-# ===============================
-def _ascii_fold(s: str) -> str:
-    """Remove acentos (NFKD) para 7-bit ASCII seguro (opcional)."""
-    s = s or ""
-    nfkd = unicodedata.normalize("NFKD", s)
-    return "".join(ch for ch in nfkd if not unicodedata.combining(ch))
-
-def _pad_right_bytes(s: str, width: int, encoding="latin-1") -> bytes:
-    """
-    Alfanumérico: right-pad com espaço até 'width' BYTES (trunca em bytes).
-    Prefira encoding single-byte (latin-1/cp1252) no arquivo final.
-    """
-    s = s or ""
-    b = s.encode(encoding, errors="replace")
-    if len(b) > width:
-        b = b[:width]
-    else:
-        b = b + b" " * (width - len(b))
-    return b
-
-def _pad_left_zeros_bytes(val: str, width: int) -> bytes:
-    """Numérico: apenas dígitos, zfill, e retorna ASCII puro com width BYTES."""
-    v = _digits(val)
-    v = v.zfill(width)[:width]
-    return v.encode("ascii", errors="strict")
 
 # ======================= Cabeçalho BPA-i =======================
 def build_bpai_header(orgao: str, sigla: str, cpf_ou_cnpj: str, competencia_mm_aaaa: str, num_registros: int) -> str:
@@ -213,12 +202,12 @@ def build_bpai_header(orgao: str, sigla: str, cpf_ou_cnpj: str, competencia_mm_a
     folhas6 = str(folhas).zfill(6)
     controle = "1111"
     orgao30 = _pad_right(_upper(_clean(orgao)), 30)
-    sigla6  = _pad_right(_upper(_clean(sigla)), 6)
+    sigla6 = _pad_right(_upper(_clean(sigla)), 6)
     cgc_cpf14 = _pad_left_zeros(cpf_ou_cnpj, 14)
     frase_estatica = "SECRETARIAS DE SAUDE MUNICIPAL DA CIDADE"
     indicador_municipio = "M"
     versao10 = _pad_right("1.0.0", 10)
-    fim = "LF"  # mantido conforme sua especificação
+    fim = "LF"
 
     return (
         prefixo + yyyymm + nregs6 + folhas6 + controle +
@@ -226,50 +215,67 @@ def build_bpai_header(orgao: str, sigla: str, cpf_ou_cnpj: str, competencia_mm_a
         indicador_municipio + versao10 + fim
     )
 
+
 # ======================= Corpo BPA-i =======================
+def resolver_cns_paciente(row: pd.Series) -> str:
+    cns_raw = _digits(_clean(row.get("prd-cnspac", "")))
+    if cns_raw:
+        return cns_raw.zfill(15)[:15]
+    return " " * 15
+
+
+def resolver_cpf_paciente_final(row: pd.Series) -> str:
+    cpf_raw = _digits(_clean(row.get("prd-cpfpac", "")))[:11]
+    if cpf_raw:
+        return cpf_raw.ljust(11, " ")
+    return " " * 11
+
+
 def build_body_line(row: pd.Series, competencia_yyyymm: str, folha: int, linha: int) -> str:
     tipo = "03"
     cnes7 = _pad_left_zeros(_clean(row.get("prd-cnes", "")), 7)
     comp6 = competencia_yyyymm[:6] if competencia_yyyymm else "000000"
     cns_prof15 = _pad_left_zeros(_clean(row.get("prd-cnsmed", "")), 15)
-    cbo6  = _pad_left_zeros(_clean(row.get("prd-cbo", "")), 6)
+    cbo6 = _pad_left_zeros(_clean(row.get("prd-cbo", "")), 6)
     dt8 = _date_to_yyyymmdd(row.get("prd-dtaten", "")) or "00000000"
 
     folha3 = str(int(folha)).zfill(3)
     linha2 = str(int(linha)).zfill(2)
     pa10 = _pad_left_zeros(_clean(row.get("prd-pa", "")), 10)
-    cns_pac15 = _pad_left_zeros(_clean(row.get("prd-cnspac", "")), 15)
+
+    cns_pac15 = resolver_cns_paciente(row)
+    cpf_pac11 = resolver_cpf_paciente_final(row)
+
     sx_val = _upper(_clean(row.get("prd-sexo", "")))
-    sx1 = (sx_val[:1] if sx_val else " ")
+    sx1 = sx_val[:1] if sx_val else " "
     ibge6 = _pad_left_zeros(_clean(row.get("prd-ibge", "")), 6)
-    cid_raw = _upper(_clean(row.get("prd-cid", "")))
-    cid4 = _pad_right(cid_raw, 4)
+    cid4 = _pad_right(_upper(_clean(row.get("prd-cid", ""))), 4)
     idade3 = _pad_left_zeros(_clean(row.get("prd-idade", "")), 3)
     qt6 = _pad_left_zeros(_clean(row.get("prd-qt", "")), 6)
     caten2 = _pad_left_zeros(_clean(row.get("prd-caten", "")), 2)
-    naut13 = " " * 13  # nº autorização (em branco)
-    org_val = _upper(_clean(row.get("prd-org", ""))) or "BPA"
-    org3 = _pad_right(org_val, 3)[:3]
-    nmpac30 = _pad_right(_upper(_clean(row.get("prd-nmpac", ""))), 30)
-    dtnasc8 = _date_to_yyyymmdd(row.get("prd-dtnasc", "")) or "00000000"
+    naut13 = " " * 13
 
+    org_val = _txt_safe(row.get("prd-org", ""), upper=True) or "BPA"
+    org3 = _pad_right(org_val, 3)[:3]
+    nmpac30 = _pad_right(_txt_safe(row.get("prd-nmpac", ""), upper=True), 30)
+    dtnasc8 = _date_to_yyyymmdd(row.get("prd-dtnasc", "")) or "00000000"
 
     raca2 = _pad_left_zeros(_clean(row.get("prd-raca", "")), 2)
     etnia4 = " " * 4
     nac3 = _pad_left_zeros(_clean(row.get("prd-nac", "")), 3)
+
     srv3 = _pad_left_zeros(_clean(row.get("prd-srv", "")), 3)
     clf3 = _pad_left_zeros(_clean(row.get("prd-clf", "")), 3)
-    equipe_area_cnpj_26 = " " * 26  # (equipes/cnpj omitidos nesta fase)
+    equipe_area_cnpj_26 = " " * 26
     cep8 = _pad_left_zeros(_clean(row.get("prd-cep-pcnte", "")), 8)
     lograd3 = _pad_left_zeros(_clean(row.get("prd-lograd-pcnte", "")), 3)
-    end30 = _pad_right(_clean(row.get("prd-end-pcnte", "")), 30)
-    compl10 = _pad_right(_clean(row.get("prd-compl-pcnte", "")), 10)
-    num5 = _pad_right(_clean(row.get("prd-num-pcnte", "")), 5)
-    bairro30 = _pad_right(_clean(row.get("prd-bairro-pcnte", "")), 30)
+    end30 = _pad_right(_txt_safe(row.get("prd-end-pcnte", ""), upper=True), 30)
+    compl10 = _pad_right(_txt_safe(row.get("prd-compl-pcnte", ""), upper=True), 10)
+    num5 = _pad_right(_txt_safe(row.get("prd-num-pcnte", ""), upper=True), 5)
+    bairro30 = _pad_right(_txt_safe(row.get("prd-bairro-pcnte", ""), upper=True), 30)
     tel11 = _pad_right(_clean(row.get("prd-ddtel-pcnte", "")), 11)
-    email40 = _pad_right(_clean(row.get("prd-email-pcnte", "")).lower(), 40)
+    email40 = _pad_right(_txt_safe(row.get("prd-email-pcnte", ""), upper=False).lower(), 40)
     ine10 = _pad_right(_clean(row.get("prd-ine", "")), 10)
-    filler2 = "  "
 
     return (
         f"{tipo}{cnes7}{comp6}{cns_prof15}{cbo6}{dt8}"
@@ -279,21 +285,16 @@ def build_body_line(row: pd.Series, competencia_yyyymm: str, folha: int, linha: 
         f"{dtnasc8}{raca2}{etnia4}{nac3}{srv3}{clf3}"
         f"{equipe_area_cnpj_26}{cep8}"
         f"{lograd3}{end30}{compl10}{num5}{bairro30}{tel11}"
-        f"{email40}{ine10}{filler2}"
+        f"{email40}{ine10}{cpf_pac11}"
     )
 
+
 def dataframe_to_txt_body(df: pd.DataFrame, competencia_yyyymm: str) -> str:
-    """
-    Gera corpo em layout posicional, com paginação:
-      - 99 linhas por folha (01..99);
-      - ao trocar de profissional (CNS) no meio da folha, força salto de folha.
-    """
     lines = []
     folha = 1
     linha = 1
     prev_cns = None
 
-    # Garantir ordem previsível (por CNS e data)
     sort_cols = [c for c in ["prd-cnsmed", "prd-dtaten"] if c in df.columns]
     if sort_cols:
         df = df.sort_values(by=sort_cols, kind="stable")
@@ -315,17 +316,14 @@ def dataframe_to_txt_body(df: pd.DataFrame, competencia_yyyymm: str) -> str:
 
         prev_cns = cns_atual
 
-    # CRLF por compatibilidade com validadores/Windows
     return "\r\n".join(lines)
+
 
 # ======================= Carregamento da planilha =======================
 def _load_dataframe(upload_file) -> pd.DataFrame:
-    """
-    Lê XLS/XLSX/CSV preservando zeros à esquerda (dtype=str).
-    Normaliza cabeçalhos para o formato comparável às REQUIRED_COLUMNS.
-    """
     filename = upload_file.filename or ""
     ext = _ext(filename)
+
     if ext not in ALLOWED_EXT:
         abort(400, f"Extensão não suportada: {ext or 'desconhecida'}. Use XLS, XLSX ou CSV.")
 
@@ -333,26 +331,16 @@ def _load_dataframe(upload_file) -> pd.DataFrame:
         if ext == ".csv":
             df = pd.read_csv(upload_file, dtype=str, keep_default_na=False)
         else:
-            # engine=None deixa o pandas escolher, dtype=str preserva zeros à esquerda
             df = pd.read_excel(upload_file, dtype=str, engine=None)
     except Exception as e:
         abort(400, f"Erro ao ler planilha: {e}")
 
-    # Normaliza cabeçalhos
     norm_map = {c: _normalize_header(c) for c in df.columns}
     df.columns = [norm_map[c] for c in df.columns]
 
-    # Adaptação: aceitar '_' no arquivo e comparar com '-' requerido
-    required_norm = [_normalize_header(c) for c in REQUIRED_COLUMNS]
-
-    # Quais colunas temos?
-    have = set(df.columns)
-    missing = [c for c in required_norm if c not in have]
-
-    # Para a primeira versão do conversor, exigimos o conjunto mínimo do body.
     needed_now = {
         "prd-cnes", "prd-cnsmed", "prd-cbo", "prd-dtaten",
-        "prd-pa", "prd-cnspac", "prd-sexo", "prd-ibge",
+        "prd-pa", "prd-cnspac", "prd-cpfpac", "prd-sexo", "prd-ibge",
         "prd-cid", "prd-idade", "prd-qt", "prd-caten",
         "prd-org", "prd-nmpac", "prd-raca", "prd-nac",
         "prd-srv", "prd-clf", "prd-cep-pcnte", "prd-dtnasc",
@@ -361,28 +349,171 @@ def _load_dataframe(upload_file) -> pd.DataFrame:
         "prd-email-pcnte", "prd-ine",
     }
     needed_now = {_normalize_header(c) for c in needed_now}
+
+    have = set(df.columns)
     missing_now = [c for c in sorted(needed_now) if c not in have]
+
     if missing_now:
-        # apresenta nomes "bonitos" ao usuário
-        raise_missing = ", ".join(missing_now)
-        abort(400, f"Planilha faltando colunas obrigatórias: {raise_missing}")
+        abort(400, f"Planilha faltando colunas obrigatórias: {', '.join(missing_now)}")
 
     return df
 
-# ======================= Rotas =======================
+
+# ============================================================
+# BPA-I · CACHE TEMPORÁRIO
+# ============================================================
+def _bpa_cache_dir():
+    path = os.path.join(tempfile.gettempdir(), "sgd_bpai_cache")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _bpa_cache_path(token):
+    return os.path.join(_bpa_cache_dir(), f"{token}.pkl")
+
+
+def _salvar_bpa_cache(df, form_data, filename):
+    token = uuid.uuid4().hex
+
+    payload = {
+        "df": df,
+        "form_data": form_data,
+        "filename": filename,
+        "excluir_idxs": [],
+        "auditoria": None
+    }
+
+    with open(_bpa_cache_path(token), "wb") as f:
+        pickle.dump(payload, f)
+
+    session["bpa_token"] = token
+
+    return token, payload
+
+
+def _carregar_bpa_cache(token=None):
+    token = token or session.get("bpa_token")
+
+    if not token:
+        abort(400, "Auditoria não encontrada. Envie a planilha novamente.")
+
+    path = _bpa_cache_path(token)
+
+    if not os.path.exists(path):
+        abort(400, "Auditoria expirada. Envie a planilha novamente.")
+
+    with open(path, "rb") as f:
+        payload = pickle.load(f)
+
+    return token, payload
+
+
+def _salvar_payload_bpa(token, payload):
+    with open(_bpa_cache_path(token), "wb") as f:
+        pickle.dump(payload, f)
+
+
+def _int_list(values):
+    out = []
+
+    for v in values or []:
+        try:
+            out.append(int(v))
+        except Exception:
+            pass
+
+    return out
+
+
+def _gerar_txt_bpa_do_payload(payload):
+    df = payload["df"]
+    excluir_idxs = set(payload.get("excluir_idxs", []))
+
+    df_final = df.drop(index=list(excluir_idxs), errors="ignore").copy()
+
+    form_data = payload["form_data"]
+    competencia_form = form_data.get("competencia", "")
+    competencia_yyyymm = _competencia_to_yyyymm(competencia_form)
+
+    header_line = build_bpai_header(
+        orgao=form_data.get("orgao", ""),
+        sigla=form_data.get("sigla", ""),
+        cpf_ou_cnpj=form_data.get("cpf", ""),
+        competencia_mm_aaaa=competencia_form,
+        num_registros=len(df_final),
+    )
+
+    body_text = dataframe_to_txt_body(df_final, competencia_yyyymm)
+    final_text = header_line + ("\r\n" if body_text else "") + body_text
+
+    original = payload.get("filename") or "bpa"
+    base = re.sub(r"\.[^.]+$", "", original)
+    out_name = f"{base}.txt"
+
+    return final_text, out_name
+
+
+def _render_bpa_com_auditoria(
+    payload,
+    token,
+    filtro_tipo_erro="TODOS",
+    pagina_erros=1,
+    erros_por_pagina=25,
+    gerar_preview_txt=True,
+):
+    auditoria = payload.get("auditoria")
+
+    if not auditoria:
+        auditoria = auditar_dataframe_bpa(
+            payload["df"],
+            excluir_idxs=payload.get("excluir_idxs", []),
+            filtro_tipo_erro=filtro_tipo_erro,
+            pagina_erros=pagina_erros,
+            erros_por_pagina=erros_por_pagina,
+            validar_cnes=False,
+        )
+
+        payload["auditoria"] = auditoria
+        _salvar_payload_bpa(token, payload)
+
+    txt_gerado = True
+    txt_nome = None
+    txt_preview = None
+    txt_tamanho_bytes = None
+
+    if gerar_preview_txt:
+        final_text, txt_nome = _gerar_txt_bpa_do_payload(payload)
+        txt_preview = final_text[:3000]
+        txt_tamanho_bytes = len(final_text.encode("latin-1", errors="replace"))
+
+    return render_template(
+        "bpa.html",
+        auditoria=auditoria,
+        form_data=payload["form_data"],
+        bpa_token=token,
+        filtro_tipo_erro=filtro_tipo_erro or "TODOS",
+        pagina_erros=int(pagina_erros or 1),
+        erros_por_pagina=int(erros_por_pagina or 25),
+        txt_gerado=txt_gerado,
+        txt_nome=txt_nome,
+        txt_preview=txt_preview,
+        txt_tamanho_bytes=txt_tamanho_bytes,
+    )
+
+
+
+
+
+# ======================= Rotas BPA-i =======================
 @export_bp.get("/bpa")
 def bpa_form():
-    # Template está em export/templates/bpa.html
     return render_template("bpa.html")
+
 
 @export_bp.get("/bpa/modelo")
 def bpa_modelo():
-    """
-    Gera e envia um modelo XLSX em memória com as colunas esperadas.
-    """
     cols = [_normalize_header(c) for c in REQUIRED_COLUMNS]
     exemplo = {c: "" for c in cols}
-    # alguns exemplos úteis
     exemplo.update({
         "prd-cnes": "6097367",
         "prd-cnsmed": "123456789012345",
@@ -390,6 +521,7 @@ def bpa_modelo():
         "prd-dtaten": datetime.today().strftime("%d/%m/%Y"),
         "prd-pa": "0301010030",
         "prd-cnspac": "898001160134286",
+        "prd-cpfpac": "12345678901",
         "prd-sexo": "F",
         "prd-ibge": "270430",
         "prd-cid": "F839",
@@ -413,6 +545,7 @@ def bpa_modelo():
         "prd-email-pcnte": "exemplo@dominio.com",
         "prd-ine": "0000000000",
     })
+
     df = pd.DataFrame([exemplo], columns=cols)
 
     bio = io.BytesIO()
@@ -427,160 +560,418 @@ def bpa_modelo():
         download_name="modelo_bpai.xlsx",
     )
 
+
 @export_bp.post("/bpa/convert")
 def bpa_convert():
-    """
-    Recebe planilha, valida, gera cabeçalho + corpo posicional e retorna TXT.
-    """
     if "file" not in request.files:
         abort(400, "Arquivo não enviado.")
+
     f = request.files["file"]
+
     if not f or f.filename == "":
         abort(400, "Arquivo inválido.")
 
     try:
         df = _load_dataframe(f)
     except Exception as e:
-        # abort já envia 400, mas se veio outra Exception mostramos amigável:
         abort(400, f"Falha ao processar o arquivo: {e}")
 
-    # Dados do cabeçalho
-    cpf_form = request.form.get("cpf", "")
-    competencia_form = request.form.get("competencia", "")  # MM/AAAA
-    orgao_form = request.form.get("orgao", "")
-    sigla_form = request.form.get("sigla", "")
+    form_data = {
+        "cpf": request.form.get("cpf", ""),
+        "competencia": request.form.get("competencia", ""),
+        "orgao": request.form.get("orgao", ""),
+        "sigla": request.form.get("sigla", ""),
+    }
 
-    competencia_yyyymm = _competencia_to_yyyymm(competencia_form)
-
-    num_registros = len(df)
-    header_line = build_bpai_header(
-        orgao=orgao_form,
-        sigla=sigla_form,
-        cpf_ou_cnpj=cpf_form,
-        competencia_mm_aaaa=competencia_form,
-        num_registros=num_registros,
+    # --------------------------------------------------
+    # Salva o BPA temporariamente
+    # --------------------------------------------------
+    token, payload = _salvar_bpa_cache(
+        df,
+        form_data,
+        f.filename or "bpa.xlsx"
     )
 
-    # Corpo
-    body_text = dataframe_to_txt_body(df, competencia_yyyymm)
 
-    # Resultado final (com CRLF entre header e body)
-    final_text = header_line + ("\r\n" if body_text else "") + body_text
-    content_bytes = final_text.encode("utf-8")
 
-    # Nome do arquivo de saída
-    original = f.filename or "bpa"
-    base = re.sub(r"\.[^.]+$", "", original)
-    out_name = f"{base}.txt"
+    # --------------------------------------------------
+    # Gera auditoria inicial
+    # --------------------------------------------------
+    payload["auditoria"] = auditar_dataframe_bpa(
+        df,
+        validar_cnes=False,
+        pagina_erros=1,
+        erros_por_pagina=999999
+    )
+
+    # --------------------------------------------------
+    # Atualiza cache com auditoria pronta
+    # --------------------------------------------------
+    _salvar_payload_bpa(token, payload)
+
+    # --------------------------------------------------
+    # Renderiza a tela
+    # --------------------------------------------------
+    return _render_bpa_com_auditoria(
+        payload=payload,
+        token=token,
+        filtro_tipo_erro="TODOS",
+        pagina_erros=1,
+        erros_por_pagina=25,
+    )
+
+
+
+
+
+
+
+
+@export_bp.post("/bpa/validar-cnes")
+def bpa_validar_cnes():
+    token = request.form.get("bpa_token") or session.get("bpa_token")
+    token, payload = _carregar_bpa_cache(token)
+
+    auditoria = auditar_dataframe_bpa(
+        payload["df"],
+        excluir_idxs=payload.get("excluir_idxs", []),
+        validar_cnes=True,
+        pagina_erros=1,
+        erros_por_pagina=999999,
+    )
+
+    payload["auditoria"] = auditoria
+    _salvar_payload_bpa(token, payload)
+
+    return _render_bpa_com_auditoria(
+        payload=payload,
+        token=token,
+        filtro_tipo_erro="TODOS",
+        pagina_erros=1,
+        erros_por_pagina=15,
+    )
+
+
+
+
+
+
+
+@export_bp.post("/bpa/auditoria")
+def bpa_auditoria_acao():
+    """
+    Ações da auditoria BPA-I.
+
+    Corrige:
+    - auditoria_atual agora existe de verdade.
+    - CNES fica ativado.
+    - Exclusão individual, selecionados e todos com erro funcionam.
+    - Adiciona opção futura: excluir_todos_filtrados.
+    """
+
+    token = request.form.get("bpa_token") or session.get("bpa_token")
+    token, payload = _carregar_bpa_cache(token)
+
+    acao = request.form.get("acao", "filtrar")
+
+    filtro_tipo_erro = request.form.get("filtro_tipo_erro") or "TODOS"
+    pagina_erros = int(request.form.get("pagina_erros") or 1)
+    erros_por_pagina = int(request.form.get("erros_por_pagina") or 25)
+
+    excluir_atual = set(payload.get("excluir_idxs", []))
+
+    # Auditoria atual ANTES da ação.
+    # Usada principalmente para:
+    # - excluir todos com erro
+    # - excluir todos filtrados
+    auditoria_atual = auditar_dataframe_bpa(
+        payload["df"],
+        excluir_idxs=list(excluir_atual),
+        filtro_tipo_erro=filtro_tipo_erro,
+        pagina_erros=pagina_erros,
+        erros_por_pagina=erros_por_pagina,
+        validar_cnes=True,
+    )
+
+    if acao == "excluir_individual":
+        idx = request.form.get("idx")
+
+        if idx and str(idx).isdigit():
+            excluir_atual.add(int(idx))
+
+        pagina_erros = 1
+
+    elif acao == "excluir_selecionados":
+        selecionados = _int_list(request.form.getlist("selecionados"))
+
+        if selecionados:
+            excluir_atual.update(selecionados)
+
+        pagina_erros = 1
+
+    elif acao == "excluir_todos_erros":
+        # Exclui todas as linhas com erro bloqueante.
+        # Avisos CNES não entram aqui se gravidade = aviso.
+        idxs_erro = auditoria_atual.get("exportacao", {}).get("idxs_com_erro", [])
+        excluir_atual.update(idxs_erro)
+
+        pagina_erros = 1
+
+    elif acao == "excluir_todos_filtrados":
+        # Exclui todos os itens do filtro atual.
+        # Exemplo: filtro DUPLICIDADE -> exclui todas as duplicidades.
+        for problema in auditoria_atual.get("problemas_filtrados", []):
+            idx = problema.get("idx")
+
+            if isinstance(idx, int) and idx >= 0:
+                excluir_atual.add(idx)
+
+        pagina_erros = 1
+
+    elif acao == "limpar_exclusoes":
+        excluir_atual = set()
+        pagina_erros = 1
+
+    elif acao == "filtrar":
+        pagina_erros = 1
+
+    elif acao == "paginar":
+        # Mantém página enviada pelo formulário.
+        pass
+
+    payload["excluir_idxs"] = sorted(excluir_atual)
+
+    # Como as exclusões mudaram, invalida auditoria cacheada se existir.
+    payload["auditoria"] = None
+
+    _salvar_payload_bpa(token, payload)
+
+    return _render_bpa_com_auditoria(
+        payload=payload,
+        token=token,
+        filtro_tipo_erro=filtro_tipo_erro,
+        pagina_erros=pagina_erros,
+        erros_por_pagina=erros_por_pagina,
+    )
+
+
+
+
+
+@export_bp.post("/bpa/download")
+def bpa_download():
+    token = request.form.get("bpa_token") or session.get("bpa_token")
+    token, payload = _carregar_bpa_cache(token)
+
+    auditoria = payload.get("auditoria")
+
+    if auditoria and auditoria.get("resumo", {}).get("tem_problemas"):
+        flash(
+            f"Atenção: foram encontradas "
+            f"{auditoria['resumo']['total_problemas']} inconsistências. "
+            f"O TXT foi gerado mesmo assim.",
+            "warning"
+        )
+
+    final_text, out_name = _gerar_txt_bpa_do_payload(payload)
 
     return send_file(
-        io.BytesIO(content_bytes),
-        mimetype="text/plain; charset=utf-8",
+        io.BytesIO(final_text.encode("latin-1", errors="replace")),
+        mimetype="text/plain; charset=latin-1",
         as_attachment=True,
         download_name=out_name
     )
 
 
-# -----------------------------
-# APAC – Visualização/Export
-# -----------------------------
-@export_bp.get("/apac")
-def apac_view():
-    """
-    Tela de visualização/gestão das APACs (filtros + tabela).
-    Passe ao template as variáveis usadas no HTML para evitar 500 por variáveis ausentes.
-    """
-    # Filtros vindos por GET (default vazio)
-    nome = request.args.get("nome", "")
-    cep = request.args.get("cep", "")
-    competencia = request.args.get("competencia", "")
-    status = request.args.get("status", "")
-    status_entrega = request.args.get("status_entrega", "")
-    nota_fiscal = request.args.get("nota_fiscal", "")
-    competencia_nota = request.args.get("competencia_nota", "")
-    fornecedor = request.args.get("fornecedor", "")
-    local_entrega = request.args.get("local_entrega", "")
 
-    # Mock de dados (substituir por SELECT no seu banco)
-    apacs = []
-    # Exemplo (remova depois):
-    # apacs = [{
-    #     "id": 1, "prontuario": "12345", "nome_paciente": "Fulano",
-    #     "numero_apac": "0001/2025", "competencia": "08/2025",
-    #     "procedimento": "Aparelho AUD", "codigo_procedimento": "1234567",
-    #     "quantidade": 1, "status": "Pago", "status_entrega": "Entregue",
-    #     "cnes": "6097367", "data_inicial": "2025-08-01", "data_final": "2025-11-01",
-    #     "tipo_apac": "1", "nacionalidade": "10", "cns": "123456789012345",
-    #     "data_nascimento": "2010-05-20", "nome_mae": "Ciclana",
-    #     "sexo": "M", "raca": "Parda", "endereco": "Rua A", "numero": "100",
-    #     "bairro": "Centro", "cep": "00000-000",
-    #     "nota_fiscal": "NF-99", "data_nota_fiscal": "2025-08-15",
-    #     "data_entrada_nf": "2025-08-16", "competencia_nota": "08/2025",
-    #     "protocolo_nota": "ABC123", "obs_nota": "", "data_pedido": "2025-08-10",
-    #     "fornecedor": "Fornecedor X", "obs_pedido": "",
-    #     "data_entrega": "2025-08-20", "local_entrega": "UBS Central",
-    #     "obs_entrega": "", "cbo_executante": "223605",
-    #     "cns_executante": "987654321098765", "servico": "", "classificacao": ""
-    # }]
 
-    return render_template(
-        "apacs_visualizar.html",
-        apacs=apacs,
-        nome_filtro=nome,
-        cep_filtro=cep,
-        competencia_filtro=competencia,
-        status_filtro=status,
-        status_entrega_filtro=status_entrega,
-        nota_fiscal_filtro=nota_fiscal,
-        competencia_nota_filtro=competencia_nota,
-        fornecedor_filtro=fornecedor,
-        local_entrega_filtro=local_entrega,
+@export_bp.post("/bpa/resumo-pdf")
+def bpa_resumo_pdf():
+    token = request.form.get("bpa_token") or session.get("bpa_token")
+    token, payload = _carregar_bpa_cache(token)
+
+    auditoria = payload.get("auditoria")
+
+    if not auditoria:
+        auditoria = auditar_dataframe_bpa(
+            payload["df"],
+            excluir_idxs=payload.get("excluir_idxs", []),
+            validar_cnes=False,
+            pagina_erros=1,
+            erros_por_pagina=999999,
+        )
+        payload["auditoria"] = auditoria
+        _salvar_payload_bpa(token, payload)
+
+    pdf_bytes = _gerar_pdf_resumo_bpa(payload, auditoria)
+
+    original = payload.get("filename") or "bpa"
+    base = re.sub(r"\.[^.]+$", "", original)
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"resumo_auditoria_{base}.pdf"
     )
 
-@export_bp.get("/apac/excel")
-def apacs_excel():
-    """Exporta APACs filtradas para Excel (stub)."""
-    # gere o arquivo e retorne com send_file. Por enquanto, devolve um XLSX vazio.
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        pd.DataFrame([]).to_excel(writer, index=False, sheet_name="APACs")
-    output.seek(0)
-    return send_file(output, as_attachment=True, download_name="apacs.xlsx",
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-@export_bp.get("/apac/txt")
-def apacs_txt():
-    """Exporta APACs filtradas para TXT (stub)."""
-    competencia = request.args.get("competencia", "")
-    conteudo = f"ARQUIVO APAC - COMPETENCIA {competencia}\r\n".encode("utf-8")
-    return send_file(io.BytesIO(conteudo), as_attachment=True,
-                     download_name=f"apacs_{competencia or 'MMYYYY'}.txt",
-                     mimetype="text/plain; charset=utf-8")
 
-@export_bp.post("/apac/duplicar")
-def apac_duplicar():
-    # pegue id e duplique no banco
-    # id_apac = request.form.get("id_apac")
-    flash("APAC duplicada (preview).", "success")
-    return redirect(url_for("export.apac_view"))
 
-@export_bp.post("/apac/excluir")
-def apac_excluir():
-    # id_apac = request.form.get("id_apac")
-    flash("APAC excluída (preview).", "info")
-    return redirect(url_for("export.apac_view"))
 
-@export_bp.get("/apac/<int:apac_id>/pdf")
-def apac_pdf(apac_id: int):
-    """Gera PDF da APAC (stub)."""
-    pdf_bytes = b"%PDF-1.4\n% ... pdf fake ..."
-    return send_file(io.BytesIO(pdf_bytes), as_attachment=True,
-                     download_name=f"apac_{apac_id}.pdf", mimetype="application/pdf")
 
-@export_bp.post("/apac/atualizar")
-def apac_atualizar():
-    # Aqui você leria request.form e faria UPDATE no banco.
-    # Ex.: id_apac = request.form.get("id_apac")
-    from flask import flash, redirect, url_for
-    flash("APAC atualizada (preview).", "success")
-    return redirect(url_for("export.apac_view"))
+
+
+def _gerar_pdf_resumo_bpa(payload, auditoria):
+    buffer = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    resumo = auditoria.get("resumo", {})
+    rankings = auditoria.get("rankings", {})
+    problemas = auditoria.get("problemas", [])
+    baixa = auditoria.get("baixa_frequencia", {})
+    cnesp = auditoria.get("cnes_profissionais", {})
+
+    story.append(Paragraph("Resumo da Auditoria BPA-i", styles["Title"]))
+    story.append(Paragraph(f"Arquivo: {payload.get('filename', '-')}", styles["Normal"]))
+    story.append(Paragraph(f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", styles["Normal"]))
+    story.append(Spacer(1, 12))
+
+    dados_resumo = [
+        ["Indicador", "Quantidade"],
+        ["Linhas originais", resumo.get("total_linhas_original", 0)],
+        ["Linhas consideradas", resumo.get("total_linhas", 0)],
+        ["Linhas excluídas", resumo.get("linhas_excluidas", 0)],
+        ["Linhas válidas", resumo.get("validas", 0)],
+        ["Problemas", resumo.get("total_problemas", 0)],
+        ["Erros", resumo.get("total_erros", 0)],
+        ["Avisos", resumo.get("total_avisos", 0)],
+        ["Duplicidades", resumo.get("duplicidades", 0)],
+        ["Inconsistências", resumo.get("inconsistencias", 0)],
+        ["Pacientes únicos", resumo.get("pacientes_unicos", 0)],
+        ["Profissionais únicos", resumo.get("profissionais_unicos", 0)],
+        ["Procedimentos diferentes", resumo.get("procedimentos_diferentes", 0)],
+        ["CIDs diferentes", resumo.get("cids_diferentes", 0)],
+    ]
+
+    story.append(_pdf_table(dados_resumo, [9 * cm, 5 * cm]))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Top procedimentos", styles["Heading2"]))
+    story.append(_pdf_table(
+        [["Procedimento", "Quantidade"]] +
+        [[x.get("chave", "-"), x.get("quantidade", 0)] for x in rankings.get("procedimentos", [])[:20]],
+        [9 * cm, 4 * cm]
+    ))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Top CIDs", styles["Heading2"]))
+    story.append(_pdf_table(
+        [["CID", "Quantidade"]] +
+        [[x.get("chave", "-"), x.get("quantidade", 0)] for x in rankings.get("cids", [])[:20]],
+        [9 * cm, 4 * cm]
+    ))
+
+    story.append(PageBreak())
+
+    story.append(Paragraph("Problemas encontrados", styles["Heading2"]))
+    dados_problemas = [["Linha", "Tipo", "Paciente", "Procedimento", "CID", "Serviço/Class.", "Mensagem"]]
+
+    for p in problemas[:150]:
+        dados_problemas.append([
+            p.get("linha_excel", "-"),
+            p.get("tipo", "-"),
+            p.get("paciente", "-")[:35],
+            p.get("procedimento", "-"),
+            p.get("cid", "-"),
+            f"{p.get('servico', '-')}/{p.get('classificacao', '-')}",
+            p.get("mensagem", "-")[:80],
+        ])
+
+    story.append(_pdf_table(
+        dados_problemas,
+        [1.5 * cm, 5 * cm, 6 * cm, 3 * cm, 2 * cm, 3 * cm, 10 * cm],
+        font_size=7
+    ))
+
+    story.append(PageBreak())
+
+    story.append(Paragraph("Validação CNES dos profissionais", styles["Heading2"]))
+
+    if cnesp and cnesp.get("ativo"):
+        dados_cnes = [["CNS", "CNES", "CBO", "Linhas", "Status", "Mensagem"]]
+
+        for item in cnesp.get("itens", [])[:120]:
+            dados_cnes.append([
+                item.get("cns", "-"),
+                item.get("cnes", "-"),
+                item.get("cbo", "-"),
+                item.get("qtd_linhas", 0),
+                item.get("status", "-"),
+                item.get("mensagem", "-")[:90],
+            ])
+
+        story.append(_pdf_table(
+            dados_cnes,
+            [4 * cm, 2.5 * cm, 2.5 * cm, 2 * cm, 3 * cm, 13 * cm],
+            font_size=7
+        ))
+    else:
+        story.append(Paragraph("Validação CNES não executada.", styles["Normal"]))
+
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("Baixa frequência estimada", styles["Heading2"]))
+
+    dados_freq = [["Paciente", "Dias diferentes", "Meta", "Déficit", "CBOs"]]
+
+    for item in baixa.get("pacientes_abaixo", [])[:120]:
+        dados_freq.append([
+            item.get("paciente", "-")[:45],
+            item.get("dias_diferentes", 0),
+            item.get("meta_minima", 4),
+            item.get("deficit", 0),
+            item.get("cbos_txt", "-")[:80],
+        ])
+
+    story.append(_pdf_table(
+        dados_freq,
+        [8 * cm, 3 * cm, 2 * cm, 2 * cm, 12 * cm],
+        font_size=7
+    ))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.read()
+
+
+def _pdf_table(data, col_widths=None, font_size=8):
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5edf7")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), font_size),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+
+    return table
+

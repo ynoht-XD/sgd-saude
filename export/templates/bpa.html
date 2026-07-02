@@ -7,60 +7,545 @@
 {% block content %}
 <div class="export-page">
   <div class="container">
+
     <div class="card">
       <h1>Gerar TXT do BPA-i</h1>
-      <p class="sub">Informe os dados do cabeçalho e selecione a planilha <span class="chip">.xls / .xlsx</span> com as produções.</p>
+      <p class="sub">
+        Informe os dados do cabeçalho e selecione a planilha
+        <span class="chip">.xls / .xlsx / .csv</span> com as produções.
+      </p>
 
       <form id="bpaiForm" action="{{ url_for('export.bpa_convert') }}" method="post" enctype="multipart/form-data" novalidate>
-        <!-- Campos visuais + hidden para enviar no formato esperado pelo backend -->
-        <input type="hidden" name="cpf" id="cpfHidden">
-        <input type="hidden" name="competencia" id="competenciaHidden">
+        <input type="hidden" name="cpf" id="cpfHidden" value="{{ form_data.cpf if form_data else '' }}">
+        <input type="hidden" name="competencia" id="competenciaHidden" value="{{ form_data.competencia if form_data else '' }}">
 
         <div class="grid cols-3">
           <div>
             <label for="cpf">CPF do responsável pela informação</label>
-            <input class="field" id="cpf" type="text" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14" required>
+            <input class="field" id="cpf" type="text" inputmode="numeric" autocomplete="off"
+                   placeholder="000.000.000-00" maxlength="14" required
+                   value="{{ form_data.cpf if form_data else '' }}">
             <div class="hint">Somente dígitos; será validado e enviado sem pontuação.</div>
           </div>
 
           <div>
             <label for="competencia">Mês/Ano (MM/AAAA)</label>
             <input class="field" id="competencia" type="month" required>
-            <div class="hint">Será convertido automaticamente para <strong>MM/AAAA</strong> no envio.</div>
+            <div class="hint">Será convertido automaticamente para <strong>MM/AAAA</strong>.</div>
           </div>
 
           <div>
-            <label for="sigla">Sigla do órgão (digitação)</label>
-            <input class="field" id="sigla" name="sigla" type="text" placeholder="SIGLA" maxlength="15" required>
+            <label for="sigla">Sigla do órgão</label>
+            <input class="field" id="sigla" name="sigla" type="text" placeholder="SIGLA"
+                   maxlength="15" required value="{{ form_data.sigla if form_data else '' }}">
           </div>
         </div>
 
         <div class="grid cols-2" style="margin-top:14px">
           <div>
-            <label for="orgao">Órgão de origem (responsável pela informação)</label>
-            <input class="field" id="orgao" name="orgao" type="text" placeholder="Nome do órgão" required>
+            <label for="orgao">Órgão de origem</label>
+            <input class="field" id="orgao" name="orgao" type="text" placeholder="Nome do órgão"
+                   required value="{{ form_data.orgao if form_data else '' }}">
           </div>
 
           <div class="file">
             <div>
-              <label for="file">Planilha de produções (XLS/XLSX)</label>
-              <input class="field" id="file" name="file" type="file" accept=".xls,.xlsx" required>
+              <label for="file">Planilha de produções</label>
+              <input class="field" id="file" name="file" type="file" accept=".xls,.xlsx,.csv" required>
               <div id="fileInfo" class="hint">Nenhum arquivo selecionado.</div>
             </div>
+
             <div class="row" style="justify-content:flex-end">
-              <button id="submitBtn" type="submit" disabled>Processar e gerar TXT</button>
+              <button id="submitBtn" type="submit" disabled>Processar e auditar</button>
             </div>
           </div>
         </div>
 
         <div id="errorBox" class="error">Corrija os campos destacados e tente novamente.</div>
-        <div id="okBox" class="ok">Validado! Enviando…</div>
+        <div id="okBox" class="ok">Validado! Processando…</div>
       </form>
 
-      <div class="footer">Dica: o campo de competência usa o seletor nativo de mês/ano do navegador.</div>
+      <div class="footer">
+        Primeiro auditamos, depois geramos. Planilha sem auditoria é igual carro sem freio: até anda, mas dá emoção demais.
+      </div>
     </div>
+
+    {% if auditoria %}
+      {% set resumo = auditoria.resumo %}
+      {% set problemas = auditoria.problemas %}
+      {% set problemas_pag = auditoria.problemas_paginados if auditoria.problemas_paginados is defined else None %}
+      {% set problemas_lista = problemas_pag.itens if problemas_pag else problemas %}
+      {% set rankings = auditoria.rankings %}
+      {% set baixa = auditoria.baixa_frequencia %}
+      {% set tipos_erro = auditoria.tipos_erro if auditoria.tipos_erro is defined else [] %}
+
+      <div class="card auditoria-card" id="auditRoot" style="margin-top:18px">
+        <div class="auditoria-head">
+          <div>
+            <h2>Auditoria da Produção BPA-I</h2>
+            <p class="sub">
+              Resumo, validações SIGTAP, duplicidades, rankings, baixa frequência estimada e exportações.
+            </p>
+          </div>
+
+          <div class="row">
+
+            {% if resumo.pode_gerar_txt %}
+              <span class="chip ok-chip">TXT apto</span>
+            {% else %}
+              <span class="chip warn-chip">Correções necessárias</span>
+            {% endif %}
+
+            <form action="{{ url_for('export.bpa_download') }}" method="post">
+              <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+              <button type="submit">
+                📥 Baixar TXT
+              </button>
+            </form>
+
+            <form action="{{ url_for('export.bpa_resumo_pdf') }}" method="post">
+              <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+              <button type="submit" class="ghost">
+                📄 Exportar Resumo PDF
+              </button>
+            </form>
+
+            {% if resumo.linhas_excluidas|default(0) > 0 %}
+              <form action="{{ url_for('export.bpa_auditoria_acao') }}" method="post">
+                <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+                <input type="hidden" name="acao" value="limpar_exclusoes">
+                <input type="hidden" name="filtro_tipo_erro" value="{{ filtro_tipo_erro|default('TODOS') }}">
+                <input type="hidden" name="pagina_erros" value="1">
+                <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+                <button type="submit" class="ghost">
+                  Restaurar excluídas
+                </button>
+              </form>
+            {% endif %}
+
+          </div>
+
+
+
+
+
+
+        </div>
+
+        <div class="audit-grid">
+          <div class="audit-kpi"><span>Linhas originais</span><strong>{{ resumo.total_linhas_original|default(resumo.total_linhas) }}</strong></div>
+          <div class="audit-kpi"><span>Linhas atuais</span><strong>{{ resumo.total_linhas }}</strong></div>
+          <div class="audit-kpi"><span>Excluídas</span><strong>{{ resumo.linhas_excluidas|default(0) }}</strong></div>
+          <div class="audit-kpi"><span>Válidas</span><strong>{{ resumo.validas }}</strong></div>
+          <div class="audit-kpi"><span>Com erro</span><strong>{{ resumo.linhas_com_erro }}</strong></div>
+          <div class="audit-kpi"><span>Duplicidades</span><strong>{{ resumo.duplicidades }}</strong></div>
+          <div class="audit-kpi"><span>Inconsistências</span><strong>{{ resumo.inconsistencias }}</strong></div>
+          <div class="audit-kpi"><span>Erros</span><strong>{{ resumo.total_erros|default(0) }}</strong></div>
+          <div class="audit-kpi"><span>Avisos</span><strong>{{ resumo.total_avisos|default(0) }}</strong></div>
+          <div class="audit-kpi"><span>Avisos CNES</span><strong>{{ resumo.avisos_cnes|default(0) }}</strong></div>
+          <div class="audit-kpi"><span>Pacientes únicos</span><strong>{{ resumo.pacientes_unicos }}</strong></div>
+          <div class="audit-kpi"><span>Profissionais únicos</span><strong>{{ resumo.profissionais_unicos }}</strong></div>
+          <div class="audit-kpi"><span>Procedimentos</span><strong>{{ resumo.procedimentos_diferentes }}</strong></div>
+        </div>
+
+        <div class="audit-status">
+
+          {% if resumo.tem_problemas %}
+            <div class="error" style="display:block">
+              ⚠ Foram encontradas
+              <strong>{{ resumo.total_problemas }}</strong>
+              inconsistências.
+
+              {% if resumo.total_erros %}
+                • {{ resumo.total_erros }} erro(s)
+              {% endif %}
+
+              {% if resumo.total_avisos %}
+                • {{ resumo.total_avisos }} aviso(s)
+              {% endif %}
+
+              {% if resumo.avisos_cnes %}
+                • {{ resumo.avisos_cnes }} relacionado(s) ao CNES
+              {% endif %}
+
+              <br>
+              O TXT continua disponível para download.
+            </div>
+
+          {% else %}
+            <div class="ok" style="display:block">
+              ✅ Nenhuma inconsistência encontrada.
+              TXT pronto para exportação.
+            </div>
+          {% endif %}
+
+        <details class="audit-details" open>
+          <summary>Problemas encontrados ({{ problemas|length }})</summary>
+
+          <div class="audit-toolbar">
+            <form action="{{ url_for('export.bpa_auditoria_acao') }}" method="post" class="row">
+              <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+              <input type="hidden" name="acao" value="filtrar">
+              <input type="hidden" name="pagina_erros" value="1">
+              <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+
+              <label class="mini-label" for="filtroErro">Filtrar erro</label>
+              <select class="field mini-field" id="filtroErro" name="filtro_tipo_erro" onchange="this.form.submit()">
+                <option value="TODOS" {% if filtro_tipo_erro|default('TODOS') == 'TODOS' %}selected{% endif %}>Todos</option>
+                {% for tipo in tipos_erro %}
+                  <option value="{{ tipo }}" {% if filtro_tipo_erro == tipo %}selected{% endif %}>{{ tipo }}</option>
+                {% endfor %}
+              </select>
+            </form>
+
+            <form id="formErrosSelecionados" action="{{ url_for('export.bpa_auditoria_acao') }}" method="post" class="row">
+              <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+              <input type="hidden" name="acao" id="acaoErros" value="excluir_selecionados">
+              <input type="hidden" name="filtro_tipo_erro" value="{{ filtro_tipo_erro|default('TODOS') }}">
+              <input type="hidden" name="pagina_erros" value="{{ pagina_erros|default(1) }}">
+              <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+
+              <button type="button" class="ghost" id="btnSelectAllErrors">Selecionar página</button>
+              <button type="button" class="ghost" id="btnClearSelection">Limpar seleção</button>
+              <button
+                type="submit"
+                class="ghost danger-soft-btn"
+                onclick="document.getElementById('acaoErros').value='excluir_todos_filtrados'"
+              >
+                Excluir todos filtrados
+              </button>
+              <button type="submit" class="ghost">Excluir selecionados</button>
+              <button type="submit" class="ghost danger-soft-btn" onclick="document.getElementById('acaoErros').value='excluir_todos_erros'">
+                Excluir todos com erro
+              </button>
+              <span class="hint">Selecionados: <strong id="selectedCount">0</strong></span>
+            </form>
+          </div>
+
+          {% if problemas_lista and problemas_lista|length > 0 %}
+            <div class="table-wrap">
+              <table class="audit-table" id="tabelaErros">
+                <thead>
+                  <tr>
+                    <th><input type="checkbox" id="checkMaster"></th>
+                    <th>Linha</th>
+                    <th>Tipo</th>
+                    <th>Paciente</th>
+                    <th>Data</th>
+                    <th>Procedimento</th>
+                    <th>CID</th>
+                    <th>Serv/Class</th>
+                    <th>Mensagem</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {% for p in problemas_lista %}
+                    <tr data-idx="{{ p.idx }}" data-tipo="{{ p.tipo }}">
+                      <td>
+                        {% if p.selecionavel is not defined or p.selecionavel %}
+                          <input type="checkbox" class="erro-check" name="selecionados" value="{{ p.idx }}" form="formErrosSelecionados">
+                        {% endif %}
+                      </td>
+
+                      <td>{{ p.linha_excel }}</td>
+                      <td>
+                        {% if p.gravidade == 'aviso' %}
+                          <span class="badge warn-chip">{{ p.tipo }}</span>
+                        {% else %}
+                          <span class="badge badge-erro">{{ p.tipo }}</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ p.paciente }}</td>
+                      <td>{{ p.data }}</td>
+                      <td>{{ p.procedimento }}</td>
+                      <td>{{ p.cid }}</td>
+                      <td>{{ p.servico }}/{{ p.classificacao }}</td>
+                      <td>
+                        <strong>{{ p.mensagem }}</strong>
+                        <div class="hint">{{ p.sugestao }}</div>
+                      </td>
+                      <td>
+                        {% if p.selecionavel is not defined or p.selecionavel %}
+                          <form action="{{ url_for('export.bpa_auditoria_acao') }}" method="post">
+                            <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+                            <input type="hidden" name="acao" value="excluir_individual">
+                            <input type="hidden" name="idx" value="{{ p.idx }}">
+                            <input type="hidden" name="filtro_tipo_erro" value="{{ filtro_tipo_erro|default('TODOS') }}">
+                            <input type="hidden" name="pagina_erros" value="{{ pagina_erros|default(1) }}">
+                            <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+                            <button type="submit" class="ghost">Excluir linha</button>
+                          </form>
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% if problemas_pag %}
+              <div class="audit-pagination">
+                <span>
+                  Página {{ problemas_pag.pagina }} de {{ problemas_pag.total_paginas }}
+                  · {{ problemas_pag.total }} problema(s)
+                </span>
+
+                <div class="row">
+                  {% if problemas_pag.tem_anterior %}
+                    <form action="{{ url_for('export.bpa_auditoria_acao') }}" method="post">
+                      <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+                      <input type="hidden" name="acao" value="paginar">
+                      <input type="hidden" name="filtro_tipo_erro" value="{{ filtro_tipo_erro|default('TODOS') }}">
+                      <input type="hidden" name="pagina_erros" value="{{ problemas_pag.pagina_anterior }}">
+                      <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+                      <button type="submit" class="ghost">Anterior</button>
+                    </form>
+                  {% endif %}
+
+                  {% if problemas_pag.tem_proxima %}
+                    <form action="{{ url_for('export.bpa_auditoria_acao') }}" method="post">
+                      <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+                      <input type="hidden" name="acao" value="paginar">
+                      <input type="hidden" name="filtro_tipo_erro" value="{{ filtro_tipo_erro|default('TODOS') }}">
+                      <input type="hidden" name="pagina_erros" value="{{ problemas_pag.pagina_proxima }}">
+                      <input type="hidden" name="erros_por_pagina" value="{{ erros_por_pagina|default(25) }}">
+                      <button type="submit" class="ghost">Próxima</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          {% else %}
+            <div class="ok" style="display:block">Nenhum problema encontrado.</div>
+          {% endif %}
+        </details>
+
+        <div class="audit-columns">
+          <details class="audit-details" open>
+            <summary>Ranking de procedimentos</summary>
+            {% if rankings.procedimentos %}
+              <table class="audit-table compact">
+                <thead><tr><th>Procedimento</th><th>Quantidade</th></tr></thead>
+                <tbody>
+                  {% for item in rankings.procedimentos %}
+                    <tr><td>{{ item.chave }}</td><td>{{ item.quantidade }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </details>
+
+          <details class="audit-details" open>
+            <summary>Ranking de CIDs</summary>
+            {% if rankings.cids %}
+              <table class="audit-table compact">
+                <thead><tr><th>CID</th><th>Quantidade</th></tr></thead>
+                <tbody>
+                  {% for item in rankings.cids %}
+                    <tr><td>{{ item.chave }}</td><td>{{ item.quantidade }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </details>
+        </div>
+
+        <details class="audit-details" open>
+          <summary>Ranking por pessoa</summary>
+          {% if rankings.por_pessoa %}
+            <div class="table-wrap">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Paciente</th>
+                    <th>Total</th>
+                    <th>Dias diferentes</th>
+                    <th>Procedimentos mais usados</th>
+                    <th>CIDs mais usados</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in rankings.por_pessoa %}
+                    <tr>
+                      <td>{{ item.paciente }}</td>
+                      <td>{{ item.quantidade_total }}</td>
+                      <td>{{ item.dias_diferentes }}</td>
+                      <td>{{ item.procedimentos_txt }}</td>
+                      <td>{{ item.cids_txt }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </details>
+
+        <div class="audit-columns">
+          <details class="audit-details">
+            <summary>Produção por dia</summary>
+            {% if rankings.dias %}
+              <table class="audit-table compact">
+                <thead><tr><th>Dia</th><th>Quantidade</th></tr></thead>
+                <tbody>
+                  {% for item in rankings.dias %}
+                    <tr><td>{{ item.chave }}</td><td>{{ item.quantidade }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </details>
+
+          <details class="audit-details">
+            <summary>Procedimento + CID</summary>
+            {% if rankings.procedimento_cid %}
+              <table class="audit-table compact">
+                <thead><tr><th>Procedimento</th><th>CID</th><th>Quantidade</th></tr></thead>
+                <tbody>
+                  {% for item in rankings.procedimento_cid %}
+                    <tr><td>{{ item.procedimento }}</td><td>{{ item.cid }}</td><td>{{ item.quantidade }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </details>
+        </div>
+
+        <details class="audit-details">
+          <summary>
+            Baixa frequência estimada
+            {% if baixa %}(meta mínima: {{ baixa.minimo_dias }} dias diferentes por paciente){% endif %}
+          </summary>
+
+          <p class="hint">
+            Usa apenas o XLSX importado. Não confirma falta real; indica baixa produção registrada no mês.
+          </p>
+
+          {% if baixa and baixa.pacientes_abaixo %}
+            <div class="table-wrap">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Paciente</th>
+                    <th>CBOs envolvidos</th>
+                    <th>CNS profissionais</th>
+                    <th>Dias realizados</th>
+                    <th>Dias diferentes</th>
+                    <th>Meta</th>
+                    <th>Déficit</th>
+                    <th>% da meta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in baixa.pacientes_abaixo %}
+                    <tr>
+                      <td>{{ item.paciente }}</td>
+                      <td>{{ item.cbos_txt }}</td>
+                      <td>{{ item.cns_profissionais_txt }}</td>
+                      <td>{{ item.dias_realizados_txt }}</td>
+                      <td>{{ item.dias_diferentes }}</td>
+                      <td>{{ item.meta_minima }}</td>
+                      <td>{{ item.deficit }}</td>
+                      <td>{{ item.percentual }}%</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="ok" style="display:block">Nenhuma baixa frequência estimada encontrada.</div>
+          {% endif %}
+        </details>
+        {% if auditoria.cnes_profissionais %}
+          {% set cnesp = auditoria.cnes_profissionais %}
+
+          <details class="audit-details" open>
+            <summary>
+              Validação CNES dos profissionais
+              {% if cnesp.ativo %}
+                — {{ cnesp.total_analisados }} analisado(s)
+              {% else %}
+                — não executada
+              {% endif %}
+            </summary>
+
+            {% if not cnesp.ativo %}
+              <form action="{{ url_for('export.bpa_validar_cnes') }}" method="post">
+                <input type="hidden" name="bpa_token" value="{{ bpa_token }}">
+                <button type="submit" class="ghost">Validar profissionais no CNES</button>
+              </form>
+            {% elif cnesp.itens and cnesp.itens|length > 0 %}
+              <div class="audit-grid">
+                <div class="audit-kpi"><span>Profissionais analisados</span><strong>{{ cnesp.total_analisados }}</strong></div>
+                <div class="audit-kpi"><span>Encontrados</span><strong>{{ cnesp.encontrados }}</strong></div>
+                <div class="audit-kpi"><span>Com alerta</span><strong>{{ cnesp.com_alerta }}</strong></div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="audit-table">
+                  <thead>
+                    <tr>
+                      <th>CNS profissional</th>
+                      <th>CNES planilha</th>
+                      <th>CBO planilha</th>
+                      <th>Linhas</th>
+                      <th>Status</th>
+                      <th>Mensagem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in cnesp.itens %}
+                      <tr>
+                        <td>{{ item.cns }}</td>
+                        <td>{{ item.cnes }}</td>
+                        <td>{{ item.cbo }}</td>
+                        <td>{{ item.qtd_linhas }}</td>
+                        <td>
+                          {% if item.status == 'ENCONTRADO' %}
+                            <span class="badge ok-chip">Encontrado</span>
+                          {% else %}
+                            <span class="badge warn-chip">Alerta</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          <strong>{{ item.mensagem }}</strong>
+                          {% if item.detalhe %}
+                            <div class="hint">{{ item.detalhe }}</div>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="ok" style="display:block">
+                Nenhum profissional para validar.
+              </div>
+            {% endif %}
+          </details>
+        {% endif %}
+      </div>
+    {% endif %}
   </div>
 </div>
+
+{% if form_data and form_data.competencia %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const competenciaBackend = "{{ form_data.competencia }}";
+  const inputMes = document.getElementById("competencia");
+
+  if (competenciaBackend && competenciaBackend.includes("/") && inputMes) {
+    const [mm, yyyy] = competenciaBackend.split("/");
+    inputMes.value = `${yyyy}-${mm}`;
+  }
+});
+</script>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

@@ -1,0 +1,831 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<style>
+  :root {
+    --apac-blue: #1f4e85;
+    --apac-blue-dark: #163d69;
+    --apac-line: #1f4e85;
+    --apac-text: #18324f;
+  }
+
+  .apac-page { max-width: 1120px; margin: 0 auto; padding: 22px; }
+
+  .apac-actions-top {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 14px; margin-bottom: 14px;
+  }
+
+  .apac-actions-top h1 {
+    margin: 0; color: var(--apac-blue-dark); font-size: 1.45rem;
+  }
+
+  .btn {
+    border: 1px solid #d1d5db; background: #fff; color: #111827;
+    border-radius: 10px; padding: 9px 13px; font-weight: 800;
+    text-decoration: none; cursor: pointer; display: inline-flex;
+    align-items: center; gap: 7px;
+  }
+
+  .btn.primary { background: var(--apac-blue); color: #fff; border-color: var(--apac-blue); }
+  .btn.gray { background: #f3f4f6; }
+
+  .apac-sheet {
+    background: #fff; border: 4px solid var(--apac-blue); border-radius: 28px;
+    padding: 18px; box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
+    color: var(--apac-text);
+  }
+
+  .apac-header {
+    border: 1.8px solid var(--apac-line); display: grid;
+    grid-template-columns: 270px 1fr 70px; align-items: stretch;
+    min-height: 72px; margin-bottom: 8px;
+  }
+
+  .apac-logo {
+    border-right: 1.8px solid var(--apac-line); display: flex;
+    align-items: center; justify-content: center; font-weight: 900;
+    color: var(--apac-blue); font-size: 1.15rem; text-align: center; line-height: 1.1;
+  }
+
+  .apac-title {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 8px 14px; color: var(--apac-blue);
+  }
+
+  .apac-title strong { font-size: 2rem; letter-spacing: .5px; line-height: 1; }
+  .apac-title span { font-size: 1.05rem; font-weight: 800; }
+
+  .apac-page-num {
+    display: flex; align-items: end; justify-content: center;
+    padding-bottom: 8px; font-size: .8rem; color: var(--apac-blue);
+  }
+
+  .bar {
+    background: var(--apac-blue); color: #fff; text-align: center;
+    font-weight: 900; letter-spacing: .4px; padding: 6px;
+    margin-top: 8px; text-transform: uppercase;
+  }
+
+  .box { border: 1.6px solid var(--apac-line); border-top: none; padding: 9px; }
+
+  .grid { display: grid; gap: 7px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g5 { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; }
+  .g-proc { grid-template-columns: 1.2fr .55fr .55fr 1.2fr .45fr; }
+  .g-auto { grid-template-columns: 1.5fr .8fr 1.2fr; }
+
+  .field {
+    position: relative; border: 1.4px solid var(--apac-line);
+    min-height: 43px; background: #fff;
+  }
+
+  .field label {
+    position: absolute; top: -8px; left: 10px; background: #fff;
+    padding: 0 4px; color: var(--apac-blue-dark); font-size: .69rem;
+    text-transform: uppercase; white-space: nowrap;
+  }
+
+  .field input, .field select, .field textarea {
+    width: 100%; height: 100%; border: none; outline: none;
+    padding: 13px 9px 6px; color: #111827; font-size: .92rem;
+    background: transparent;
+  }
+
+  .field input[readonly] { background: #f8fafc; color: #374151; }
+  .field textarea { min-height: 86px; resize: vertical; }
+  .field.big { min-height: 86px; }
+  .field.tall { min-height: 120px; }
+
+  .field input:focus, .field select:focus, .field textarea:focus { background: #eff6ff; }
+
+  .digits { letter-spacing: 3px; font-family: Consolas, monospace; }
+  .autocomplete-box { position: relative; }
+
+  .suggestions {
+    position: absolute; z-index: 40; top: 100%; left: -1px; right: -1px;
+    background: #fff; border: 1px solid var(--apac-line);
+    box-shadow: 0 12px 30px rgba(15,23,42,.15);
+    display: none; max-height: 270px; overflow: auto;
+  }
+
+  .suggestion-item {
+    padding: 9px 10px; cursor: pointer; border-bottom: 1px solid #e5e7eb;
+  }
+
+  .suggestion-item:hover { background: #eff6ff; }
+  .suggestion-item strong { display: block; color: #111827; }
+  .suggestion-item span { display: block; color: #6b7280; font-size: .8rem; margin-top: 2px; }
+
+  .submit-bar {
+    display: flex; justify-content: flex-end; gap: 10px;
+    margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--apac-blue);
+  }
+
+  @media (max-width: 900px) {
+    .apac-header, .g2, .g3, .g4, .g5, .g-proc, .g-auto { grid-template-columns: 1fr; }
+    .apac-logo, .apac-title, .apac-page-num { border-right: none; border-bottom: 1px solid var(--apac-line); }
+    .apac-actions-top { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+
+<div class="apac-page">
+  <div class="apac-actions-top">
+    <h1>Cadastro de APAC</h1>
+    <a href="{{ url_for('export.apac_view') }}" class="btn gray">← Voltar para APACs</a>
+  </div>
+
+  <form method="POST" action="{{ url_for('export.apac_salvar') }}" id="formApacCadastro">
+    <input type="hidden" name="paciente_id" id="paciente_id">
+    <input type="hidden" name="clinica_id" id="clinica_id">
+    <input type="hidden" name="codigo_logradouro" id="codigo_logradouro_hidden">
+    <input type="hidden" name="cod_logradouro" id="cod_logradouro_hidden">
+    <input type="hidden" name="cpf_mae" id="cpf_mae">
+    <input type="hidden" name="cpf_pai" id="cpf_pai">
+    <input type="hidden" name="cpf_responsavel" id="cpf_responsavel">
+    <input type="hidden" name="laudos_json" id="laudos_json">
+    <input type="hidden" name="comorbidades_json" id="comorbidades_json">
+
+    <div class="apac-sheet">
+      <div class="apac-header">
+        <div class="apac-logo">Ministério<br>da Saúde<br>SUS</div>
+        <div class="apac-title">
+          <strong>APAC</strong>
+          <span>Autorização de Procedimentos Ambulatoriais</span>
+          <span>Laudo de Solicitação / Autorização</span>
+        </div>
+        <div class="apac-page-num">pg. 1/2</div>
+      </div>
+
+      <div class="bar">Identificação do Estabelecimento de Saúde (Solicitante)</div>
+      <div class="box">
+        <div class="grid g2">
+          <div class="field">
+            <label>Nome do estabelecimento de saúde solicitante</label>
+            <input type="text" name="estabelecimento_solicitante" value="ASSOCIAÇÃO C. DE REABILITAÇÃO E EQUOTERAPIA SANTA CLARA - ACRESC">
+          </div>
+          <div class="field">
+            <label>CNES</label>
+            <input class="digits" type="text" name="cnes" maxlength="7">
+          </div>
+        </div>
+      </div>
+
+      <div class="bar">Identificação do Paciente</div>
+      <div class="box">
+        <div class="grid g2">
+          <div class="field autocomplete-box">
+            <label>Nome do paciente *</label>
+            <input type="text" name="nome_paciente" id="nome_paciente" autocomplete="off" required placeholder="Digite 3 letras para pesquisar">
+            <div class="suggestions" id="pacienteSuggestions"></div>
+          </div>
+
+          <div class="field">
+            <label>Nº do prontuário</label>
+            <input type="text" name="prontuario" id="prontuario">
+          </div>
+        </div>
+
+        <div class="grid g5" style="margin-top:7px;">
+          <div class="field">
+            <label>Cartão Nacional de Saúde (CNS)</label>
+            <input class="digits" type="text" name="cns" id="cns" maxlength="15" readonly>
+          </div>
+          <div class="field">
+            <label>Data de nascimento</label>
+            <input type="date" name="data_nascimento" id="data_nascimento" readonly>
+          </div>
+          <div class="field">
+            <label>Idade</label>
+            <input type="text" name="idade" id="idade" readonly>
+          </div>
+          <div class="field">
+            <label>Sexo</label>
+            <input type="text" name="sexo" id="sexo" readonly>
+          </div>
+          <div class="field">
+            <label>CPF</label>
+            <input type="text" name="cpf" id="cpf" readonly>
+          </div>
+        </div>
+
+
+
+
+        <div class="grid g2" style="margin-top:7px;">
+        <div class="field">
+            <label>Raça/Cor</label>
+            <input type="text" name="raca" id="raca" readonly>
+        </div>
+
+        <div class="field">
+            <label>Responsável</label>
+            <input type="text" name="responsavel" id="responsavel">
+        </div>
+        </div>
+
+
+
+
+        <div class="grid g2" style="margin-top:7px;">
+          <div class="field">
+            <label>Nome da mãe</label>
+            <input type="text" name="nome_mae" id="nome_mae" readonly>
+          </div>
+
+
+        <div class="field">
+            <label>Telefone</label>
+            <input type="text" name="telefone" id="telefone" readonly>
+        </div>
+        </div>        
+
+
+
+        <div class="grid g3" style="margin-top:7px;">
+          <div class="field">
+            <label>Endereço</label>
+            <input type="text" name="endereco" id="endereco" readonly>
+          </div>
+          <div class="field">
+            <label>Nº</label>
+            <input type="text" name="numero" id="numero" readonly>
+          </div>
+          <div class="field">
+            <label>Complemento</label>
+            <input type="text" name="complemento" id="complemento" readonly>
+          </div>
+        </div>
+
+        <div class="grid g4" style="margin-top:7px;">
+          <div class="field">
+            <label>Bairro</label>
+            <input type="text" name="bairro" id="bairro" readonly>
+          </div>
+          <div class="field">
+            <label>Município</label>
+            <input type="text" name="municipio" id="municipio" readonly>
+          </div>
+          <div class="field">
+            <label>Cód. IBGE município</label>
+            <input type="text" name="codigo_ibge" id="codigo_ibge" readonly>
+          </div>
+          <div class="field">
+            <label>CEP</label>
+            <input class="digits" type="text" name="cep" id="cep" maxlength="8" readonly>
+          </div>
+        </div>
+      </div>
+
+      <div class="bar">Procedimento Solicitado</div>
+      <div class="box">
+        <div class="grid g2">
+          <div class="field autocomplete-box">
+            <label>Pesquisar procedimento por código ou descrição</label>
+            <input type="text" id="busca_procedimento" autocomplete="off" placeholder="Digite 3 caracteres">
+            <div class="suggestions" id="procedimentoSuggestions"></div>
+          </div>
+          <div class="field">
+            <label>Nome do procedimento principal</label>
+            <input type="text" name="procedimento" id="procedimento">
+          </div>
+        </div>
+
+        <div class="grid g-proc" style="margin-top:7px;">
+          <div class="field">
+            <label>Código do procedimento principal</label>
+            <input class="digits" type="text" name="codigo_procedimento" id="codigo_procedimento">
+          </div>
+          <div class="field">
+            <label>Serviço</label>
+            <input type="text" name="servico" id="servico" list="servicoOptions" placeholder="Escolha ou escreva">
+            <datalist id="servicoOptions"></datalist>
+          </div>
+          <div class="field">
+            <label>Class.</label>
+            <input type="text" name="classificacao" id="classificacao" list="classificacaoOptions" placeholder="Escolha ou escreva">
+            <datalist id="classificacaoOptions"></datalist>
+          </div>
+
+          <div class="field">
+            <label>Qtde.</label>
+            <input type="number" name="quantidade" min="1" value="1">
+          </div>
+        </div>
+      </div>
+
+      <div class="grid g4" style="margin-top:7px;">
+        <div class="field">
+          <label>Competência</label>
+          <input type="text" name="competencia" id="competencia" placeholder="05/2026">
+        </div>
+
+        <div class="field">
+          <label>Tipo da APAC</label>
+          <input type="text" name="tipo_apac" id="tipo_apac" maxlength="1" placeholder="I / C / Única">
+        </div>
+
+        <div class="field">
+          <label>Nacionalidade</label>
+          <input type="text" name="nacionalidade" id="nacionalidade" placeholder="010">
+        </div>
+
+        <div class="field">
+          <label>Caráter atendimento</label>
+          <input type="text" name="carater_atendimento" id="carater_atendimento" placeholder="01">
+        </div>
+      </div>
+
+
+
+      <div class="bar">Justificativa do(s) Procedimento(s) Solicitado(s)</div>
+      <div class="box">
+        <div class="grid g4">
+          <div class="field big" style="grid-column: span 2;">
+            <label>Descrição do diagnóstico</label>
+            <textarea name="descricao_diagnostico" id="descricao_diagnostico"></textarea>
+          </div>
+          <div class="field">
+            <label>CID10 principal</label>
+            <input type="text" name="cid" id="cid" maxlength="4">
+          </div>
+          <div class="field">
+            <label>CID10 secundário</label>
+            <input type="text" name="cid2" id="cid2" maxlength="4">
+          </div>
+        </div>
+
+        <div class="field tall" style="margin-top:7px;">
+          <label>Observações</label>
+          <textarea name="obs_geral" id="obs_geral"></textarea>
+        </div>
+      </div>
+
+      <div class="bar">Solicitação</div>
+      <div class="box">
+        <div class="grid g2">
+          <div class="field autocomplete-box">
+            <label>Nome do profissional solicitante</label>
+            <input type="text" name="nome_solicitante" id="nome_solicitante" autocomplete="off" placeholder="Digite 3 caracteres">
+            <div class="suggestions" id="solicitanteSuggestions"></div>
+          </div>
+          <div class="field">
+            <label>Data da solicitação</label>
+            <input type="date" name="data_solicitacao">
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:7px;">
+          <label>Cartão Nacional de Saúde do profissional solicitante</label>
+          <input class="digits" type="text" name="cns_solicitante" id="cns_solicitante" maxlength="15">
+        </div>
+      </div>
+
+      <div class="bar">Autorização</div>
+      <div class="box">
+        <div class="grid g-auto">
+          <div class="field autocomplete-box">
+            <label>Nome do profissional autorizador</label>
+            <input type="text" name="nome_autorizador" id="nome_autorizador" autocomplete="off" placeholder="Digite 3 caracteres">
+            <div class="suggestions" id="autorizadorSuggestions"></div>
+          </div>
+          <div class="field">
+            <label>Cód. órgão emissor</label>
+            <input type="text" name="orgao_emissor" id="orgao_emissor" placeholder="M27670301">
+          </div>
+          <div class="field">
+            <label>Nº da autorização (APAC)</label>
+            <input class="digits" type="text" name="numero_apac">
+          </div>
+        </div>
+
+        <div class="grid g3" style="margin-top:7px;">
+          <div class="field">
+            <label>CNS profissional autorizador</label>
+            <input class="digits" type="text" name="cns_autorizador" id="cns_autorizador" maxlength="15">
+          </div>
+          <div class="field">
+            <label>Data da autorização</label>
+            <input type="date" name="data_autorizacao">
+          </div>
+          <div class="field">
+            <label>Período de validade da APAC</label>
+            <div class="grid g2" style="padding:14px 8px 6px;">
+              <input type="date" name="data_inicial">
+              <input type="date" name="data_final">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="submit-bar">
+        <a href="{{ url_for('export.apac_view') }}" class="btn gray">Cancelar</a>
+        <button type="reset" class="btn">Limpar</button>
+        <button type="submit" class="btn primary">💾 Salvar APAC</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+  const qs = (s, r = document) => r.querySelector(s);
+  const qsa = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  const els = {
+    nome: qs("#nome_paciente"),
+    pacienteBox: qs("#pacienteSuggestions"),
+    buscaProc: qs("#busca_procedimento"),
+    procBox: qs("#procedimentoSuggestions"),
+    servico: qs("#servico"),
+    classificacao: qs("#classificacao"),
+    solicitante: qs("#nome_solicitante"),
+    solicitanteBox: qs("#solicitanteSuggestions"),
+    autorizador: qs("#nome_autorizador"),
+    autorizadorBox: qs("#autorizadorSuggestions"),
+    form: qs("#formApacCadastro")
+  };
+
+  const onlyDigits = (v) => String(v || "").replace(/\D+/g, "");
+
+  const debounce = (fn, wait = 300) => {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
+  };
+
+  const brToISO = (v) => {
+    const s = String(v || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      const [d, m, y] = s.split("/");
+      return `${y}-${m}-${d}`;
+    }
+    return "";
+  };
+
+  const setValue = (name, value) => {
+    const el = qs(`[name="${name}"]`);
+    if (el) el.value = value || "";
+  };
+
+  const setById = (id, value) => {
+    const el = qs(`#${id}`);
+    if (el) el.value = value || "";
+  };
+
+  const pick = (obj, keys) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+    }
+    return "";
+  };
+
+  const hideBox = (box) => {
+    if (!box) return;
+    box.innerHTML = "";
+    box.style.display = "none";
+  };
+
+  const showBox = (box, html) => {
+    if (!box) return;
+    box.innerHTML = html;
+    box.style.display = "block";
+  };
+
+  const fetchJson = async (url) => {
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    return await resp.json();
+  };
+
+  function normalizarListaCompatibilidade(obj, prefixo) {
+    const direta = obj?.[prefixo];
+
+    if (Array.isArray(direta) && direta.length) {
+      return direta.map((x) => {
+        const codigo = x.codigo || x.cod || "";
+        const descricao = x.descricao || x.nome || "";
+        return {
+          codigo,
+          descricao,
+          label: x.label || (descricao ? `${codigo} - ${descricao}` : codigo)
+        };
+      }).filter(x => x.codigo || x.descricao);
+    }
+
+    const codigosRaw = String(obj?.[`${prefixo}_codigos`] || "").trim();
+    const descricoesRaw = String(obj?.[`${prefixo}_descricoes`] || "").trim();
+
+    if (!codigosRaw) return [];
+
+    const splitSmart = (txt) => {
+      if (!txt) return [];
+      const sep = txt.includes("|") ? "|" : txt.includes(";") ? ";" : ",";
+      return txt.split(sep).map(x => x.trim()).filter(Boolean);
+    };
+
+    const codigos = splitSmart(codigosRaw);
+    const descricoes = splitSmart(descricoesRaw);
+
+    return codigos.map((codigo, i) => {
+      const descricao = descricoes[i] || "";
+      return {
+        codigo,
+        descricao,
+        label: descricao ? `${codigo} - ${descricao}` : codigo
+      };
+    });
+  }
+
+  function preencherPaciente(p) {
+    const mae = pick(p, ["nome_mae", "mae"]);
+    const responsavel = pick(p, ["responsavel"]) || mae;
+
+    setById("paciente_id", pick(p, ["id", "paciente_id", "cidadao_id"]));
+    setById("clinica_id", pick(p, ["clinica_id"]));
+    setById("codigo_logradouro_hidden", pick(p, ["codigo_logradouro"]));
+    setById("cod_logradouro_hidden", pick(p, ["codigo_logradouro", "cod_logradouro"]));
+
+    setValue("prontuario", pick(p, ["prontuario", "end_prontuario"]));
+    setValue("nome_paciente", pick(p, ["nome", "nome_paciente", "no_cidadao"]));
+    setValue("cns", onlyDigits(pick(p, ["cns", "nu_cns"])));
+    setValue("cpf", onlyDigits(pick(p, ["cpf", "nu_cpf"])));
+    setValue("data_nascimento", brToISO(pick(p, ["nascimento", "data_nascimento", "dt_nascimento"])));
+    setValue("idade", pick(p, ["idade"]));
+    setValue("sexo", pick(p, ["sexo"]));
+    setValue("raca", pick(p, ["raca"]));
+    setValue("nome_mae", mae);
+    setValue("responsavel", responsavel);
+    setValue("telefone", pick(p, ["telefone", "telefone1", "telefone2", "telefone3"]));
+
+    setValue("endereco", pick(p, ["endereco", "logradouro", "rua", "end_prontuario"]));
+    setValue("numero", pick(p, ["numero", "numero_casa"]));
+    setValue("complemento", pick(p, ["complemento"]));
+    setValue("bairro", pick(p, ["bairro"]));
+    setValue("municipio", pick(p, ["municipio", "cidade"]));
+    setValue("codigo_ibge", pick(p, ["codigo_ibge", "ibge"]));
+    setValue("cep", onlyDigits(pick(p, ["cep"])));
+
+    setValue("cid", pick(p, ["cid"]));
+    setValue("cid2", pick(p, ["cid2"]));
+
+    const descricaoCid = pick(p, [
+      "cid_descricao",
+      "descricao_cid",
+      "cids_descricoes",
+      "laudo",
+      "aviso"
+    ]);
+
+    setValue("descricao_diagnostico", descricaoCid);
+
+    const obs = [
+      pick(p, ["alergias"]),
+      pick(p, ["comorbidades"]),
+      pick(p, ["aviso"])
+    ].filter(Boolean).join(" | ");
+
+    setValue("obs_geral", obs);
+    hideBox(els.pacienteBox);
+  }
+
+  function renderPacientes(items) {
+    if (!items?.length) return hideBox(els.pacienteBox);
+
+    showBox(els.pacienteBox, items.map((p, idx) => {
+      const nome = pick(p, ["nome", "nome_paciente", "no_cidadao"]);
+      const nasc = pick(p, ["nascimento", "data_nascimento", "dt_nascimento"]);
+      const cns = pick(p, ["cns", "nu_cns"]);
+      const cpf = pick(p, ["cpf", "nu_cpf"]);
+      const pront = pick(p, ["prontuario", "end_prontuario"]);
+
+      return `
+        <div class="suggestion-item" data-tipo="paciente" data-idx="${idx}">
+          <strong>${nome || ""}</strong>
+          <span>Nasc.: ${nasc || "-"} • CNS: ${cns || "-"} • CPF: ${cpf || "-"} • Pront.: ${pront || "-"}</span>
+        </div>
+      `;
+    }).join(""));
+
+    qsa('[data-tipo="paciente"]', els.pacienteBox).forEach((el) => {
+      el.addEventListener("click", () => preencherPaciente(items[Number(el.dataset.idx)]));
+    });
+  }
+
+  const buscarPacientes = debounce(async () => {
+    const termo = els.nome?.value?.trim() || "";
+    if (termo.length < 3) return hideBox(els.pacienteBox);
+
+    try {
+      const data = await fetchJson(`/export/apac/api/consulta_pacientes?nome=${encodeURIComponent(termo)}`);
+      renderPacientes(data);
+    } catch {
+      hideBox(els.pacienteBox);
+    }
+  });
+
+    function fillSelect(input, items, placeholder = "Escolha ou escreva") {
+    if (!input) return;
+
+    const listId = input.getAttribute("list");
+    const datalist = listId ? qs(`#${listId}`) : null;
+
+    input.placeholder = placeholder;
+
+    if (!datalist) return;
+
+    datalist.innerHTML = "";
+
+    items.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.codigo || "";
+        opt.label = item.label || `${item.codigo || ""} - ${item.descricao || ""}`;
+        opt.textContent = item.label || `${item.codigo || ""} - ${item.descricao || ""}`;
+        datalist.appendChild(opt);
+    });
+    }
+
+
+
+
+
+
+
+  function preencherProcedimento(p) {
+    const servicos = normalizarListaCompatibilidade(p, "servicos");
+    const classificacoes = normalizarListaCompatibilidade(p, "classificacoes");
+
+    setValue("codigo_procedimento", onlyDigits(p.codigo || ""));
+    setValue("procedimento", p.descricao || "");
+    setById("busca_procedimento", `${p.codigo || ""} - ${p.descricao || ""}`);
+
+    fillSelect(els.servico, servicos);
+    fillSelect(els.classificacao, classificacoes);
+
+    if (servicos.length === 1) els.servico.value = servicos[0].codigo || "";
+    if (classificacoes.length === 1) els.classificacao.value = classificacoes[0].codigo || "";
+
+    if (p.competencia && qs("#competencia") && !qs("#competencia").value) {
+      setById("competencia", p.competencia);
+    }
+
+    hideBox(els.procBox);
+  }
+
+  function renderProcedimentos(items) {
+    if (!items?.length) return hideBox(els.procBox);
+
+    showBox(els.procBox, items.map((p, idx) => {
+      const servicos = normalizarListaCompatibilidade(p, "servicos");
+      const classificacoes = normalizarListaCompatibilidade(p, "classificacoes");
+
+      return `
+        <div class="suggestion-item" data-tipo="procedimento" data-idx="${idx}">
+          <strong>${p.codigo || ""} - ${p.descricao || ""}</strong>
+          <span>
+            Serviço: ${servicos.map(s => s.label).join(" / ") || "-"}
+            • Class.: ${classificacoes.map(c => c.label).join(" / ") || "-"}
+          </span>
+        </div>
+      `;
+    }).join(""));
+
+    qsa('[data-tipo="procedimento"]', els.procBox).forEach((el) => {
+      el.addEventListener("click", () => preencherProcedimento(items[Number(el.dataset.idx)]));
+    });
+  }
+
+  const buscarProcedimentos = debounce(async () => {
+    const q = els.buscaProc?.value?.trim() || "";
+    const servico = els.servico?.value || "";
+    const classificacao = els.classificacao?.value || "";
+
+    if (q.length < 3 && !servico && !classificacao) return hideBox(els.procBox);
+
+    try {
+      const params = new URLSearchParams();
+      if (q.length >= 3) params.set("q", q);
+      if (servico) params.set("servico", servico);
+      if (classificacao) params.set("classificacao", classificacao);
+
+      const data = await fetchJson(`/export/apac/api/procedimentos?${params.toString()}`);
+      renderProcedimentos(data);
+    } catch {
+      hideBox(els.procBox);
+    }
+  });
+
+  async function refiltrarProcedimentos() {
+    const servico = els.servico?.value || "";
+    const classificacao = els.classificacao?.value || "";
+    if (!servico && !classificacao) return;
+
+    try {
+      const params = new URLSearchParams();
+      if (servico) params.set("servico", servico);
+      if (classificacao) params.set("classificacao", classificacao);
+
+      const data = await fetchJson(`/export/apac/api/procedimentos?${params.toString()}`);
+
+      if (data.length === 1) preencherProcedimento(data[0]);
+      else renderProcedimentos(data);
+    } catch {
+      hideBox(els.procBox);
+    }
+  }
+
+  function preencherProfissional(p, tipo) {
+    const nome = p.nome || p.label || "";
+    const cns = onlyDigits(p.cns || p.profissional_id || "");
+
+    if (tipo === "solicitante") {
+      setValue("nome_solicitante", nome);
+      setValue("cns_solicitante", cns);
+      hideBox(els.solicitanteBox);
+    }
+
+    if (tipo === "autorizador") {
+      setValue("nome_autorizador", nome);
+      setValue("cns_autorizador", cns);
+      hideBox(els.autorizadorBox);
+    }
+  }
+
+  function renderProfissionais(items, box, tipo) {
+    if (!items?.length) return hideBox(box);
+
+    showBox(box, items.map((p, idx) => `
+      <div class="suggestion-item" data-tipo="${tipo}" data-idx="${idx}">
+        <strong>${p.nome || p.label || ""}</strong>
+        <span>CNS/ID: ${p.cns || p.profissional_id || "-"} • Conselho: ${p.conselho || "-"}</span>
+      </div>
+    `).join(""));
+
+    qsa(`[data-tipo="${tipo}"]`, box).forEach((el) => {
+      el.addEventListener("click", () => preencherProfissional(items[Number(el.dataset.idx)], tipo));
+    });
+  }
+
+  function buscarProfissionais(input, box, tipo) {
+    return debounce(async () => {
+      const q = input?.value?.trim() || "";
+      if (q.length < 3) return hideBox(box);
+
+      try {
+        const data = await fetchJson(`/export/apac/api/profissionais?q=${encodeURIComponent(q)}`);
+        renderProfissionais(data, box, tipo);
+      } catch {
+        hideBox(box);
+      }
+    });
+  }
+
+  els.nome?.addEventListener("input", buscarPacientes);
+  els.buscaProc?.addEventListener("input", buscarProcedimentos);
+  els.servico?.addEventListener("change", refiltrarProcedimentos);
+  els.classificacao?.addEventListener("change", refiltrarProcedimentos);
+
+  els.solicitante?.addEventListener(
+    "input",
+    buscarProfissionais(els.solicitante, els.solicitanteBox, "solicitante")
+  );
+
+  els.autorizador?.addEventListener(
+    "input",
+    buscarProfissionais(els.autorizador, els.autorizadorBox, "autorizador")
+  );
+
+  document.addEventListener("click", (e) => {
+    const insideAuto = e.target.closest(".autocomplete-box");
+    [els.pacienteBox, els.procBox, els.solicitanteBox, els.autorizadorBox].forEach((box) => {
+      if (!box) return;
+      if (!box.contains(e.target) && !insideAuto) hideBox(box);
+    });
+  });
+
+  els.form?.addEventListener("submit", () => {
+[
+  "cpf",
+  "cns",
+  "cep",
+  "cns_solicitante",
+  "cns_autorizador",
+  "cns_executante",
+  "codigo_procedimento",
+  "numero_apac",
+  "nacionalidade",
+  "carater_atendimento"
+].forEach((name) => {
+      const el = qs(`[name="${name}"]`);
+      if (el) el.value = onlyDigits(el.value);
+    });
+  });
+})();
+</script>
+{% endblock %}

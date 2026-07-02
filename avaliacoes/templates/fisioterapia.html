@@ -1,0 +1,1025 @@
+{% extends "layout.html" %}
+
+{% block title %}Avaliação Fisioterapêutica{% endblock %}
+
+{% block content %}
+
+<style>
+:root{
+    --fisio-primary:#0f766e;
+    --fisio-primary-dark:#115e59;
+    --fisio-bg:#f4f8f8;
+    --fisio-card:#ffffff;
+    --fisio-border:#dbe7e6;
+    --fisio-text:#173b3a;
+    --fisio-muted:#64748b;
+    --fisio-soft:#ecfdf5;
+    --fisio-danger:#dc2626;
+    --fisio-blue:#eff6ff;
+    --fisio-purple:#f5f3ff;
+    --fisio-orange:#fff7ed;
+}
+
+.fisio-page{
+    background:var(--fisio-bg);
+    padding:16px;
+    border-radius:18px;
+}
+
+.fisio-header{
+    background:linear-gradient(135deg,#0f766e,#14b8a6);
+    color:#fff;
+    padding:18px 22px;
+    border-radius:20px;
+    margin-bottom:16px;
+    box-shadow:0 10px 24px rgba(15,118,110,.22);
+}
+
+.fisio-header h1{
+    margin:0;
+    font-size:24px;
+    font-weight:900;
+}
+
+.fisio-header p{
+    margin:6px 0 0;
+    opacity:.92;
+    font-size:14px;
+}
+
+.fisio-card{
+    background:var(--fisio-card);
+    border:1px solid var(--fisio-border);
+    border-radius:16px;
+    padding:16px;
+    margin-bottom:14px;
+    box-shadow:0 6px 18px rgba(15,23,42,.04);
+}
+
+.fisio-card.compact{
+    padding:14px;
+}
+
+.fisio-card h2{
+    font-size:16px;
+    color:var(--fisio-primary-dark);
+    margin:0 0 12px;
+    font-weight:900;
+}
+
+.fisio-grid{
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:10px;
+}
+
+.col-12{grid-column:span 12;}
+.col-8{grid-column:span 8;}
+.col-6{grid-column:span 6;}
+.col-4{grid-column:span 4;}
+.col-3{grid-column:span 3;}
+.col-2{grid-column:span 2;}
+
+.field{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+}
+
+.field label{
+    font-size:12px;
+    font-weight:800;
+    color:var(--fisio-text);
+}
+
+.field input,
+.field select,
+.field textarea{
+    width:100%;
+    border:1px solid var(--fisio-border);
+    border-radius:10px;
+    padding:9px 10px;
+    font-size:13px;
+    outline:none;
+    background:#fff;
+    transition:.2s;
+}
+
+.field textarea{
+    min-height:74px;
+    resize:vertical;
+}
+
+.field textarea.textarea-sm{
+    min-height:62px;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus{
+    border-color:var(--fisio-primary);
+    box-shadow:0 0 0 3px rgba(20,184,166,.13);
+}
+
+.section-split{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+}
+
+.section-mini{
+    border:1px solid var(--fisio-border);
+    border-radius:14px;
+    padding:12px;
+    background:#fbfefe;
+}
+
+.section-mini.blue{background:var(--fisio-blue);}
+.section-mini.green{background:var(--fisio-soft);}
+.section-mini.purple{background:var(--fisio-purple);}
+.section-mini.orange{background:var(--fisio-orange);}
+
+.section-mini h3{
+    margin:0 0 10px;
+    font-size:14px;
+    color:var(--fisio-primary-dark);
+    font-weight:900;
+}
+
+/* Botões selecionáveis */
+.option-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+    gap:8px;
+}
+
+.option-pill{
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:36px;
+    padding:8px 10px;
+    border:1px solid var(--fisio-border);
+    border-radius:999px;
+    background:#f8fafc;
+    color:var(--fisio-text);
+    font-size:13px;
+    font-weight:800;
+    cursor:pointer;
+    user-select:none;
+    transition:.18s;
+    text-align:center;
+}
+
+.option-pill input{
+    position:absolute;
+    opacity:0;
+    pointer-events:none;
+}
+
+.option-pill:hover{
+    background:#ccfbf1;
+    border-color:#99f6e4;
+}
+
+.option-pill:has(input:checked){
+    background:var(--fisio-primary);
+    color:#fff;
+    border-color:var(--fisio-primary);
+    box-shadow:0 6px 14px rgba(15,118,110,.22);
+}
+
+.radio-group{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+}
+
+.eva-box{
+    background:#f8fafc;
+    border:1px solid var(--fisio-border);
+    border-radius:14px;
+    padding:12px;
+}
+
+.eva-top{
+    display:flex;
+    justify-content:space-between;
+    font-weight:900;
+    color:var(--fisio-primary-dark);
+    margin-bottom:6px;
+}
+
+.eva-value{
+    font-size:22px;
+}
+
+input[type="range"]{
+    width:100%;
+    accent-color:var(--fisio-primary);
+}
+
+.eva-scale{
+    display:flex;
+    justify-content:space-between;
+    font-size:11px;
+    color:var(--fisio-muted);
+    margin-top:3px;
+}
+
+.mini-table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0 6px;
+}
+
+.mini-table th{
+    text-align:left;
+    font-size:12px;
+    color:var(--fisio-muted);
+    padding:0 4px;
+}
+
+.mini-table td{
+    padding:0 4px;
+}
+
+.mini-table input,
+.mini-table select{
+    width:100%;
+    border:1px solid var(--fisio-border);
+    border-radius:9px;
+    padding:8px;
+    font-size:13px;
+}
+
+.btn-add,
+.btn-remove,
+.btn-save{
+    border:none;
+    border-radius:11px;
+    padding:9px 13px;
+    font-weight:900;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.btn-add{
+    background:var(--fisio-soft);
+    color:var(--fisio-primary-dark);
+}
+
+.btn-add:hover{
+    background:#ccfbf1;
+}
+
+.btn-remove{
+    background:#fee2e2;
+    color:var(--fisio-danger);
+}
+
+.btn-save{
+    background:var(--fisio-primary);
+    color:white;
+    padding:13px 24px;
+    font-size:15px;
+    box-shadow:0 10px 25px rgba(15,118,110,.25);
+}
+
+.btn-save:hover{
+    background:var(--fisio-primary-dark);
+    transform:translateY(-1px);
+}
+
+.actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+    margin-top:18px;
+}
+
+.paciente-wrap{
+    position:relative;
+}
+
+.paciente-sugestoes{
+    position:absolute;
+    top:100%;
+    left:0;
+    right:0;
+    background:#fff;
+    border:1px solid var(--fisio-border);
+    border-radius:12px;
+    box-shadow:0 12px 25px rgba(15,23,42,.12);
+    z-index:20;
+    display:none;
+    overflow:hidden;
+    margin-top:4px;
+}
+
+.paciente-item{
+    padding:10px 12px;
+    cursor:pointer;
+    border-bottom:1px solid #eef2f7;
+}
+
+.paciente-item:hover{
+    background:var(--fisio-soft);
+}
+
+.paciente-item strong{
+    font-size:13px;
+}
+
+.paciente-item small{
+    color:var(--fisio-muted);
+}
+
+@media(max-width:900px){
+    .col-8,.col-6,.col-4,.col-3,.col-2{
+        grid-column:span 12;
+    }
+
+    .section-split{
+        grid-template-columns:1fr;
+    }
+
+    .option-grid{
+        grid-template-columns:repeat(2,1fr);
+    }
+}
+</style>
+
+<div class="fisio-page">
+
+    <div class="fisio-header">
+        <h1>AVALIAÇÃO FISIOTERAPÊUTICA</h1>
+        <p>Registro clínico compacto, intuitivo e funcional.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('avaliacoes.nova') }}">
+        <input type="hidden" name="tipo" value="fisioterapia">
+        <input type="hidden" name="paciente_id" id="paciente_id">
+        <input type="hidden" name="paciente_prontuario" id="paciente_prontuario">
+        <input type="hidden" name="paciente_cpf" id="paciente_cpf">
+
+        <section class="fisio-card compact">
+            <h2>👤 Identificação</h2>
+
+            <div class="fisio-grid">
+                <div class="field col-8 paciente-wrap">
+                    <label>Paciente</label>
+                    <input type="text" name="paciente_nome" id="paciente_nome" autocomplete="off" required placeholder="Digite 3 letras para buscar o paciente">
+                    <div class="paciente-sugestoes" id="paciente_sugestoes"></div>
+                </div>
+
+                <div class="field col-4">
+                    <label>Data da Avaliação</label>
+                    <input type="date" name="data_avaliacao" id="data_avaliacao">
+                </div>
+
+                <div class="field col-3">
+                    <label>Nascimento</label>
+                    <input type="date" name="data_nascimento" id="data_nascimento">
+                </div>
+
+                <div class="field col-2">
+                    <label>Idade</label>
+                    <input type="text" name="idade" id="idade" readonly>
+                </div>
+
+                <div class="field col-3">
+                    <label>Sexo</label>
+                    <select name="sexo" id="sexo">
+                        <option value="">Selecione</option>
+                        <option value="Feminino">Feminino</option>
+                        <option value="Masculino">Masculino</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                </div>
+
+                <div class="field col-4">
+                    <label>Telefone</label>
+                    <input type="text" name="telefone" id="telefone" placeholder="(00) 00000-0000">
+                </div>
+
+                <div class="field col-4">
+                    <label>Profissão/Ocupação</label>
+                    <input type="text" name="profissao_ocupacao">
+                </div>
+
+                <div class="field col-8">
+                    <label>Endereço</label>
+                    <input type="text" name="endereco" id="endereco">
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <div class="section-split">
+                <div class="section-mini blue">
+                    <h3>🗣️ Queixa Principal</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="queixa_principal" placeholder="Queixa principal do paciente..."></textarea>
+                    </div>
+                </div>
+
+                <div class="section-mini green">
+                    <h3>📋 História da Doença Atual</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="historia_doenca_atual" placeholder="Início, evolução, melhora/piora..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>🩺 Antecedentes Pessoais</h2>
+
+            <div class="option-grid">
+                <label class="option-pill"><input type="checkbox" name="antecedente_hipertensao" value="sim">Hipertensão</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_diabetes" value="sim">Diabetes</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_cardiopatias" value="sim">Cardiopatias</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_osteoporose" value="sim">Osteoporose</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_artrose" value="sim">Artrose</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_artrite" value="sim">Artrite</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_cirurgias" value="sim">Cirurgias</label>
+                <label class="option-pill"><input type="checkbox" name="antecedente_fraturas" value="sim">Fraturas</label>
+            </div>
+
+            <div class="field" style="margin-top:10px;">
+                <label>Outros antecedentes</label>
+                <input type="text" name="antecedentes_outros">
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <div class="section-split">
+                <div class="section-mini orange">
+                    <h3>💊 Medicamentos em Uso</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="medicamentos_uso"></textarea>
+                    </div>
+                </div>
+
+                <div class="section-mini purple">
+                    <h3>🌱 Hábitos de Vida</h3>
+                    <div class="fisio-grid">
+                        <div class="field col-6">
+                            <label>Atividade Física</label>
+                            <input type="text" name="atividade_fisica">
+                        </div>
+                        <div class="field col-6">
+                            <label>Sono</label>
+                            <input type="text" name="sono">
+                        </div>
+                        <div class="field col-6">
+                            <label>Tabagismo</label>
+                            <input type="text" name="tabagismo">
+                        </div>
+                        <div class="field col-6">
+                            <label>Etilismo</label>
+                            <input type="text" name="etilismo">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>🔥 Dor — EVA</h2>
+
+            <div class="fisio-grid">
+                <div class="col-12">
+                    <div class="eva-box">
+                        <div class="eva-top">
+                            <span>Escala Visual Analógica</span>
+                            <span class="eva-value"><span id="eva_resultado">0</span>/10</span>
+                        </div>
+                        <input type="range" min="0" max="10" value="0" name="eva_dor" id="eva_dor">
+                        <div class="eva-scale">
+                            <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                            <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field col-4">
+                    <label>Local</label>
+                    <input type="text" name="dor_local">
+                </div>
+
+                <div class="field col-4">
+                    <label>Tipo</label>
+                    <input type="text" name="dor_tipo" placeholder="Pontada, queimação, peso...">
+                </div>
+
+                <div class="field col-4">
+                    <label>Irradiação</label>
+                    <input type="text" name="dor_irradiacao">
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>👀 Inspeção</h2>
+
+            <div class="option-grid">
+                <label class="option-pill"><input type="checkbox" name="inspecao_postura" value="sim">Postura</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_marcha" value="sim">Marcha</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_edema" value="sim">Edema</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_atrofia_muscular" value="sim">Atrofia</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_hipertrofia" value="sim">Hipertrofia</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_cicatriz" value="sim">Cicatriz</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_deformidade" value="sim">Deformidade</label>
+                <label class="option-pill"><input type="checkbox" name="inspecao_alteracao_temperatura" value="sim">Temperatura</label>
+            </div>
+
+            <div class="field" style="margin-top:10px;">
+                <label>Observações</label>
+                <textarea class="textarea-sm" name="inspecao_observacoes"></textarea>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <div class="section-split">
+                <div class="section-mini">
+                    <h3>🤲 Palpação</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="palpacao"></textarea>
+                    </div>
+                </div>
+
+                <div class="section-mini">
+                    <h3>🧠 Sensibilidade</h3>
+                    <div class="radio-group">
+                        <label class="option-pill"><input type="radio" name="sensibilidade" value="Preservada">Preservada</label>
+                        <label class="option-pill"><input type="radio" name="sensibilidade" value="Hipoestesia">Hipoestesia</label>
+                        <label class="option-pill"><input type="radio" name="sensibilidade" value="Hiperestesia">Hiperestesia</label>
+                        <label class="option-pill"><input type="radio" name="sensibilidade" value="Parestesia">Parestesia</label>
+                    </div>
+                    <div class="field" style="margin-top:10px;">
+                        <label>Observações</label>
+                        <textarea class="textarea-sm" name="sensibilidade_observacoes"></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <div class="section-split">
+                <div>
+                    <h2>📐 ADM</h2>
+                    <table class="mini-table" id="adm_table">
+                        <thead>
+                            <tr>
+                                <th>Segmento</th>
+                                <th>Ativa</th>
+                                <th>Passiva</th>
+                                <th>Dor</th>
+                                <th>Limitação</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <button type="button" class="btn-add" onclick="addAdm()">+ Segmento</button>
+                    <input type="hidden" name="adm_json" id="adm_json">
+                </div>
+
+                <div>
+                    <h2>💪 Força Muscular</h2>
+                    <table class="mini-table" id="forca_table">
+                        <thead>
+                            <tr>
+                                <th>Segmento</th>
+                                <th>Direito</th>
+                                <th>Esquerdo</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <button type="button" class="btn-add" onclick="addForca()">+ Segmento</button>
+                    <input type="hidden" name="forca_muscular_json" id="forca_muscular_json">
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>🚶 Avaliação Funcional</h2>
+
+            <div class="fisio-grid">
+                <div class="field col-4">
+                    <label>Marcha</label>
+                    <select name="marcha">
+                        <option value="">Selecione</option>
+                        <option>Independente</option>
+                        <option>Bengala</option>
+                        <option>Muletas</option>
+                        <option>Andador</option>
+                        <option>Cadeira de Rodas</option>
+                    </select>
+                </div>
+
+                <div class="field col-4">
+                    <label>Equilíbrio</label>
+                    <select name="equilibrio">
+                        <option value="">Selecione</option>
+                        <option>Bom</option>
+                        <option>Regular</option>
+                        <option>Ruim</option>
+                    </select>
+                </div>
+
+                <div class="field col-4">
+                    <label>Coordenação</label>
+                    <select name="coordenacao">
+                        <option value="">Selecione</option>
+                        <option>Preservada</option>
+                        <option>Alterada</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>🏠 AVDs</h2>
+
+            <div class="option-grid">
+                <label class="option-pill"><input type="checkbox" name="avd_sentar" value="sim">Sentar</label>
+                <label class="option-pill"><input type="checkbox" name="avd_levantar" value="sim">Levantar</label>
+                <label class="option-pill"><input type="checkbox" name="avd_agachar" value="sim">Agachar</label>
+                <label class="option-pill"><input type="checkbox" name="avd_subir_escadas" value="sim">Subir escadas</label>
+                <label class="option-pill"><input type="checkbox" name="avd_descer_escadas" value="sim">Descer escadas</label>
+                <label class="option-pill"><input type="checkbox" name="avd_vestir_se" value="sim">Vestir-se</label>
+                <label class="option-pill"><input type="checkbox" name="avd_banho" value="sim">Banho</label>
+                <label class="option-pill"><input type="checkbox" name="avd_trabalho" value="sim">Trabalho</label>
+                <label class="option-pill"><input type="checkbox" name="avd_esporte" value="sim">Esporte</label>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <div class="section-split">
+                <div class="section-mini blue">
+                    <h3>🧪 Testes Especiais</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="testes_especiais"></textarea>
+                    </div>
+                </div>
+
+                <div class="section-mini green">
+                    <h3>🧾 Diagnóstico Cinético-Funcional</h3>
+                    <div class="field">
+                        <textarea class="textarea-sm" name="diagnostico_cinetico_funcional"></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>🎯 Objetivos e Plano Terapêutico</h2>
+
+            <div class="fisio-grid">
+                <div class="field col-6">
+                    <label>Objetivos Terapêuticos</label>
+                    <textarea class="textarea-sm" name="objetivos_terapeuticos"></textarea>
+                </div>
+
+                <div class="field col-6">
+                    <label>Objetivo do Paciente</label>
+                    <textarea class="textarea-sm" name="objetivo_paciente"></textarea>
+                </div>
+
+                <div class="field col-3">
+                    <label>Frequência Semanal</label>
+                    <input type="text" name="frequencia_semanal" placeholder="Ex: 2x por semana">
+                </div>
+
+                <div class="field col-3">
+                    <label>Nº de Sessões</label>
+                    <input type="number" name="numero_sessoes">
+                </div>
+
+                <div class="field col-3">
+                    <label>Reavaliação</label>
+                    <input type="date" name="reavaliacao_prevista">
+                </div>
+
+                <div class="field col-3">
+                    <label>Prioridade</label>
+                    <select name="prioridade">
+                        <option value="">Selecione</option>
+                        <option>Baixa</option>
+                        <option>Média</option>
+                        <option>Alta</option>
+                    </select>
+                </div>
+
+                <div class="field col-6">
+                    <label>Recursos Fisioterapêuticos</label>
+                    <textarea class="textarea-sm" name="recursos_fisioterapeuticos"></textarea>
+                </div>
+
+                <div class="field col-6">
+                    <label>Condutas</label>
+                    <textarea class="textarea-sm" name="condutas"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <section class="fisio-card compact">
+            <h2>📝 Observações</h2>
+            <div class="field">
+                <textarea name="observacoes" style="min-height:90px;"></textarea>
+            </div>
+        </section>
+
+        <div class="actions">
+            <button type="submit" class="btn-save">Salvar Avaliação</button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+const hoje = new Date().toISOString().split("T")[0];
+const dataAvaliacao = document.getElementById("data_avaliacao");
+
+if(dataAvaliacao && !dataAvaliacao.value){
+    dataAvaliacao.value = hoje;
+}
+
+const evaDor = document.getElementById("eva_dor");
+const evaResultado = document.getElementById("eva_resultado");
+
+if(evaDor){
+    evaDor.addEventListener("input", function(){
+        evaResultado.textContent = this.value;
+    });
+}
+
+const nascimento = document.getElementById("data_nascimento");
+const idade = document.getElementById("idade");
+
+if(nascimento){
+    nascimento.addEventListener("change", calcularIdade);
+}
+
+function calcularIdade(){
+    if(!nascimento.value){
+        idade.value = "";
+        return;
+    }
+
+    const nasc = new Date(nascimento.value);
+    const hoje = new Date();
+
+    let anos = hoje.getFullYear() - nasc.getFullYear();
+    const mes = hoje.getMonth() - nasc.getMonth();
+
+    if(mes < 0 || (mes === 0 && hoje.getDate() < nasc.getDate())){
+        anos--;
+    }
+
+    idade.value = anos >= 0 ? anos + " anos" : "";
+}
+
+function addAdm(data = {}){
+    const tbody = document.querySelector("#adm_table tbody");
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+        <td><input type="text" class="adm-segmento" value="${data.segmento || ""}"></td>
+        <td><input type="text" class="adm-ativa" value="${data.ativa || ""}"></td>
+        <td><input type="text" class="adm-passiva" value="${data.passiva || ""}"></td>
+        <td>
+            <select class="adm-dor">
+                <option value=""></option>
+                <option ${data.dor === "Sim" ? "selected" : ""}>Sim</option>
+                <option ${data.dor === "Não" ? "selected" : ""}>Não</option>
+            </select>
+        </td>
+        <td><input type="text" class="adm-limitacao" value="${data.limitacao || ""}"></td>
+        <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">×</button></td>
+    `;
+
+    tbody.appendChild(tr);
+}
+
+function addForca(data = {}){
+    const tbody = document.querySelector("#forca_table tbody");
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+        <td><input type="text" class="forca-segmento" value="${data.segmento || ""}"></td>
+        <td>
+            <select class="forca-direito">
+                <option value=""></option>
+                <option ${data.direito === "0" ? "selected" : ""}>0</option>
+                <option ${data.direito === "1" ? "selected" : ""}>1</option>
+                <option ${data.direito === "2" ? "selected" : ""}>2</option>
+                <option ${data.direito === "3" ? "selected" : ""}>3</option>
+                <option ${data.direito === "4" ? "selected" : ""}>4</option>
+                <option ${data.direito === "5" ? "selected" : ""}>5</option>
+            </select>
+        </td>
+        <td>
+            <select class="forca-esquerdo">
+                <option value=""></option>
+                <option ${data.esquerdo === "0" ? "selected" : ""}>0</option>
+                <option ${data.esquerdo === "1" ? "selected" : ""}>1</option>
+                <option ${data.esquerdo === "2" ? "selected" : ""}>2</option>
+                <option ${data.esquerdo === "3" ? "selected" : ""}>3</option>
+                <option ${data.esquerdo === "4" ? "selected" : ""}>4</option>
+                <option ${data.esquerdo === "5" ? "selected" : ""}>5</option>
+            </select>
+        </td>
+        <td><button type="button" class="btn-remove" onclick="this.closest('tr').remove()">×</button></td>
+    `;
+
+    tbody.appendChild(tr);
+}
+
+addAdm();
+addForca();
+
+document.querySelector("form").addEventListener("submit", function(){
+    const adm = [];
+
+    document.querySelectorAll("#adm_table tbody tr").forEach(row => {
+        const item = {
+            segmento: row.querySelector(".adm-segmento").value.trim(),
+            ativa: row.querySelector(".adm-ativa").value.trim(),
+            passiva: row.querySelector(".adm-passiva").value.trim(),
+            dor: row.querySelector(".adm-dor").value.trim(),
+            limitacao: row.querySelector(".adm-limitacao").value.trim()
+        };
+
+        if(item.segmento || item.ativa || item.passiva || item.dor || item.limitacao){
+            adm.push(item);
+        }
+    });
+
+    document.getElementById("adm_json").value = JSON.stringify(adm);
+
+    const forca = [];
+
+    document.querySelectorAll("#forca_table tbody tr").forEach(row => {
+        const item = {
+            segmento: row.querySelector(".forca-segmento").value.trim(),
+            direito: row.querySelector(".forca-direito").value.trim(),
+            esquerdo: row.querySelector(".forca-esquerdo").value.trim()
+        };
+
+        if(item.segmento || item.direito || item.esquerdo){
+            forca.push(item);
+        }
+    });
+
+    document.getElementById("forca_muscular_json").value = JSON.stringify(forca);
+});
+
+const pacienteInput = document.getElementById("paciente_nome");
+const sugestoesBox = document.getElementById("paciente_sugestoes");
+let pacienteTimer = null;
+
+if(pacienteInput){
+    pacienteInput.addEventListener("input", function(){
+        clearTimeout(pacienteTimer);
+
+        const q = this.value.trim();
+
+        document.getElementById("paciente_id").value = "";
+        document.getElementById("paciente_prontuario").value = "";
+        document.getElementById("paciente_cpf").value = "";
+
+        if(q.length < 3){
+            sugestoesBox.style.display = "none";
+            sugestoesBox.innerHTML = "";
+            return;
+        }
+
+        pacienteTimer = setTimeout(() => {
+            buscarPacientes(q);
+        }, 300);
+    });
+}
+
+function normalizarDataBRParaISO(valor){
+    if(!valor) return "";
+
+    valor = String(valor).trim();
+
+    if(/^\d{4}-\d{2}-\d{2}$/.test(valor)){
+        return valor;
+    }
+
+    const m = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+    if(m){
+        return `${m[3]}-${m[2]}-${m[1]}`;
+    }
+
+    return "";
+}
+
+function preencherPaciente(item){
+    pacienteInput.value = item.nome || "";
+
+    document.getElementById("paciente_id").value = item.id || "";
+    document.getElementById("paciente_prontuario").value = item.prontuario || "";
+    document.getElementById("paciente_cpf").value = item.cpf || "";
+
+    const dataNasc = normalizarDataBRParaISO(
+        item.data_nascimento ||
+        item.nascimento ||
+        item.dt_nascimento ||
+        item.dataNascimento ||
+        ""
+    );
+
+    if(dataNasc){
+        document.getElementById("data_nascimento").value = dataNasc;
+        calcularIdade();
+    }
+
+    const sexo = item.sexo || item.genero || "";
+
+    if(sexo){
+        const sexoSelect = document.getElementById("sexo");
+        const s = String(sexo).toLowerCase();
+
+        if(s === "f" || s.includes("fem")){
+            sexoSelect.value = "Feminino";
+        }else if(s === "m" || s.includes("masc")){
+            sexoSelect.value = "Masculino";
+        }else{
+            sexoSelect.value = "Outro";
+        }
+    }
+
+    document.getElementById("telefone").value =
+        item.telefone ||
+        item.celular ||
+        item.contato ||
+        "";
+
+    document.getElementById("endereco").value =
+        item.endereco ||
+        item.logradouro ||
+        item.rua ||
+        "";
+
+    sugestoesBox.style.display = "none";
+    sugestoesBox.innerHTML = "";
+}
+
+function buscarPacientes(q){
+    fetch(`{{ url_for('avaliacoes.api_buscar_pacientes') }}?q=${encodeURIComponent(q)}`)
+        .then(resp => resp.json())
+        .then(data => {
+            const items = data.items || [];
+
+            if(!items.length){
+                sugestoesBox.style.display = "none";
+                sugestoesBox.innerHTML = "";
+                return;
+            }
+
+            sugestoesBox.innerHTML = items.map((item, idx) => `
+                <div class="paciente-item"
+                     data-index="${idx}">
+                    <strong>${item.nome || ""}</strong><br>
+                    <small>
+                        Prontuário: ${item.prontuario || "-"}
+                        · CPF: ${item.cpf || "-"}
+                        · Nasc.: ${item.data_nascimento || item.nascimento || item.dt_nascimento || "-"}
+                    </small>
+                </div>
+            `).join("");
+
+            sugestoesBox.style.display = "block";
+
+            document.querySelectorAll(".paciente-item").forEach(el => {
+                el.addEventListener("click", function(){
+                    const idx = Number(this.dataset.index);
+                    preencherPaciente(items[idx] || {});
+                });
+            });
+        })
+        .catch(() => {
+            sugestoesBox.style.display = "none";
+            sugestoesBox.innerHTML = "";
+        });
+}
+
+document.addEventListener("click", function(e){
+    if(!e.target.closest(".paciente-wrap")){
+        sugestoesBox.style.display = "none";
+    }
+});
+</script>
+
+{% endblock %}

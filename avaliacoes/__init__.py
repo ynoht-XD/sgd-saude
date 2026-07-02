@@ -9,3 +9,4 @@ avaliacoes_bp = Blueprint(
 )
 
 from . import routes  # noqa: E402,F401
+from . import exporta_pdf

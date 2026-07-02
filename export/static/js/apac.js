@@ -1,39 +1,24 @@
 // export/static/js/apac.js
 (() => {
-  // ===== Helpers =====
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
 
-  const isISODate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
-  const isBRDate  = (s) => /^\d{2}\/\d{2}\/\d{4}$/.test(s || "");
-
-  const toISO = (s) => {
-    if (!s) return "";
-    s = String(s).trim();
-    if (isISODate(s)) return s;
-    if (isBRDate(s)) {
-      const [dd, mm, yyyy] = s.split("/");
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    // tenta normalizar sem separador (ddmmyyyy)
-    const digits = s.replace(/\D+/g, "");
-    if (digits.length === 8) {
-      const dd = digits.slice(0, 2);
-      const mm = digits.slice(2, 4);
-      const yyyy = digits.slice(4);
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    return s;
-  };
-
-  // ===== Elements =====
   const modal = $("#modal-edicao-apac");
-  const editButtons = $$(".btn-editar");
-  const closeBtns = $$("#modal-edicao-apac [data-close], #modal-edicao-apac .js-close, #modal-edicao-apac .icon-btn");
   const modalForm = $("#modal-edicao-apac form") || $("#form-edicao-apac");
 
-  // Campos conhecidos no modal (name=...)
+  const DATE_FIELDS = new Set([
+    "data_inicial",
+    "data_final",
+    "data_nascimento",
+    "data_nota_fiscal",
+    "data_entrada_nf",
+    "data_pedido",
+    "data_entrega",
+    "data_solicitacao",
+    "data_autorizacao",
+  ]);
+
   const FIELD_NAMES = [
     "id_apac",
     "numero_apac",
@@ -46,17 +31,33 @@
     "data_final",
     "tipo_apac",
     "nacionalidade",
+    "tipo_apac",
+    "nacionalidade",
+    "carater_atendimento",
+    "nome_paciente",
     "nome_paciente",
     "cns_paciente",
     "cpf_paciente",
     "data_nascimento",
     "nome_mae",
+    "responsavel",
     "sexo",
     "raca",
     "endereco",
     "numero",
     "bairro",
     "cep",
+    "cid",
+    "cid2",
+    "descricao_diagnostico",
+    "obs_geral",
+    "nome_solicitante",
+    "cns_solicitante",
+    "data_solicitacao",
+    "nome_autorizador",
+    "cns_autorizador",
+    "data_autorizacao",
+    "orgao_emissor",
     "status",
     "nota_fiscal",
     "data_nota_fiscal",
@@ -69,39 +70,105 @@
     "obs_pedido",
     "data_entrega",
     "local_entrega",
-    "obs_entrega",
     "status_entrega",
+    "obs_entrega",
     "cbo_executante",
     "cns_executante",
     "servico",
     "classificacao",
   ];
 
-  const DATE_FIELDS = new Set([
-    "data_inicial",
-    "data_final",
-    "data_nota_fiscal",
-    "data_entrada_nf",
-    "data_pedido",
-    "data_entrega",
-    "data_nascimento",
-  ]);
+  function toISO(value) {
+    if (!value) return "";
+
+    const s = String(value).trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+      const [dd, mm, yyyy] = s.split("/");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    const digits = s.replace(/\D+/g, "");
+
+    if (digits.length === 8) {
+      const dd = digits.slice(0, 2);
+      const mm = digits.slice(2, 4);
+      const yyyy = digits.slice(4);
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return s;
+  }
+
+  function debounce(fn, wait = 600) {
+    let timer;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  async function postJson(url, payload) {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    return await resp.json();
+  }
+
+  function markSaving(el) {
+    const card = el.closest(".apac-card");
+    if (card) card.classList.add("saving");
+  }
+
+  function markSaved(el) {
+    const card = el.closest(".apac-card");
+    if (!card) return;
+
+    card.classList.remove("saving");
+    card.classList.add("saved");
+
+    setTimeout(() => card.classList.remove("saved"), 900);
+  }
+
+  function markError(el) {
+    const card = el.closest(".apac-card");
+    if (!card) return;
+
+    card.classList.remove("saving");
+    card.classList.add("save-error");
+
+    setTimeout(() => card.classList.remove("save-error"), 1300);
+  }
+
+  // ============================================================
+  // Modal edição
+  // ============================================================
 
   function setFieldValue(name, value) {
-    const el = modal?.querySelector(`[name="${name}"]`);
+    if (!modal) return;
+
+    const el = modal.querySelector(`[name="${name}"]`);
     if (!el) return;
+
     let v = value ?? "";
 
-    // normaliza datas para inputs type=date
     if (DATE_FIELDS.has(name)) {
       v = toISO(v);
     }
 
-    if (el.tagName === "SELECT" || el.tagName === "TEXTAREA") {
-      el.value = v;
-    } else {
-      el.value = v;
-    }
+    el.value = v;
   }
 
   function openModal() {
@@ -116,74 +183,57 @@
     document.body.style.overflow = "";
   }
 
-  // Fecha modal em botões dedicados
-  closeBtns.forEach((btn) => on(btn, "click", closeModal));
-
-  // Fecha modal clicando fora do card
-  on(modal, "click", (e) => {
-    if (e.target === modal) closeModal();
-  });
-
-  // ESC fecha modal
-  on(document, "keydown", (e) => {
-    if (e.key === "Escape" && modal && modal.style.display === "flex") {
-      closeModal();
-    }
-  });
-
   function fillModalFromButton(btn) {
-    // Preenche todos os campos por data-atributos
-    FIELD_NAMES.forEach((name) => setFieldValue(name, btn.dataset[name] || ""));
+    FIELD_NAMES.forEach((name) => {
+      setFieldValue(name, btn.dataset[name] || "");
+    });
 
-    // Campo id (fallbacks)
-    const idFromBtn = btn.dataset.id || btn.getAttribute("data-id");
-    const idHidden = modal.querySelector("#id_apac_editar") || modal.querySelector('[name="id_apac"]');
-    if (idFromBtn && idHidden) idHidden.value = idFromBtn;
+    const idHidden =
+      modal.querySelector("#id_apac_editar") ||
+      modal.querySelector('[name="id_apac"]');
 
-    // Ajustes UX (foco no primeiro campo editável)
-    const firstEditable = modal.querySelector('input:not([readonly]), select, textarea');
-    if (firstEditable) setTimeout(() => firstEditable.focus(), 60);
+    if (idHidden) {
+      idHidden.value = btn.dataset.id || "";
+    }
+
+    setTimeout(() => {
+      const first = modal.querySelector("input:not([readonly]), select, textarea");
+      if (first) first.focus();
+    }, 80);
   }
 
-  // Clicar "Editar" abre o modal e popula
-  editButtons.forEach((btn) => {
+  $$(".btn-editar").forEach((btn) => {
     on(btn, "click", () => {
       fillModalFromButton(btn);
       openModal();
     });
   });
 
-  // Submissão do modal — normaliza datas antes de enviar
+  $$("#modal-edicao-apac .icon-btn, #modal-edicao-apac [data-close], #modal-edicao-apac .js-close")
+    .forEach((btn) => on(btn, "click", closeModal));
+
+  on(modal, "click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  on(document, "keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
+
   on(modalForm, "submit", () => {
     DATE_FIELDS.forEach((name) => {
       const el = modalForm.querySelector(`[name="${name}"]`);
-      if (el && el.value) el.value = toISO(el.value);
-    });
-  });
-
-  // ===== (Opcional) manter filtros na URL ao exportar =====
-  // Se colocar class="js-keep-query" nos links de export, mantém os filtros atuais.
-  $$(".js-keep-query").forEach((a) => {
-    on(a, "click", (e) => {
-      const qs = window.location.search;
-      if (!qs) return; // nada a fazer
-      try {
-        const url = new URL(a.href, window.location.origin);
-        // Transfere todos os params atuais para o link
-        const current = new URLSearchParams(window.location.search);
-        current.forEach((val, key) => url.searchParams.set(key, val));
-        a.href = url.toString();
-      } catch {
-        // deixa seguir do jeito que está
+      if (el && el.value) {
+        el.value = toISO(el.value);
       }
     });
   });
 
-  // ===== Clique na linha → abrir modal (conveniência) =====
-  // Depende de haver um botão .btn-editar dentro da linha.
-  $$(".apac-table tbody tr").forEach((tr) => {
-    on(tr, "dblclick", () => {
-      const btn = tr.querySelector(".btn-editar");
+  $$(".apac-card").forEach((card) => {
+    on(card, "dblclick", (e) => {
+      if (e.target.closest("button, a, form, input, textarea, label")) return;
+
+      const btn = card.querySelector(".btn-editar");
       if (btn) {
         fillModalFromButton(btn);
         openModal();
@@ -191,4 +241,68 @@
     });
   });
 
+  // ============================================================
+  // Autosave checks: processado / sms_enviado / bpai
+  // Espera rota POST /export/apac/autosave
+  // payload: { id, campo, valor }
+  // ============================================================
+
+  $$(".js-toggle").forEach((check) => {
+    on(check, "change", async () => {
+      const id = check.dataset.id;
+      const campo = check.dataset.campo;
+      const valor = check.checked;
+
+      if (!id || !campo) return;
+
+      try {
+        markSaving(check);
+
+        await postJson("/export/apac/autosave", {
+          id,
+          campo,
+          valor,
+        });
+
+        markSaved(check);
+      } catch (err) {
+        console.error("Erro ao salvar check:", err);
+        check.checked = !valor;
+        markError(check);
+      }
+    });
+  });
+
+  // ============================================================
+  // Autosave observações
+  // Espera rota POST /export/apac/autosave
+  // payload: { id, campo: "obs_geral", valor }
+  // ============================================================
+
+  const salvarObs = debounce(async (textarea) => {
+    const id = textarea.dataset.id;
+    const valor = textarea.value || "";
+
+    if (!id) return;
+
+    try {
+      markSaving(textarea);
+
+      await postJson("/export/apac/autosave", {
+        id,
+        campo: "obs_geral",
+        valor,
+      });
+
+      markSaved(textarea);
+    } catch (err) {
+      console.error("Erro ao salvar observação:", err);
+      markError(textarea);
+    }
+  }, 700);
+
+  $$(".js-obs").forEach((textarea) => {
+    on(textarea, "input", () => salvarObs(textarea));
+    on(textarea, "blur", () => salvarObs(textarea));
+  });
 })();

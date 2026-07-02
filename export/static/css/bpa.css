@@ -1,94 +1,689 @@
 :root {
-  --bg: #0f172a;
-  --card: #111827;
-  --muted: #9ca3af;
-  --text: #e5e7eb;
-  --accent: #22c55e;
-  --accent-2: #60a5fa;
-  --danger: #ef4444;
-  --ring: rgba(96,165,250,.45);
+  --page-bg: #f5f8fc;
+  --page-bg-2: #eef4fb;
+  --card: #ffffff;
+  --card-soft: #f8fbff;
+  --line: #dbe5f0;
+  --line-strong: #c7d5e6;
+
+  --text: #1e293b;
+  --text-strong: #0f172a;
+  --muted: #64748b;
+
+  --accent: #16a34a;
+  --accent-dark: #15803d;
+  --accent-soft: #e8f8ee;
+
+  --accent-2: #2563eb;
+  --accent-2-soft: #eaf1ff;
+
+  --danger: #dc2626;
+  --danger-soft: #fff1f2;
+
+  --warning: #d97706;
+  --warning-soft: #fff7ed;
+
+  --purple: #7c3aed;
+  --purple-soft: #f3e8ff;
+
+  --ring: rgba(37, 99, 235, .18);
 }
 
-/* Namespacing: tudo da página do export fica dentro de .export-page */
-.export-page * { box-sizing: border-box; }
-.export-page { padding: 24px; color: var(--text); }
+/* =========================================================
+   BASE
+========================================================= */
+.export-page * {
+  box-sizing: border-box;
+}
 
-/* fundo da página do export (não mexe no body global) */
 .export-page {
-  background: radial-gradient(1200px 600px at 20% -10%, #1f2937 0%, #0b1020 40%, #060913 100%);
-  border-radius: 12px;
+  min-height: calc(100vh - 120px);
+  padding: 26px;
+  color: var(--text);
+  border-radius: 20px;
+  background:
+    radial-gradient(900px 360px at 12% -8%, rgba(37, 99, 235, .12), transparent 60%),
+    radial-gradient(820px 380px at 90% 0%, rgba(22, 163, 74, .10), transparent 56%),
+    linear-gradient(145deg, var(--page-bg) 0%, var(--page-bg-2) 100%);
 }
 
-/* container e card */
-.export-page .container { max-width: 960px; margin: 0 auto; }
+.export-page .container {
+  width: 100%;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+
+/* =========================================================
+   CARDS
+========================================================= */
 .export-page .card {
-  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 18px; padding: 22px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-  backdrop-filter: blur(6px);
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .88);
+  border: 1px solid rgba(199, 213, 230, .86);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, .08),
+    0 1px 0 rgba(255,255,255,.9) inset;
+  backdrop-filter: blur(10px);
+}
+
+.export-page .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2563eb, #16a34a, #7c3aed);
+  opacity: .85;
+}
+
+.export-page h1,
+.export-page h2,
+.export-page h3 {
+  color: var(--text-strong);
+  letter-spacing: -.025em;
 }
 
 .export-page h1 {
-  margin: 0 0 8px; font-weight: 700; font-size: 22px; letter-spacing: .3px;
+  margin: 0 0 8px;
+  font-size: clamp(23px, 2.4vw, 32px);
+  font-weight: 850;
 }
-.export-page p.sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
 
-/* grid responsivo */
-.export-page .grid { display: grid; gap: 14px; }
+.export-page h2 {
+  margin: 0 0 6px;
+  font-size: clamp(19px, 1.8vw, 25px);
+  font-weight: 850;
+}
+
+.export-page p.sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   GRID
+========================================================= */
+.export-page .grid {
+  display: grid;
+  gap: 14px;
+}
+
 @media (min-width: 760px) {
-  .export-page .grid.cols-2 { grid-template-columns: 1fr 1fr; }
-  .export-page .grid.cols-3 { grid-template-columns: 1.2fr .8fr .8fr; }
+  .export-page .grid.cols-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .export-page .grid.cols-3 {
+    grid-template-columns: 1.2fr .8fr .8fr;
+  }
 }
 
-/* campos */
+/* =========================================================
+   CAMPOS
+========================================================= */
 .export-page label {
-  display: block; margin-bottom: 6px; font-size: 13px; color: #cbd5e1; letter-spacing: .2px;
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  color: #334155;
+  letter-spacing: .2px;
+  font-weight: 750;
 }
+
 .export-page .field {
-  background: #0b1221; border: 1px solid rgba(148,163,184,.25);
-  border-radius: 12px; padding: 10px 12px; color: var(--text);
-  outline: none; width: 100%; font-size: 15px;
-  transition: border-color .15s ease, box-shadow .15s ease, transform .02s ease;
+  width: 100%;
+  min-height: 44px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 11px 13px;
+  color: var(--text);
+  outline: none;
+  font-size: 15px;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
+
+.export-page .field:hover {
+  border-color: var(--line-strong);
+  background: #fbfdff;
+}
+
 .export-page .field:focus {
   border-color: var(--accent-2);
   box-shadow: 0 0 0 4px var(--ring);
 }
-.export-page .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
-.export-page .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.export-page .field::placeholder {
+  color: #94a3b8;
+}
+
+.export-page .field.is-valid {
+  border-color: rgba(22, 163, 74, .62);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .10);
+}
+
+.export-page .field.is-invalid {
+  border-color: rgba(220, 38, 38, .72);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, .08);
+}
+
+.export-page .field.is-neutral {
+  border-color: var(--line);
+}
+
+.export-page .hint {
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.export-page .row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   CHIPS / BADGES
+========================================================= */
+.export-page .chip,
+.export-page .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .export-page .chip {
-  padding: 4px 8px; border-radius: 999px; font-size: 12px; color: #93c5fd;
-  border: 1px dashed rgba(96,165,250,.6); background: rgba(37,99,235,.12);
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  background: var(--accent-2-soft);
 }
 
-/* botões */
-.export-page .actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
-.export-page button {
-  appearance: none; border: 0; cursor: pointer; color: white;
-  padding: 12px 16px; border-radius: 12px; font-weight: 600; letter-spacing: .2px;
-  background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 8px 24px rgba(34,197,94,.35);
-  transition: transform .05s ease, box-shadow .2s ease, filter .15s ease;
+.export-page .ok-chip {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: var(--accent-soft);
 }
-.export-page button:disabled { opacity: .6; cursor: not-allowed; filter: grayscale(.4); }
-.export-page button:hover:not(:disabled) { box-shadow: 0 10px 26px rgba(34,197,94,.45); }
-.export-page button:active:not(:disabled) { transform: translateY(1px); }
-.export-page .ghost {
-  background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,.3);
+
+.export-page .warn-chip {
+  color: #92400e;
+  border-color: #fed7aa;
+  background: var(--warning-soft);
+}
+
+.export-page .badge-erro {
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  background: var(--danger-soft);
+}
+
+/* =========================================================
+   BOTÕES
+========================================================= */
+.export-page .actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.export-page button,
+.export-page .btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  color: #ffffff;
+  min-height: 44px;
+  padding: 12px 17px;
+  border-radius: 14px;
+  font-weight: 850;
+  letter-spacing: .2px;
+  text-decoration: none;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  box-shadow: 0 12px 24px rgba(22, 163, 74, .20);
+  transition: transform .08s ease, box-shadow .18s ease, filter .15s ease, opacity .15s ease;
+}
+
+.export-page button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  filter: grayscale(.45);
   box-shadow: none;
 }
 
-/* feedback */
-.export-page .error { color: var(--danger); font-size: 13px; margin-top: 8px; display:none; }
-.export-page .ok { color: #86efac; font-size: 13px; margin-top: 8px; display:none; }
+.export-page button:hover:not(:disabled),
+.export-page .btn:hover {
+  box-shadow: 0 16px 30px rgba(22, 163, 74, .26);
+  transform: translateY(-1px);
+}
 
-/* file input */
+.export-page button:active:not(:disabled),
+.export-page .btn:active {
+  transform: translateY(0);
+}
+
+.export-page button.is-loading {
+  pointer-events: none;
+  opacity: .82;
+}
+
+.export-page .ghost {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
+}
+
+.export-page .ghost:hover {
+  box-shadow: 0 12px 22px rgba(15, 23, 42, .09);
+  background: #f8fbff;
+}
+
+.export-page .danger-soft-btn {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: var(--danger-soft);
+}
+
+/* =========================================================
+   FEEDBACK
+========================================================= */
+.export-page .error,
+.export-page .ok {
+  border-radius: 14px;
+  padding: 11px 13px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.export-page .error {
+  color: #991b1b;
+  background: var(--danger-soft);
+  border: 1px solid #fecaca;
+  margin-top: 10px;
+  display: none;
+}
+
+.export-page .ok {
+  color: #166534;
+  background: var(--accent-soft);
+  border: 1px solid #bbf7d0;
+  margin-top: 10px;
+  display: none;
+}
+
+/* =========================================================
+   FILE INPUT
+========================================================= */
 .export-page .file {
-  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
-}
-.export-page .file input[type="file"] {
-  padding: 8px; background: #0b1221; border-radius: 12px; border: 1px solid rgba(148,163,184,.25);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
 }
 
-.export-page .footer { margin-top: 14px; color: var(--muted); font-size: 12px; }
+.export-page .file input[type="file"] {
+  padding: 9px;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.export-page input[type="file"]::file-selector-button {
+  border: 0;
+  margin-right: 10px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  color: #1d4ed8;
+  background: var(--accent-2-soft);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.export-page .footer {
+  margin-top: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* =========================================================
+   AUDITORIA
+========================================================= */
+.export-page .auditoria-card {
+  animation: auditIn .28s ease both;
+}
+
+@keyframes auditIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.export-page .auditoria-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+/* KPIS */
+.export-page .audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+@media (min-width: 760px) {
+  .export-page .audit-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .export-page .audit-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.export-page .audit-kpi {
+  position: relative;
+  overflow: hidden;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #dbeafe;
+  background:
+    radial-gradient(180px 80px at 20% 0%, rgba(37, 99, 235, .10), transparent 65%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+}
+
+.export-page .audit-kpi::after {
+  content: "";
+  position: absolute;
+  right: -34px;
+  bottom: -34px;
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, .08);
+}
+
+.export-page .audit-kpi span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.export-page .audit-kpi strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: clamp(20px, 2vw, 29px);
+  font-weight: 900;
+}
+
+/* DETAILS */
+.export-page .audit-status {
+  margin: 12px 0 16px;
+}
+
+.export-page .audit-status .ok,
+.export-page .audit-status .error,
+.export-page .audit-details .ok {
+  display: block;
+}
+
+.export-page .audit-details {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, .045);
+}
+
+.export-page .audit-details summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 15px 16px;
+  color: #1e3a8a;
+  font-weight: 900;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, var(--accent-2-soft), #ffffff 72%);
+}
+
+.export-page .audit-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-page .audit-details summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform .16s ease;
+  color: var(--accent-2);
+}
+
+.export-page .audit-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.export-page .audit-details > *:not(summary) {
+  margin: 14px;
+}
+
+.export-page .txt-preview {
+  max-height: 340px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 14px;
+  color: #064e3b;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* TOOLBAR / PAGINAÇÃO */
+.export-page .audit-toolbar,
+.export-page .audit-pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.export-page .mini-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.export-page .mini-field {
+  min-height: 38px;
+  width: auto;
+  min-width: 210px;
+  padding: 8px 11px;
+}
+
+.export-page .audit-pagination {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* TABELAS */
+.export-page .table-wrap {
+  width: calc(100% - 28px);
+  overflow: auto;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+}
+
+.export-page .audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+  background: #ffffff;
+}
+
+.export-page .audit-table.compact {
+  min-width: 420px;
+}
+
+.export-page .audit-table th,
+.export-page .audit-table td {
+  padding: 12px 13px;
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.export-page .audit-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: #1e3a8a;
+  background: #f1f6ff;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.export-page .audit-table tr:hover td {
+  background: #f8fbff;
+}
+
+.export-page .audit-table td {
+  color: #334155;
+}
+
+.export-page .audit-table td:first-child,
+.export-page .audit-table td:last-child {
+  color: #0f172a;
+}
+
+/* COLUNAS */
+.export-page .audit-columns {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+@media (min-width: 920px) {
+  .export-page .audit-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* =========================================================
+   RESPONSIVO
+========================================================= */
+@media (max-width: 720px) {
+  .export-page {
+    padding: 14px;
+  }
+
+  .export-page .card {
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .export-page .auditoria-head {
+    flex-direction: column;
+  }
+
+  .export-page .file {
+    grid-template-columns: 1fr;
+  }
+
+  .export-page .audit-toolbar,
+  .export-page .audit-pagination {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 520px) {
+  .export-page .audit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-page button,
+  .export-page .btn {
+    width: 100%;
+  }
+
+  .export-page .row {
+    width: 100%;
+  }
+
+  .export-page .mini-field {
+    width: 100%;
+  }
+}
+
+/* =========================================================
+   PRINT / PDF PELO NAVEGADOR
+========================================================= */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .export-page,
+  .export-page * {
+    visibility: visible !important;
+  }
+
+  .export-page {
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  .export-page .card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+
+  .export-page button,
+  .export-page .file,
+  .export-page form,
+  .export-page .audit-toolbar,
+  .export-page .audit-pagination {
+    display: none !important;
+  }
+
+  .export-page .audit-details {
+    break-inside: avoid;
+  }
+
+  .export-page .audit-table th {
+    position: static !important;
+  }
+}

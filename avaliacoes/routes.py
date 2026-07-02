@@ -10,8 +10,6 @@ from flask import (
     flash, jsonify, session, send_file, abort
 )
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
 
 from . import avaliacoes_bp
 from db import conectar_db
@@ -36,8 +34,8 @@ TIPOS_AVALIACAO = {
     "terapia_ocupacional": "Terapia Ocupacional",
     "psicologia_infantil": "Avaliação Psicológica Infantil",
     "fonoaudiologia_infantil": "Fonoaudiologia Infantil",
+    "fisioterapia": "Avaliação Fisioterapêutica",
 }
-
 
 FORM_ROUTES = {
     "anamnese": "avaliacoes.tela_anamnese",
@@ -46,6 +44,7 @@ FORM_ROUTES = {
     "terapia_ocupacional": "avaliacoes.tela_terapia_ocupacional",
     "psicologia_infantil": "avaliacoes.tela_psicologia_infantil",
     "fonoaudiologia_infantil": "avaliacoes.tela_fonoaudiologia_infantil",
+    "fisioterapia": "avaliacoes.tela_fisioterapia",
 }
 
 
@@ -337,28 +336,6 @@ def montar_itens_visualizacao(dados: dict) -> list[dict]:
     return itens
 
 
-def quebrar_texto_pdf(texto: str, limite: int = 95):
-    palavras = (texto or "").split()
-    if not palavras:
-        return [""]
-
-    linhas = []
-    atual = ""
-
-    for palavra in palavras:
-        teste = f"{atual} {palavra}".strip()
-        if len(teste) <= limite:
-            atual = teste
-        else:
-            if atual:
-                linhas.append(atual)
-            atual = palavra
-
-    if atual:
-        linhas.append(atual)
-
-    return linhas
-
 
 def _buscar_avaliacao_por_id(conn, avaliacao_id: int):
     ensure_avaliacoes_schema(conn)
@@ -389,60 +366,138 @@ def _buscar_avaliacao_por_id(conn, avaliacao_id: int):
 @require_permission("avaliacoes", "ver")
 def api_buscar_pacientes():
     q = (request.args.get("q") or "").strip()
-    if len(q) < 3:
+    q_digits = _only_digits(q)
+
+    if len(q) < 3 and len(q_digits) < 3:
         return jsonify({"items": []})
 
     conn = conectar_db()
+
     try:
         if not has_table(conn, "pacientes"):
             return jsonify({"items": []})
 
         cols = table_columns(conn, "pacientes")
-        pront_expr = "COALESCE(prontuario, '')" if "prontuario" in cols else "''"
-        cpf_expr = "COALESCE(cpf, '')" if "cpf" in cols else "''"
 
-        where = ["""
-            (
-                nome ILIKE %s
-                OR REGEXP_REPLACE(COALESCE(cpf::text, ''), '\\D', '', 'g') ILIKE %s
-                OR COALESCE(prontuario::text, '') ILIKE %s
-            )
-        """]
-        params = [f"%{q}%", f"%{_only_digits(q)}%", f"%{q}%"]
+        def expr(*nomes, default="''"):
+            for nome in nomes:
+                if nome in cols:
+                    return f"COALESCE({nome}::text, '')"
+            return default
+
+        nome_expr = expr("nome", "no_cidadao", "paciente_nome")
+        pront_expr = expr("prontuario", "nu_prontuario", "codigo_prontuario")
+        cpf_expr = expr("cpf", "nu_cpf", "cpf_digits")
+        cns_expr = expr("cns", "nu_cns")
+        nasc_expr = expr("data_nascimento", "dt_nascimento", "nascimento")
+        sexo_expr = expr("sexo", "ds_sexo", "genero")
+        telefone_expr = expr("telefone", "celular", "fone", "contato")
+        logradouro_expr = expr("endereco", "logradouro", "rua")
+        numero_expr = expr("numero", "numero_residencia")
+        bairro_expr = expr("bairro", "no_bairro")
+        municipio_expr = expr("municipio", "cidade", "no_municipio")
+        uf_expr = expr("uf", "sg_uf")
+
+        where = []
+        params = []
+
+        filtros = [f"{nome_expr} ILIKE %s"]
+        params.append(f"%{q}%")
+
+        if q_digits:
+            filtros.extend([
+                f"REGEXP_REPLACE({cpf_expr}, '\\D', '', 'g') ILIKE %s",
+                f"REGEXP_REPLACE({cns_expr}, '\\D', '', 'g') ILIKE %s",
+                f"REGEXP_REPLACE({pront_expr}, '\\D', '', 'g') ILIKE %s",
+            ])
+            params.extend([
+                f"%{q_digits}%",
+                f"%{q_digits}%",
+                f"%{q_digits}%",
+            ])
+
+        where.append("(" + " OR ".join(filtros) + ")")
 
         _add_clinica_where(conn, "pacientes", "pacientes", where, params)
 
         cur = conn.cursor()
+
         try:
             cur.execute(f"""
                 SELECT
                     id,
-                    COALESCE(nome, '') AS nome,
+                    {nome_expr} AS nome,
                     {pront_expr} AS prontuario,
-                    {cpf_expr} AS cpf
+                    {cpf_expr} AS cpf,
+                    {cns_expr} AS cns,
+                    {nasc_expr} AS data_nascimento,
+                    {sexo_expr} AS sexo,
+                    {telefone_expr} AS telefone,
+                    BTRIM(CONCAT_WS(', ',
+                        NULLIF({logradouro_expr}, ''),
+                        NULLIF({numero_expr}, ''),
+                        NULLIF({bairro_expr}, ''),
+                        NULLIF({municipio_expr}, ''),
+                        NULLIF({uf_expr}, '')
+                    )) AS endereco
                 FROM pacientes
                 WHERE {" AND ".join(where)}
-                ORDER BY nome
+                ORDER BY
+                    CASE
+                        WHEN {nome_expr} ILIKE %s THEN 0
+                        ELSE 1
+                    END,
+                    {nome_expr}
                 LIMIT 20
-            """, params)
+            """, params + [f"{q}%"])
+
             rows = _rows_to_dicts(cur, cur.fetchall())
+
         finally:
             cur.close()
 
+        items = []
+
+        for r in rows:
+            data_nasc = r.get("data_nascimento") or ""
+
+            try:
+                data_nasc = data_nasc.isoformat()
+            except Exception:
+                data_nasc = str(data_nasc or "")
+
+            items.append({
+                "id": r.get("id"),
+                "nome": r.get("nome") or "",
+                "prontuario": r.get("prontuario") or "",
+                "cpf": r.get("cpf") or "",
+                "cns": r.get("cns") or "",
+                "data_nascimento": data_nasc[:10],
+                "sexo": r.get("sexo") or "",
+                "telefone": r.get("telefone") or "",
+                "endereco": r.get("endereco") or "",
+                "label": f'{r.get("nome") or ""} · Pront: {r.get("prontuario") or "-"}'
+            })
+
+        return jsonify({"items": items})
+
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         return jsonify({
-            "items": [
-                {
-                    "id": r.get("id"),
-                    "nome": r.get("nome") or "",
-                    "prontuario": r.get("prontuario") or "",
-                    "cpf": r.get("cpf") or "",
-                    "label": f'{r.get("nome") or ""} · Pront: {r.get("prontuario") or "-"}'
-                }
-                for r in rows
-            ]
-        })
+            "items": [],
+            "error": str(e)
+        }), 500
+
     finally:
         conn.close()
+
+
+
+
 
 
 # ============================================================
@@ -563,6 +618,8 @@ def visualizar(id):
 @avaliacoes_bp.route("/pdf/<int:id>", endpoint="exportar_pdf")
 @require_permission("avaliacoes", "exportar")
 def exportar_pdf(id):
+    from .exporta_pdf import gerar_pdf_avaliacao
+
     conn = conectar_db()
     try:
         av = _buscar_avaliacao_por_id(conn, id)
@@ -576,62 +633,13 @@ def exportar_pdf(id):
         except Exception:
             dados = {}
 
-        itens = montar_itens_visualizacao(dados)
+        tipo_label = TIPOS_AVALIACAO.get(av.get("tipo"), av.get("tipo"))
 
-        buffer = io.BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=A4)
-        largura, altura = A4
-
-        margem_x = 40
-        y = altura - 70
-
-        def nova_pagina():
-            nonlocal y
-            pdf.showPage()
-            y = altura - 70
-
-        pdf.setTitle(f"Avaliacao_{id}")
-
-        pdf.setFont("Helvetica-Bold", 15)
-        pdf.drawString(margem_x, y, "Avaliação")
-        y -= 24
-
-        pdf.setFont("Helvetica", 10)
-        pdf.drawString(margem_x, y, f"Tipo: {TIPOS_AVALIACAO.get(av.get('tipo'), av.get('tipo'))}")
-        y -= 16
-        pdf.drawString(margem_x, y, f"Paciente: {av.get('paciente_nome') or '-'}")
-        y -= 16
-        pdf.drawString(margem_x, y, f"Prontuário: {av.get('paciente_prontuario') or '-'}")
-        y -= 16
-        pdf.drawString(margem_x, y, f"Profissional: {av.get('usuario_nome') or '-'}")
-        y -= 16
-        pdf.drawString(margem_x, y, f"CBO: {av.get('usuario_cbo') or '-'}")
-        y -= 16
-        pdf.drawString(margem_x, y, f"Criado em: {av.get('criado_em') or '-'}")
-        y -= 28
-
-        pdf.setFont("Helvetica-Bold", 12)
-        pdf.drawString(margem_x, y, "Dados da avaliação")
-        y -= 20
-
-        pdf.setFont("Helvetica", 10)
-
-        for item in itens:
-            texto = f"{item['label']}: {item['valor']}"
-            linhas = quebrar_texto_pdf(texto, 95)
-
-            for linha in linhas:
-                if y < 50:
-                    nova_pagina()
-                    pdf.setFont("Helvetica", 10)
-
-                pdf.drawString(margem_x, y, linha)
-                y -= 14
-
-            y -= 4
-
-        pdf.save()
-        buffer.seek(0)
+        buffer = gerar_pdf_avaliacao(
+            avaliacao=av,
+            tipo_label=tipo_label,
+            dados=dados,
+        )
 
         registrar_log(conn, "EXPORTAR_AVALIACAO_PDF", referencia_id=id)
         conn.commit()
@@ -642,8 +650,11 @@ def exportar_pdf(id):
             download_name=f"avaliacao_{id}.pdf",
             mimetype="application/pdf"
         )
+
     finally:
         conn.close()
+
+
 
 
 # ============================================================
@@ -784,3 +795,13 @@ def tela_psicologia_infantil():
 @require_permission("avaliacoes", "editar")
 def tela_fonoaudiologia_infantil():
     return render_template("fonoaudiologia_infantil.html", tipos=TIPOS_AVALIACAO)
+
+
+
+@avaliacoes_bp.route("/fisioterapia", endpoint="tela_fisioterapia")
+@require_permission("avaliacoes", "editar")
+def tela_fisioterapia():
+    return render_template(
+        "fisioterapia.html",
+        tipos=TIPOS_AVALIACAO
+    )

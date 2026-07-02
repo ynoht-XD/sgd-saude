@@ -2160,9 +2160,9 @@ BPAI_COLS = [
     "prd-caten", "prd-naut", "prd-org", "prd-nmpac", "prd-dtnasc", "prd-raca",
     "prd-etnia", "prd-nac", "prd-srv", "prd-clf", "prd-equipe-seq", "prd-equipe-area",
     "prd-cnpj", "prd-cep-pcnte", "prd-lograd-pcnte", "prd-end-pcnte", "prd-compl-pcnte",
-    "prd-num-pcnte", "prd-bairro-pcnte", "prd-ddtel-pcnte", "prd-email-pcnte", "prd-ine"
+    "prd-num-pcnte", "prd-bairro-pcnte", "prd-ddtel-pcnte", "prd-email-pcnte", "prd-ine",
+    "prd-cpfpac"
 ]
-
 
 def _fetch_dict_by_id(conn, table: str, id_value: Any) -> dict:
     if not id_value or not _has_table(conn, table) or not _has_column(conn, table, "id"):
@@ -2231,6 +2231,13 @@ def _rows_bpai(conn, filtros: dict) -> list[dict]:
         idade = _safe_str(pac.get("idade") or "") or _calc_idade_no_dia(str(nasc_raw), str(dt_at_raw))
 
         cnspac = _only_digits(pac.get("cns") or "")
+        cpfpac = _only_digits(
+            pac.get("cpf")
+            or pac.get("cpf_digits")
+            or a.get("cpf")
+            or a.get("cpf_paciente")
+            or ""
+        )
         nmpac = _safe_str(pac.get("nome") or a.get("nome") or "")
         cnsmed = _only_digits(prof.get("cns") or a.get("cns_profissional") or "")
         cbo = _only_digits(prof.get("cbo") or a.get("cbo_profissional") or "")
@@ -2268,6 +2275,7 @@ def _rows_bpai(conn, filtros: dict) -> list[dict]:
         row["prd-num-pcnte"] = _safe_str(pac.get("numero_casa") or pac.get("numero") or "")
         row["prd-bairro-pcnte"] = _safe_str(pac.get("bairro") or "")
         row["prd-ddtel-pcnte"] = _only_digits(pac.get("telefone1") or pac.get("telefone") or "")
+        row["prd-cpfpac"] = cpfpac
 
         out.append(row)
 

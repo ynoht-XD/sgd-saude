@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 import json
 
-from flask import render_template, request, redirect, url_for, flash, jsonify, session, abort, g
+from flask import render_template, request, redirect, url_for, flash, jsonify, session, abort, g, Response
 from werkzeug.security import generate_password_hash
 
 from . import admin_bp, admin_required
@@ -228,6 +228,8 @@ def ensure_users_table():
                 municipio         TEXT,
                 uf                TEXT,
                 permissoes_json   TEXT,
+                assinatura_png    BYTEA,
+                carimbo_png       BYTEA,
                 senha_hash        TEXT,
                 password_hash     TEXT,
                 criado_em         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -239,9 +241,21 @@ def ensure_users_table():
 
         def add_col(name: str, ddl: str):
             nonlocal cols
+
             if name not in cols:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
                 cur.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {ddl};")
                 conn.commit()
+
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
                 cols = list_columns(conn, "usuarios")
 
         add_col("nome", "nome TEXT")
@@ -271,10 +285,20 @@ def ensure_users_table():
         add_col("municipio", "municipio TEXT")
         add_col("uf", "uf TEXT")
         add_col("permissoes_json", "permissoes_json TEXT")
+
+        # PNGs do profissional
+        add_col("assinatura_png", "assinatura_png BYTEA")
+        add_col("carimbo_png", "carimbo_png BYTEA")
+
         add_col("senha_hash", "senha_hash TEXT")
         add_col("password_hash", "password_hash TEXT")
         add_col("criado_em", "criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         add_col("atualizado_em", "atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
         cur.execute("""
             UPDATE usuarios
@@ -309,12 +333,10 @@ def ensure_users_table():
                AND (password_hash IS NOT NULL AND BTRIM(password_hash) <> '');
         """)
 
-        # Remove índices globais antigos.
         cur.execute("DROP INDEX IF EXISTS idx_usuarios_email;")
         cur.execute("DROP INDEX IF EXISTS idx_usuarios_cpf;")
         cur.execute("DROP INDEX IF EXISTS idx_usuarios_cpf_digits;")
 
-        # Índices multi-clínica.
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_usuarios_clinica_id
                 ON usuarios(clinica_id);
@@ -350,11 +372,24 @@ def ensure_users_table():
         setattr(g, cache_key, True)
 
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
 
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+
+
+
+
+
 
 # =============================================================================
 # CBO
@@ -566,12 +601,26 @@ def get_cbos_catalogo_local(q: str | None = None, limit: int = 200):
 # USER HELPERS
 # =============================================================================
 
+def _reset_conn(conn):
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+
+
+
+
+
+
+
 def load_user(uid: int, exigir_mesma_clinica=True):
     ensure_users_table()
 
     conn = db_conn(True)
 
     try:
+        _reset_conn(conn)
+
         cur = conn.cursor()
 
         params = [uid]
@@ -592,10 +641,7 @@ def load_user(uid: int, exigir_mesma_clinica=True):
         return _fetchone_as_dict(cur)
 
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+        _reset_conn(conn)
         raise
 
     finally:
@@ -603,6 +649,13 @@ def load_user(uid: int, exigir_mesma_clinica=True):
             conn.close()
         except Exception:
             pass
+
+
+
+
+
+
+
 
 
 def _montar_permissoes_json():
@@ -613,6 +666,35 @@ def _montar_permissoes_json():
             permissoes.append(k.replace("perm_", "", 1))
 
     return json.dumps(permissoes, ensure_ascii=False) if permissoes else None
+
+
+def _png_upload_bin(nome_campo: str):
+    arq = request.files.get(nome_campo)
+
+    if not arq or not arq.filename:
+        return None
+
+    filename = arq.filename.lower().strip()
+
+    if not filename.endswith(".png"):
+        raise ValueError(f"O arquivo de {nome_campo.replace('_', ' ')} precisa ser PNG.")
+
+    data = arq.read()
+
+    if not data:
+        return None
+
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError(f"O arquivo de {nome_campo.replace('_', ' ')} não parece ser um PNG válido.")
+
+    return data
+
+
+
+
+
+
+
 
 
 def _montar_payload_usuario(row_atual=None):
@@ -640,6 +722,8 @@ def _montar_payload_usuario(row_atual=None):
     cbo_descricao = get_cbo_descricao(cbo) if cbo else None
 
     clinica_id = _resolver_clinica_alvo()
+    assinatura_png = _png_upload_bin("assinatura_png")
+    carimbo_png = _png_upload_bin("carimbo_png")
 
     return {
         "nome": nome,
@@ -668,6 +752,8 @@ def _montar_payload_usuario(row_atual=None):
         "permissoes_json": _montar_permissoes_json(),
         "is_master": role in {"MASTER", "ROOT", "SUPERADMIN"},
         "is_superuser": role in {"MASTER", "ROOT", "SUPERADMIN"},
+        "assinatura_png": assinatura_png,
+        "carimbo_png": carimbo_png,
     }
 
 
@@ -869,6 +955,14 @@ def usuarios_listar():
         is_master=usuario_eh_master(),
     )
 
+
+
+
+
+
+
+
+
 # =============================================================================
 # USUÁRIOS - CRIAR
 # =============================================================================
@@ -904,6 +998,12 @@ def usuarios_criar():
         ensure_users_table()
 
         conn = db_conn(False)
+
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
         cur = conn.cursor()
 
         cur.execute("""
@@ -934,6 +1034,8 @@ def usuarios_criar():
                 municipio,
                 uf,
                 permissoes_json,
+                assinatura_png,
+                carimbo_png,
                 senha_hash,
                 password_hash,
                 criado_em,
@@ -944,7 +1046,9 @@ def usuarios_criar():
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
+                %s, %s,
+                %s, %s,
+                %s, %s,
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             RETURNING id;
@@ -975,6 +1079,8 @@ def usuarios_criar():
             payload["municipio"],
             payload["uf"],
             payload["permissoes_json"],
+            payload.get("assinatura_png"),
+            payload.get("carimbo_png"),
             senha_hash,
             senha_hash,
         ))
@@ -991,6 +1097,8 @@ def usuarios_criar():
                 "clinica_id": clinica_id,
                 "nome": payload["nome"],
                 "role": payload["role"],
+                "assinatura_png": payload.get("assinatura_png") is not None,
+                "carimbo_png": payload.get("carimbo_png") is not None,
             },
         )
 
@@ -1040,6 +1148,33 @@ def usuarios_criar():
             conn.close()
 
 
+
+@admin_bp.route("/usuarios/<int:uid>/assinatura.png")
+@admin_required
+@require_permission("admin_usuarios", "ver")
+def usuario_assinatura_png(uid):
+    row = load_user(uid)
+
+    if not row or not row.get("assinatura_png"):
+        abort(404)
+
+    return Response(bytes(row["assinatura_png"]), mimetype="image/png")
+
+
+@admin_bp.route("/usuarios/<int:uid>/carimbo.png")
+@admin_required
+@require_permission("admin_usuarios", "ver")
+def usuario_carimbo_png(uid):
+    row = load_user(uid)
+
+    if not row or not row.get("carimbo_png"):
+        abort(404)
+
+    return Response(bytes(row["carimbo_png"]), mimetype="image/png")
+
+
+
+
 # =============================================================================
 # USUÁRIOS - JSON
 # =============================================================================
@@ -1048,7 +1183,11 @@ def usuarios_criar():
 @admin_required
 @require_permission("admin_usuarios", "ver")
 def usuarios_json(uid):
+    conn = None
+
     try:
+        ensure_users_table()
+
         row = load_user(uid)
 
         if not row:
@@ -1058,6 +1197,17 @@ def usuarios_json(uid):
 
         data.pop("senha_hash", None)
         data.pop("password_hash", None)
+
+        assinatura_tem = bool(data.get("assinatura_png"))
+        carimbo_tem = bool(data.get("carimbo_png"))
+
+        data.pop("assinatura_png", None)
+        data.pop("carimbo_png", None)
+
+        data["tem_assinatura_png"] = assinatura_tem
+        data["tem_carimbo_png"] = carimbo_tem
+        data["assinatura_png_url"] = url_for("admin.usuario_assinatura_png", uid=uid) if assinatura_tem else ""
+        data["carimbo_png_url"] = url_for("admin.usuario_carimbo_png", uid=uid) if carimbo_tem else ""
 
         for campo in ("criado_em", "atualizado_em", "nascimento", "last_login_at", "created_at"):
             if campo in data and data[campo] is not None:
@@ -1072,7 +1222,10 @@ def usuarios_json(uid):
         cbo_descricao = (data.get("cbo_descricao") or "").strip()
 
         if cbo_codigo and not cbo_descricao:
-            cbo_descricao = get_cbo_descricao(cbo_codigo)
+            try:
+                cbo_descricao = get_cbo_descricao(cbo_codigo)
+            except Exception:
+                cbo_descricao = ""
 
         data["cbo_descricao"] = cbo_descricao
         data["cbo_label"] = (
@@ -1081,26 +1234,22 @@ def usuarios_json(uid):
             else (cbo_codigo or "")
         )
 
-        registrar_log(
-            modulo="admin_usuarios",
-            acao="visualizar",
-            entidade="usuarios",
-            entidade_id=uid,
-            descricao="Carregou JSON de usuário.",
-            detalhes={"clinica_id": _current_clinica_id()},
-        )
-
         return jsonify(data)
 
     except Exception as e:
-        log_erro(
-            "admin_usuarios",
-            e,
-            entidade="usuarios",
-            entidade_id=uid,
-            descricao="Erro ao carregar JSON de usuário.",
-        )
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+
+        try:
+            print("ERRO usuarios_json:", repr(e))
+        except Exception:
+            pass
+
         return jsonify({"error": str(e)}), 500
+
 
 
 # =============================================================================
@@ -1135,7 +1284,18 @@ def usuarios_editar(uid):
 
         cur = conn.cursor()
 
-        cur.execute("""
+        sql_extra = ""
+        params_extra = []
+
+        if payload.get("assinatura_png") is not None:
+            sql_extra += ", assinatura_png = %s"
+            params_extra.append(payload["assinatura_png"])
+
+        if payload.get("carimbo_png") is not None:
+            sql_extra += ", carimbo_png = %s"
+            params_extra.append(payload["carimbo_png"])
+
+        cur.execute(f"""
             UPDATE usuarios SET
                 nome = %s,
                 email = %s,
@@ -1164,6 +1324,7 @@ def usuarios_editar(uid):
                 uf = %s,
                 permissoes_json = %s,
                 atualizado_em = CURRENT_TIMESTAMP
+                {sql_extra}
             WHERE id = %s
               AND COALESCE(clinica_id, 1) = %s;
         """, (
@@ -1193,6 +1354,7 @@ def usuarios_editar(uid):
             payload["municipio"],
             payload["uf"],
             payload["permissoes_json"],
+            *params_extra,
             uid,
             clinica_id,
         ))
@@ -1208,6 +1370,8 @@ def usuarios_editar(uid):
                 "clinica_id": clinica_id,
                 "nome": payload["nome"],
                 "role": payload["role"],
+                "assinatura_png": payload.get("assinatura_png") is not None,
+                "carimbo_png": payload.get("carimbo_png") is not None,
             },
         )
 
@@ -1255,6 +1419,12 @@ def usuarios_editar(uid):
             conn.close()
 
     return _redirect_usuarios()
+
+
+
+
+
+
 
 
 # =============================================================================
@@ -1338,6 +1508,8 @@ def usuarios_mudar_senha(uid):
             conn.close()
 
     return _redirect_usuarios()
+
+
 
 
 # =============================================================================

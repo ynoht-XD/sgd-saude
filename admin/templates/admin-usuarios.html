@@ -237,7 +237,7 @@
 
   <!-- Modal: Novo/Editar Usuário -->
   <dialog id="modalUsuario" class="modal">
-    <form id="formUsuario" method="post" action="{{ url_for('admin.usuarios_criar') }}" class="modal-content">
+    <form id="formUsuario" method="post" action="{{ url_for('admin.usuarios_criar') }}" class="modal-content" enctype="multipart/form-data">
       <input type="hidden" id="u_id_hidden" name="uid" value="">
 
       <header class="modal-header">
@@ -389,6 +389,47 @@
             </div>
           </div>
         </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Assinatura e carimbo</legend>
+
+          <div class="grid two">
+            <div class="field">
+              <label>Assinatura em PNG</label>
+              <input type="file" name="assinatura_png" id="u_assinatura_png" accept="image/png">
+              <small class="muted">Use imagem PNG com fundo transparente, se possível.</small>
+            </div>
+
+            <div class="field">
+              <label>Carimbo em PNG</label>
+              <input type="file" name="carimbo_png" id="u_carimbo_png" accept="image/png">
+              <small class="muted">Será usado nos relatórios quando necessário.</small>
+            </div>
+          </div>
+
+          <div class="grid two" id="u_preview_imgs" style="display:none; margin-top:12px;">
+            <div class="field">
+              <label>Assinatura cadastrada</label>
+              <img id="u_assinatura_preview"
+                  src=""
+                  alt="Assinatura cadastrada"
+                  style="max-height:90px; max-width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:8px; background:#fff;">
+            </div>
+
+            <div class="field">
+              <label>Carimbo cadastrado</label>
+              <img id="u_carimbo_preview"
+                  src=""
+                  alt="Carimbo cadastrado"
+                  style="max-height:90px; max-width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:8px; background:#fff;">
+            </div>
+          </div>
+        </fieldset>
+
+
+
+
+
 
         <div id="u_senhas_group" class="grid two">
           <div class="field">

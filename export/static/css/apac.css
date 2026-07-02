@@ -224,6 +224,209 @@
 
 
 
+.apac-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+
+.apac-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.apac-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-left: 6px solid #94a3b8;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+}
+
+.card-aberto { border-left-color: #ef4444; }
+.card-pago { border-left-color: #f59e0b; }
+.card-entregue { border-left-color: #22c55e; }
+.card-instituicao { border-left-color: #3b82f6; }
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.card-top h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.card-top p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: .92rem;
+}
+
+.card-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: .75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.badge.nf {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.badge.entrega {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.card-grid div {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 9px;
+}
+
+.card-grid strong {
+  display: block;
+  font-size: .72rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.card-grid span {
+  display: block;
+  margin-top: 3px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.card-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  margin-bottom: 12px;
+}
+
+.card-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  color: #334155;
+  font-size: .88rem;
+}
+
+.card-obs {
+  margin-bottom: 12px;
+}
+
+.card-obs label {
+  display: block;
+  font-size: .78rem;
+  font-weight: 800;
+  color: #64748b;
+  margin-bottom: 5px;
+}
+
+.card-obs textarea {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 9px;
+  outline: none;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-actions form {
+  display: inline;
+}
+
+.empty-state {
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 28px;
+  text-align: center;
+  color: #64748b;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .apac-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .card-top {
+    flex-direction: column;
+  }
+
+  .card-badges {
+    align-items: flex-start;
+  }
+}
+
+.apac-card.saving {
+  opacity: .75;
+}
+
+.apac-card.saved {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, .25);
+}
+
+.apac-card.save-error {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, .25);
+}
+
+
+
+
 /* ---------- Utilidades ---------- */
 .text-right{ text-align:right; }
 .text-center{ text-align:center; }
@@ -249,3 +452,9 @@
 @media (max-width: 480px){
   .btn{ width:100%; }
 }
+
+
+
+
+
+
