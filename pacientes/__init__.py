@@ -8,4 +8,10 @@ pacientes_bp = Blueprint(
     url_prefix="/pacientes"
 )
 
+# Rotas existentes
 from . import routes  # noqa
+
+# Frequência digital e estação de assinatura
+# TODO: reativar quando a decisão sobre a estação/tablet estiver tomada
+# e o template pacientes/frequencia_assinatura.html existir.
+# from . import frequencia  # noqa

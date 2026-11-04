@@ -130,14 +130,6 @@
         </li>
         {% endif %}
 
-        {% if is_master or can_modulo('cadastro', 'ver') %}
-        <li>
-          <a href="{{ url_for('cadastro.cadastrar_paciente') }}">
-            <span class="ico">📝</span>
-            <span class="txt">Cadastro</span>
-          </a>
-        </li>
-        {% endif %}
 
         {% if is_master or can_modulo('lista_atendimentos', 'ver') %}
         <li>
@@ -157,12 +149,34 @@
         </li>
         {% endif %}
 
-        {% if is_master or can_modulo('pacientes', 'ver') %}
-        <li>
-          <a href="{{ url_for('pacientes.listar_pacientes') }}">
+        {# Grupo Pacientes: cada item mantém a permissão correspondente. #}
+        {% if is_master or can_modulo('pacientes', 'ver') or can_modulo('cadastro', 'ver') %}
+        <li class="menu-group">
+          <a href="#" class="menu-toggle" data-menu-toggle="pacientes" aria-expanded="false">
             <span class="ico">👥</span>
             <span class="txt">Pacientes</span>
+            <span class="chev">▾</span>
           </a>
+          <ul class="submenu" id="submenu-pacientes" hidden>
+            {% if is_master or can_modulo('pacientes', 'ver') %}
+            <li>
+              <a href="{{ url_for('pacientes.listar_pacientes') }}">
+                <span class="ico">👥</span>
+                <span class="txt">Pacientes</span>
+              </a>
+            </li>
+            {# Frequência: aguardando decisão sobre estação/tablet e template de assinatura.
+               Reativar o item abaixo quando a funcionalidade for integrada. #}
+            {% endif %}
+            {% if is_master or can_modulo('cadastro', 'ver') %}
+            <li>
+              <a href="{{ url_for('cadastro.cadastrar_paciente') }}">
+                <span class="ico">📝</span>
+                <span class="txt">Cadastro</span>
+              </a>
+            </li>
+            {% endif %}
+          </ul>
         </li>
         {% endif %}
 
