@@ -547,14 +547,15 @@ def api_criar_clinica():
 def api_atualizar_clinica(clinica_id):
     """
     Atualiza clínica via JSON.
-    MASTER pode alterar qualquer.
-    Usuário comum só a própria, se permitido.
+    Apenas MASTER (mesmo critério da edição pela tela e das demais
+    rotas de escrita de clínica; o payload inclui campos de cobrança
+    e o flag 'ativa').
     """
 
-    if not usuario_pode_acessar_clinica(clinica_id):
+    if not usuario_eh_master():
         return jsonify({
             "ok": False,
-            "error": "Sem permissão para alterar esta clínica.",
+            "error": "Apenas MASTER pode alterar clínicas.",
         }), 403
 
     try:
