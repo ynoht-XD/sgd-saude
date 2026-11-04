@@ -20,11 +20,8 @@ from admin.modulos import require_permission
 
 from db import conectar_db
 
-try:
-    from logs import registrar_log
-except ImportError:
-    def registrar_log(*args, **kwargs):
-        return None
+# registrar_log vive em log.py (raiz). O pacote "logs" só expõe o blueprint logs_bp.
+from log import registrar_log
 
 from . import export_bp
 
@@ -490,8 +487,11 @@ def apac_salvar():
         conn.commit()
 
         registrar_log(
-            f"🧾 Criou APAC ID {novo_id}",
-            session.get("usuario_logado")
+            modulo="export",
+            acao="criar",
+            entidade="apac",
+            entidade_id=novo_id,
+            descricao="Cadastrou APAC.",
         )
 
         flash(f"✅ APAC cadastrada com sucesso! ID {novo_id}", "success")
@@ -506,6 +506,15 @@ def apac_salvar():
 
         print("❌ Erro ao salvar APAC:", e)
         traceback.print_exc()
+
+        registrar_log(
+            modulo="export",
+            acao="criar",
+            entidade="apac",
+            descricao="Falha ao cadastrar APAC.",
+            sucesso=False,
+            erro=e,
+        )
 
         flash("❌ Erro ao salvar a APAC no banco.", "danger")
         return redirect(url_for("export.apac_cadastro"))
