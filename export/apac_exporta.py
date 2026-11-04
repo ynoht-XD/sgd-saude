@@ -14,11 +14,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from db import conectar_db
 from . import export_bp
 
-try:
-    from auth import login_required
-except ImportError:
-    def login_required(f):
-        return f
+# Sem fallback: se o import falhar, o app não sobe (em vez de rodar sem proteção).
+from admin.modulos import require_permission
 
 
 _RE_DIGITS = re.compile(r"\D+")
@@ -250,7 +247,7 @@ def _competencia_mais_recente(cur, where_sql: str = "1=1", params: list | None =
 
 
 @export_bp.get("/apac/excel", endpoint="apacs_excel")
-@login_required
+@require_permission("export_apac", "ver")
 def apacs_excel():
     conn = conectar_db()
     cur = conn.cursor()
@@ -363,7 +360,7 @@ def apacs_excel():
 
 
 @export_bp.get("/apac/txt", endpoint="apacs_txt")
-@login_required
+@require_permission("export_apac", "ver")
 def apacs_txt():
     conn = conectar_db()
     cur = conn.cursor()

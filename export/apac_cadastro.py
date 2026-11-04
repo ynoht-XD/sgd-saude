@@ -15,11 +15,8 @@ from flask import (
     url_for,
 )
 
-try:
-    from auth import login_required
-except ImportError:
-    def login_required(f):
-        return f
+# Sem fallback: se o import falhar, o app não sobe (em vez de rodar sem proteção).
+from admin.modulos import require_permission
 
 from db import conectar_db
 
@@ -303,13 +300,13 @@ def ensure_apac_table():
 # =============================================================================
 
 @export_bp.route("/apac/cadastro", methods=["GET"])
-@login_required
+@require_permission("export_apac", "ver")
 def apac_cadastro():
     return render_template("apac_cadastro.html")
 
 
 @export_bp.route("/apac/cadastro", methods=["POST"])
-@login_required
+@require_permission("export_apac", "criar")
 def apac_salvar():
     conn = None
     cur = None
@@ -532,7 +529,7 @@ def apac_salvar():
 # =============================================================================
 
 @export_bp.route("/apac/api/consulta_pacientes", methods=["GET"])
-@login_required
+@require_permission("export_apac", "ver")
 def apac_api_consulta_pacientes():
     termo = (request.args.get("nome") or "").strip()
 
@@ -824,7 +821,7 @@ def _split_multi(codigos, descricoes):
 
 
 @export_bp.route("/apac/api/procedimentos", methods=["GET"])
-@login_required
+@require_permission("export_apac", "ver")
 def apac_api_procedimentos():
     q = (request.args.get("q") or "").strip()
     servico = (_only_digits(request.args.get("servico")) or "").strip()
@@ -985,7 +982,7 @@ def apac_api_procedimentos():
             pass
 
 @export_bp.route("/apac/api/procedimento/<codigo>", methods=["GET"])
-@login_required
+@require_permission("export_apac", "ver")
 def apac_api_procedimento_detalhe(codigo):
     codigo_limpo = _only_digits(codigo)
 
@@ -1128,7 +1125,7 @@ def _descobrir_tabela_usuarios(cur):
 
 
 @export_bp.route("/apac/api/profissionais", methods=["GET"])
-@login_required
+@require_permission("export_apac", "ver")
 def apac_api_profissionais():
     termo = (request.args.get("q") or request.args.get("nome") or "").strip()
 
