@@ -18,7 +18,7 @@ import shutil
 
 import psycopg2
 
-from . import admin_bp
+from . import admin_bp, admin_required, master_required
 
 try:
     from db import conectar_db, get_database_url as db_get_database_url
@@ -36,16 +36,6 @@ EXTENSOES_BACKUP = (".backup", ".sql", ".zip")
 # =========================================================
 # AUTH
 # =========================================================
-
-def login_required_local(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if not session.get("usuario_id") and not session.get("user_id"):
-            flash("Faça login para acessar esta área.", "danger")
-            return redirect(url_for("auth.login") if "auth.login" in current_app.view_functions else "/login")
-        return f(*args, **kwargs)
-    return wrapper
-
 
 def get_usuario_logado():
     return session.get("usuario_nome") or session.get("nome") or session.get("user_nome") or "Sistema"
@@ -565,7 +555,7 @@ def restaurar_backup_geral_postgres(caminho_backup):
 # =========================================================
 
 @admin_bp.route("/backup")
-@login_required_local
+@admin_required
 def backup_home():
     pasta = get_backup_dir()
     clinica_id = get_clinica_id_atual()
@@ -619,7 +609,7 @@ def backup_home():
 
 
 @admin_bp.route("/backup/criar")
-@login_required_local
+@admin_required
 def backup_criar():
     if not is_master():
         flash("Apenas o usuário master pode gerar backup geral.", "danger")
@@ -636,7 +626,7 @@ def backup_criar():
 
 
 @admin_bp.route("/backup/criar-clinica")
-@login_required_local
+@admin_required
 def backup_criar_clinica_atual():
     clinica_id = get_clinica_id_atual()
 
@@ -648,7 +638,7 @@ def backup_criar_clinica_atual():
 
 
 @admin_bp.route("/backup/criar-clinica/<int:clinica_id>")
-@login_required_local
+@admin_required
 def backup_criar_clinica(clinica_id):
     if not is_master() and str(clinica_id) != str(get_clinica_id_atual()):
         flash("Você não tem permissão para gerar backup desta clínica.", "danger")
@@ -665,7 +655,7 @@ def backup_criar_clinica(clinica_id):
 
 
 @admin_bp.route("/backup/download/<path:nome>")
-@login_required_local
+@admin_required
 def backup_download_arquivo(nome):
     nome = os.path.basename(nome)
     caminho = os.path.join(get_backup_dir(), nome)
@@ -690,7 +680,7 @@ def backup_download_arquivo(nome):
 
 
 @admin_bp.route("/backup/restaurar/<path:nome>", methods=["POST"])
-@login_required_local
+@master_required
 def backup_restaurar_salvo(nome):
     if not is_master():
         flash("Apenas o usuário master pode restaurar backup geral.", "danger")
@@ -710,7 +700,7 @@ def backup_restaurar_salvo(nome):
 
 
 @admin_bp.route("/backup/excluir/<path:nome>", methods=["POST"])
-@login_required_local
+@admin_required
 def backup_excluir(nome):
     nome = os.path.basename(nome)
     caminho = os.path.join(get_backup_dir(), nome)
@@ -750,7 +740,7 @@ def backup_excluir(nome):
 
 
 @admin_bp.route("/backup/importar", methods=["POST"])
-@login_required_local
+@master_required
 def backup_importar():
     if not is_master():
         flash("Apenas o master pode importar backups gerais.", "danger")
@@ -792,7 +782,7 @@ def backup_importar():
 
 
 @admin_bp.route("/download")
-@login_required_local
+@admin_required
 def download_backup():
     prefixo = "backup_geral_" if is_master() else f"backup_clinica_{get_clinica_id_atual()}_"
 
