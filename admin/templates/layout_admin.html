@@ -14,7 +14,7 @@
         <a href="{{ url_for('admin.usuarios_listar') }}">Usuários</a>
         <a href="{{ url_for('admin.modulos') }}">Módulos</a>
         <a href="{{ url_for('admin.backup') }}">Backup</a>
-        <a href="{{ url_for('auth.logout') }}">Sair</a>
+        <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" style="all:inherit;cursor:pointer">Sair</button></form>
         <a href="{{ url_for('admin.cbos_listar') }}">CBO</a>
         <a href="{{ url_for('procedimentos.pagina_base_procedimentos') }}">Procedimentos</a>
 

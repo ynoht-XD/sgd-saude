@@ -74,9 +74,9 @@
         <p>Cria um arquivo .zip com dados filtrados pelo clinica_id.</p>
       </div>
 
-      <a href="{{ url_for('admin.backup_criar_clinica_atual') }}" class="bk-btn bk-btn--primary bk-btn--full">
-        Gerar backup da clínica
-      </a>
+      <form method="post" action="{{ url_for('admin.backup_criar_clinica_atual') }}" class="bk-form-full">
+        <button type="submit" class="bk-btn bk-btn--primary bk-btn--full">Gerar backup da clínica</button>
+      </form>
     </article>
 
     {% if master %}
@@ -91,9 +91,9 @@
         <p>Cria um backup completo do PostgreSQL em formato .backup.</p>
       </div>
 
-      <a href="{{ url_for('admin.backup_criar') }}" class="bk-btn bk-btn--dark bk-btn--full">
-        Gerar backup geral
-      </a>
+      <form method="post" action="{{ url_for('admin.backup_criar') }}" class="bk-form-full">
+        <button type="submit" class="bk-btn bk-btn--dark bk-btn--full">Gerar backup geral</button>
+      </form>
     </article>
 
     <article class="bk-action-card bk-action-card--import">
@@ -299,6 +299,8 @@
   .bk-btn{border:0;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:14px;font-weight:900;cursor:pointer;transition:.18s ease;white-space:nowrap;}
   .bk-btn:hover{transform:translateY(-1px);}
   .bk-btn--full{width:100%;margin-top:auto;}
+  .bk-form-full{margin:0;margin-top:auto;width:100%;}
+  .bk-form-full .bk-btn--full{margin-top:0;font:inherit;font-weight:900;}
   .bk-btn--primary{color:#fff;background:linear-gradient(135deg,var(--bk-primary),var(--bk-indigo));box-shadow:0 14px 30px rgba(37,99,235,.2);}
   .bk-btn--dark{color:#fff;background:linear-gradient(135deg,#0f172a,#334155);}
   .bk-btn--soft{color:#3730a3;background:#eef2ff;}

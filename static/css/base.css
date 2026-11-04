@@ -1131,3 +1131,7 @@ td{
   align-items:center;
   gap:.75rem;
 }
+
+/* Logout via POST (CSRF): o <button> mantém a aparência do antigo <a> */
+.logout-form{display:contents;margin:0}
+button.btn-logout{font-family:inherit;line-height:inherit;cursor:pointer;appearance:none;-webkit-appearance:none}

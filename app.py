@@ -5,9 +5,10 @@ from datetime import date
 
 from flask import (
     Flask, render_template, session, request,
-    redirect, url_for, g, flash, make_response
+    redirect, url_for, g, flash, make_response, jsonify
 )
 from flask_limiter import Limiter
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -55,6 +56,19 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = (
     os.getenv("SESSION_COOKIE_SECURE", "1").strip().lower() not in ("0", "false", "no")
 )
+
+# ============================================================
+# CSRF
+# ============================================================
+# Proteção global: todo POST/PUT/PATCH/DELETE exige o token (campo
+# "csrf_token" ou header "X-CSRFToken"). O static/js/csrf.js injeta o token
+# nos formulários e nas chamadas fetch; o login leva o token explícito.
+# TIME_LIMIT=None: o token vale enquanto a sessão valer (telas como a agenda
+# ficam abertas o dia todo e não podem começar a falhar após 1 hora).
+# Rotas chamadas de FORA do sistema (ex.: futuro webhook do Asaas) devem usar
+# @csrf.exempt e autenticar por assinatura/token próprio.
+app.config["WTF_CSRF_TIME_LIMIT"] = None
+csrf = CSRFProtect(app)
 
 # ============================================================
 # RATE LIMIT
@@ -684,6 +698,53 @@ def inject_permissions():
 # ============================================================
 # HANDLERS DE ERROS
 # ============================================================
+
+@app.errorhandler(CSRFError)
+def erro_csrf(e):
+    msg = "Sua sessão de segurança expirou ou o formulário é inválido. Recarregue a página e tente novamente."
+
+    # Logout com token vencido: o objetivo (sair) já foi atingido.
+    if request.endpoint == "auth.logout":
+        session.clear()
+        return redirect(url_for("auth.login"))
+
+    # Login: volta para a tela com aviso (token novo vem no GET).
+    if request.endpoint == "auth.login":
+        flash(msg, "error")
+        return redirect(url_for("auth.login"))
+
+    try:
+        _registrar_log_app(
+            acao="ERRO_CSRF",
+            modulo="app",
+            detalhes=f"endpoint={request.endpoint}; path={request.path}; motivo={e.description}",
+            sucesso=False,
+        )
+    except Exception:
+        pass
+
+    wants_json = (
+        request.is_json
+        or request.headers.get("X-CSRFToken")
+        or request.headers.get("X-Requested-With")
+        or "application/json" in (request.headers.get("Accept") or "")
+        or "/api/" in request.path
+    )
+
+    if wants_json:
+        resp = jsonify({"ok": False, "error": msg, "erro": msg, "csrf": True})
+        resp.status_code = 400
+    else:
+        resp = make_response(
+            f"<!doctype html><meta charset='utf-8'><title>Requisição recusada</title>"
+            f"<body style='font-family:sans-serif;max-width:560px;margin:15vh auto;padding:0 16px'>"
+            f"<h2>Requisição recusada (400)</h2><p>{msg}</p>"
+            f"<p><a href='javascript:history.back()'>Voltar</a> · <a href='/'>Início</a></p></body>",
+            400,
+        )
+    resp.headers["X-CSRF-Error"] = "1"
+    return resp
+
 
 @app.errorhandler(429)
 def erro_429(e):

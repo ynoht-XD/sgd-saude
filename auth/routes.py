@@ -794,7 +794,7 @@ def login():
     return render_template("login.html", next_url=next_url)
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
     log_logout()
     session.clear()

@@ -608,7 +608,7 @@ def backup_home():
     )
 
 
-@admin_bp.route("/backup/criar")
+@admin_bp.route("/backup/criar", methods=["POST"])
 @admin_required
 def backup_criar():
     if not is_master():
@@ -625,7 +625,7 @@ def backup_criar():
     return redirect(url_for("admin.backup_home"))
 
 
-@admin_bp.route("/backup/criar-clinica")
+@admin_bp.route("/backup/criar-clinica", methods=["POST"])
 @admin_required
 def backup_criar_clinica_atual():
     clinica_id = get_clinica_id_atual()
@@ -637,7 +637,7 @@ def backup_criar_clinica_atual():
     return backup_criar_clinica(int(clinica_id))
 
 
-@admin_bp.route("/backup/criar-clinica/<int:clinica_id>")
+@admin_bp.route("/backup/criar-clinica/<int:clinica_id>", methods=["POST"])
 @admin_required
 def backup_criar_clinica(clinica_id):
     if not is_master() and str(clinica_id) != str(get_clinica_id_atual()):

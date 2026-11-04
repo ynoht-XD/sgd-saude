@@ -111,9 +111,10 @@ def buscar_nome_paciente_por_id(paciente_id):
 
 def contexto_atual():
     try:
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-        if ip and "," in ip:
-            ip = ip.split(",")[0].strip()
+        # remote_addr é confiável: o ProxyFix (app.py) já aplicou o último
+        # X-Forwarded-For anexado pelo nginx. Ler o header cru aqui deixaria o
+        # cliente forjar o IP gravado nos logs.
+        ip = request.remote_addr
 
         return {
             "clinica_id": _get_session_value("clinica_id"),
