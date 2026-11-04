@@ -8,6 +8,7 @@ import pandas as pd
 
 from db import conectar_db
 from . import procedimentos_bp
+from admin import admin_required
 
 
 # =========================================================
@@ -691,6 +692,7 @@ def excluir(procedimento_id):
 # LIMPAR BASE
 # =========================================================
 @procedimentos_bp.route("/limpar", methods=["POST"])
+@admin_required
 def limpar():
     ensure_schema()
 
@@ -714,6 +716,7 @@ def limpar():
 
 
 @procedimentos_bp.route("/limpar-banco", methods=["POST"])
+@admin_required
 def limpar_banco():
     return limpar()
 
