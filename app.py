@@ -5,8 +5,11 @@ from datetime import date
 
 from flask import (
     Flask, render_template, session, request,
-    redirect, url_for, g
+    redirect, url_for, g, flash, make_response
 )
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Blueprints principais
 from agenda import agenda_bp
@@ -36,6 +39,36 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "uma_chave_ultra_secreta_123")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
+# ============================================================
+# PROXY (nginx) E COOKIES DE SESSÃO
+# ============================================================
+# O TLS termina no nginx, que repassa X-Forwarded-For e X-Forwarded-Proto
+# (vhost sgd-saude.conf). O ProxyFix faz o Flask enxergar o IP real do
+# cliente e o esquema https. Confia em 1 proxy; o gunicorn escuta só em
+# 127.0.0.1, então o cliente não fala direto com a app.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Secure: o cookie só trafega por HTTPS. Para testar em HTTP puro (ex.: porta
+# local sem nginx), defina SESSION_COOKIE_SECURE=0 no ambiente do teste.
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("SESSION_COOKIE_SECURE", "1").strip().lower() not in ("0", "false", "no")
+)
+
+# ============================================================
+# RATE LIMIT
+# ============================================================
+# Armazenamento em memória: cada worker do gunicorn mantém a sua contagem
+# (com 3 workers o teto efetivo por IP pode chegar a ~15/min) e zera no restart.
+# Para limite global, aponte RATELIMIT_STORAGE_URI para um Redis.
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"),
+)
+
 
 # ============================================================
 # REGISTRO DOS BLUEPRINTS
@@ -60,6 +93,22 @@ app.register_blueprint(avaliacoes_bp)
 app.register_blueprint(agenda_medica_bp)
 app.register_blueprint(clinica_config_bp)
 app.register_blueprint(logs_bp)
+
+
+# Login: no máximo 5 tentativas FALHAS por minuto por IP. Só falhas contam
+# (o login falho redireciona de volta para /auth/login); assim vários
+# funcionários atrás do mesmo IP/NAT conseguem entrar sem bloquear uns aos outros.
+def _login_falhou(response) -> bool:
+    if response.status_code not in (301, 302, 303):
+        return False
+    return (response.headers.get("Location") or "").split("?")[0].endswith("/auth/login")
+
+
+app.view_functions["auth.login"] = limiter.limit(
+    "5 per minute",
+    methods=["POST"],
+    deduct_when=_login_falhou,
+)(app.view_functions["auth.login"])
 
 # ============================================================
 # ENDPOINTS PÚBLICOS
@@ -635,6 +684,16 @@ def inject_permissions():
 # ============================================================
 # HANDLERS DE ERROS
 # ============================================================
+
+@app.errorhandler(429)
+def erro_429(e):
+    if request.endpoint == "auth.login":
+        flash("Muitas tentativas de login. Aguarde 1 minuto e tente novamente.", "error")
+        resp = make_response(render_template("login.html", next_url=request.values.get("next") or ""), 429)
+        resp.headers["Retry-After"] = "60"
+        return resp
+    return e
+
 
 @app.errorhandler(403)
 def forbidden(e):
