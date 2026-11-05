@@ -2005,8 +2005,8 @@ def api_resumo_financeiro():
                 SUM(CASE WHEN tipo = 'saida' AND status = 'pago' THEN valor ELSE 0 END) AS saidas_pagas,
                 SUM(CASE WHEN tipo = 'entrada' AND status IN ('pendente', 'parcial') THEN valor ELSE 0 END) AS entradas_pendentes,
                 SUM(CASE WHEN tipo = 'saida' AND status IN ('pendente', 'parcial') THEN valor ELSE 0 END) AS saidas_pendentes,
-                SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END) AS entradas_total,
-                SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END) AS saidas_total,
+                SUM(CASE WHEN tipo = 'entrada' AND COALESCE(status, '') <> 'cancelado' THEN valor ELSE 0 END) AS entradas_total,
+                SUM(CASE WHEN tipo = 'saida' AND COALESCE(status, '') <> 'cancelado' THEN valor ELSE 0 END) AS saidas_total,
                 COUNT(*) AS qtd_lancamentos
             FROM financeiro_lancamentos
             WHERE {where_sql}
@@ -2077,7 +2077,7 @@ def api_fechamento():
                 tipo,
                 SUM(CASE WHEN status = 'pago' THEN valor ELSE 0 END) AS total_pago,
                 SUM(CASE WHEN status IN ('pendente', 'parcial') THEN valor ELSE 0 END) AS total_pendente,
-                SUM(valor) AS total_geral,
+                SUM(CASE WHEN COALESCE(status, '') <> 'cancelado' THEN valor ELSE 0 END) AS total_geral,
                 COUNT(*) AS quantidade
             FROM financeiro_lancamentos
             WHERE {" AND ".join(where)}
