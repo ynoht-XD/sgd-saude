@@ -492,6 +492,7 @@ def api_detalhe(procedimento_id):
 # IMPORTAÇÃO XLSX
 # =========================================================
 @procedimentos_bp.route("/importar", methods=["POST"])
+@master_required
 def importar_xls():
     ensure_schema()
 
@@ -662,6 +663,7 @@ def importar_xls():
 # EXCLUSÃO
 # =========================================================
 @procedimentos_bp.route("/excluir/<int:procedimento_id>", methods=["POST"])
+@master_required
 def excluir(procedimento_id):
     ensure_schema()
 

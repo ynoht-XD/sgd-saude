@@ -2,10 +2,29 @@
 from __future__ import annotations
 
 import json
+import re
 import traceback
 from flask import session, request
 
 from db import conectar_db
+
+
+def mascarar_cpf(valor):
+    """Mascara um CPF para uso em logs: 123.***.**-45 (3 primeiros e 2 ultimos).
+
+    Valor que nao tem 11 digitos (digitacao errada, texto qualquer colado no
+    campo) e totalmente mascarado, so preservando a quantidade de digitos --
+    assim nenhum trecho do que foi digitado vaza no log.
+    """
+    digitos = re.sub(r"\D", "", str(valor or ""))
+
+    if not digitos:
+        return ""
+
+    if len(digitos) == 11:
+        return f"{digitos[:3]}.***.**-{digitos[-2:]}"
+
+    return "*" * len(digitos)
 
 
 def ensure_logs_table():
@@ -299,7 +318,7 @@ def log_login(usuario=None, descricao="Login realizado com sucesso."):
         detalhes = {
             "usuario_id": usuario.get("id"),
             "nome": usuario.get("nome"),
-            "cpf": usuario.get("cpf"),
+            "cpf": mascarar_cpf(usuario.get("cpf")),
             "role": usuario.get("role"),
             "clinica_id": usuario.get("clinica_id"),
             "is_master": usuario.get("is_master"),

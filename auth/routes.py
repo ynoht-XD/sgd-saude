@@ -17,8 +17,9 @@ except ImportError:
     conectar_db = None
 
 try:
-    from log import log_login, log_logout, log_erro, registrar_log
+    from log import log_login, log_logout, log_erro, registrar_log, mascarar_cpf
 except Exception:
+    def mascarar_cpf(valor): return "***"
     def log_login(*args, **kwargs): pass
     def log_logout(*args, **kwargs): pass
     def log_erro(*args, **kwargs): pass
@@ -673,7 +674,7 @@ def login():
                     acao="login_falhou",
                     entidade="usuarios",
                     descricao="Tentativa de login sem CPF ou senha.",
-                    detalhes={"cpf_digitado": cpf},
+                    detalhes={"cpf_digitado": mascarar_cpf(cpf)},
                     sucesso=False,
                 )
                 return redirect(url_for("auth.login", next=next_url))
@@ -687,7 +688,7 @@ def login():
                     acao="login_falhou",
                     entidade="usuarios",
                     descricao="Tentativa de login com CPF não encontrado.",
-                    detalhes={"cpf_digitado": cpf},
+                    detalhes={"cpf_digitado": mascarar_cpf(cpf)},
                     sucesso=False,
                 )
                 return redirect(url_for("auth.login", next=next_url))
@@ -701,7 +702,7 @@ def login():
                     entidade_id=usuario.get("id"),
                     descricao="Tentativa de login de usuário inativo.",
                     detalhes={
-                        "cpf": usuario.get("cpf"),
+                        "cpf": mascarar_cpf(usuario.get("cpf")),
                         "nome": usuario.get("nome"),
                         "role": usuario.get("role"),
                         "clinica_id": usuario.get("clinica_id"),
@@ -724,7 +725,7 @@ def login():
                     entidade_id=usuario.get("id"),
                     descricao="Tentativa de login com senha inválida.",
                     detalhes={
-                        "cpf": usuario.get("cpf"),
+                        "cpf": mascarar_cpf(usuario.get("cpf")),
                         "nome": usuario.get("nome"),
                         "role": usuario.get("role"),
                         "clinica_id": usuario.get("clinica_id"),
@@ -753,7 +754,7 @@ def login():
                     descricao="Usuário sem clínica vinculada tentou acessar o sistema.",
                     detalhes={
                         "nome": usuario.get("nome"),
-                        "cpf": usuario.get("cpf"),
+                        "cpf": mascarar_cpf(usuario.get("cpf")),
                         "role": usuario.get("role"),
                         "clinica_id": usuario.get("clinica_id"),
                     },
@@ -786,7 +787,7 @@ def login():
                 e,
                 entidade="usuarios",
                 descricao="Erro inesperado durante o login.",
-                detalhes={"cpf_digitado": request.form.get("cpf")},
+                detalhes={"cpf_digitado": mascarar_cpf(request.form.get("cpf"))},
             )
             flash(f"Erro ao realizar login: {e}", "error")
             return redirect(url_for("auth.login", next=next_url))
