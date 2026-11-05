@@ -24,9 +24,18 @@ from .financas import (
     _add_clinica_where,
     _exigir_coluna_clinica,
     FiltroClinicaIndisponivel,
+    _validar_profissional,
 )
 
 from admin.modulos import require_permission
+
+# Catálogo de planos e beneficiários (registram suas rotas no blueprint)
+from . import planos_catalogo  # noqa: F401
+from . import beneficiarios  # noqa: F401
+
+# Novos combos devem ter profissional_id. Fica False enquanto a tela de combos
+# (comercial.js) não envia o campo: ligar para True quando o front for atualizado.
+COMBO_EXIGE_PROFISSIONAL = False
 
 
 # ============================================================
@@ -182,9 +191,15 @@ def api_listar_combos():
             where.append("fc.ativo = ?")
             params.append(int(ativo))
 
+        prof_filtro = _to_int(request.args.get("profissional_id"), 0)
+        if prof_filtro > 0:
+            where.append("fc.profissional_id = ?")
+            params.append(prof_filtro)
+
         cur = _execute(conn, f"""
             SELECT
                 fc.id,
+                fc.profissional_id,
                 fc.nome,
                 fc.descricao,
                 fc.sessoes,
@@ -231,9 +246,17 @@ def api_criar_combo():
     if preco < 0:
         return _fail("Preço inválido.")
 
+    profissional_id = _to_int(data.get("profissional_id"), 0) or None
+
+    if COMBO_EXIGE_PROFISSIONAL and not profissional_id:
+        return _fail("Informe o profissional do combo (profissional_id).")
+
     conn = _conn()
 
     try:
+        if profissional_id and not _validar_profissional(conn, profissional_id):
+            return _fail("Profissional não encontrado nesta clínica.", 404)
+
         cols = [
             "nome",
             "descricao",
@@ -242,6 +265,7 @@ def api_criar_combo():
             "ativo",
             "criado_em",
             "atualizado_em",
+            "profissional_id",
         ]
 
         vals = [
@@ -252,6 +276,7 @@ def api_criar_combo():
             ativo,
             _now_iso(),
             _now_iso(),
+            profissional_id,
         ]
 
         col_sql, placeholders, vals = _insert_with_optional_clinica(
@@ -349,6 +374,17 @@ def api_editar_combo(combo_id: int):
         if not cur.fetchone():
             return _fail("Combo não encontrado para esta clínica.", 404)
 
+        # profissional_id só muda se vier no payload (combo antigo sem profissional segue editável)
+        extra_set = ""
+        extra_val = []
+        prof_novo = _to_int(data.get("profissional_id"), 0)
+
+        if prof_novo > 0:
+            if not _validar_profissional(conn, prof_novo):
+                return _fail("Profissional não encontrado nesta clínica.", 404)
+            extra_set = "profissional_id = ?,"
+            extra_val = [prof_novo]
+
         _execute(conn, f"""
             UPDATE financeiro_combos
             SET
@@ -357,6 +393,7 @@ def api_editar_combo(combo_id: int):
                 sessoes = ?,
                 preco = ?,
                 ativo = ?,
+                {extra_set}
                 atualizado_em = ?
             WHERE {" AND ".join(where)}
         """, (
@@ -365,6 +402,7 @@ def api_editar_combo(combo_id: int):
             sessoes,
             preco,
             ativo,
+            *extra_val,
             _now_iso(),
             *params,
         ))
@@ -669,6 +707,8 @@ def api_excluir_paciente_plano(plano_id: int):
                 mensagem="Plano já possuía sessões usadas, então foi cancelado em vez de excluído.",
                 modo="cancelado"
             )
+
+        _execute(conn, "DELETE FROM financeiro_plano_beneficiarios WHERE contrato_id = ?", [plano_id])
 
         _execute(conn, f"""
             DELETE FROM financeiro_paciente_planos

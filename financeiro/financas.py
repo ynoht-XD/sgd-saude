@@ -419,6 +419,57 @@ def ensure_financeiro_schema():
             )
         """)
 
+        ts = "TIMESTAMP" if _is_postgres_conn(conn) else "TEXT"
+
+        # ----- Catálogo de planos (espelha financeiro_combos) -----
+        _execute(conn, f"""
+            CREATE TABLE IF NOT EXISTS financeiro_planos (
+                id {pk},
+                clinica_id INTEGER NOT NULL,
+                profissional_id INTEGER,
+                nome TEXT NOT NULL,
+                descricao TEXT,
+                valor_mensalidade {money} NOT NULL DEFAULT 0 CHECK (valor_mensalidade >= 0),
+                duracao_meses INTEGER NOT NULL DEFAULT 1 CHECK (duracao_meses > 0),
+                sessoes_por_periodo INTEGER NOT NULL DEFAULT 1 CHECK (sessoes_por_periodo > 0),
+                periodo TEXT NOT NULL DEFAULT 'semana' CHECK (periodo IN ('semana', 'mes')),
+                max_beneficiarios INTEGER NOT NULL DEFAULT 1 CHECK (max_beneficiarios > 0),
+                ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+                criado_em {dt},
+                atualizado_em {ts}
+            )
+        """)
+
+        # Combo passa a pertencer a um profissional (usuarios.id; NULL = clínica toda).
+        _ensure_column(conn, "financeiro_combos", "profissional_id", "INTEGER")
+
+        # Contrato do paciente: FK real para o catálogo + snapshot do plano vendido.
+        # (plano_catalogo_id, e não plano_id: financeiro_lancamentos.plano_id e
+        # atendimentos.combo_plano_id já significam "id do contrato".)
+        _ensure_column(
+            conn, "financeiro_paciente_planos", "plano_catalogo_id",
+            "INTEGER REFERENCES financeiro_planos(id) ON DELETE RESTRICT",
+        )
+        _ensure_column(conn, "financeiro_paciente_planos", "valor_mensalidade", money)
+        _ensure_column(conn, "financeiro_paciente_planos", "duracao_meses", "INTEGER")
+        _ensure_column(conn, "financeiro_paciente_planos", "sessoes_por_periodo", "INTEGER")
+        _ensure_column(conn, "financeiro_paciente_planos", "periodo", "TEXT")
+        _ensure_column(conn, "financeiro_paciente_planos", "max_beneficiarios", "INTEGER NOT NULL DEFAULT 1")
+
+        # Beneficiários do contrato (plano familiar). O titular é contrato.paciente_id
+        # e também ganha uma linha aqui; não há coluna eh_titular de propósito.
+        _execute(conn, f"""
+            CREATE TABLE IF NOT EXISTS financeiro_plano_beneficiarios (
+                id {pk},
+                clinica_id INTEGER NOT NULL,
+                contrato_id INTEGER NOT NULL REFERENCES financeiro_paciente_planos(id) ON DELETE CASCADE,
+                paciente_id INTEGER NOT NULL,
+                ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+                criado_em {dt},
+                CONSTRAINT uq_fin_benef_contrato_paciente UNIQUE (contrato_id, paciente_id)
+            )
+        """)
+
         # Colunas obrigatórias de multi-clínica
         _ensure_column(conn, "financeiro_combos", "clinica_id", "INTEGER")
         _ensure_column(conn, "financeiro_paciente_planos", "clinica_id", "INTEGER")
@@ -479,6 +530,13 @@ def ensure_financeiro_schema():
 
         indices = [
             "CREATE INDEX IF NOT EXISTS idx_fin_combos_clinica ON financeiro_combos(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_combos_prof ON financeiro_combos(clinica_id, profissional_id)",
+            # catálogo de planos: nomes distintos de idx_fin_planos_* (que são da tabela de contratos)
+            "CREATE INDEX IF NOT EXISTS idx_fin_catplanos_clinica ON financeiro_planos(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_catplanos_prof ON financeiro_planos(clinica_id, profissional_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_planos_pac_catalogo ON financeiro_paciente_planos(plano_catalogo_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_planos_pac_combo ON financeiro_paciente_planos(combo_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_benef_paciente ON financeiro_plano_beneficiarios(clinica_id, paciente_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_planos_clinica ON financeiro_paciente_planos(clinica_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_lanc_clinica ON financeiro_lancamentos(clinica_id)",
 
@@ -711,6 +769,18 @@ def api_pacientes_sem_vinculo():
             )
             """
             params.insert(0, _clinica_id_atual())
+
+        # Quem é beneficiário ativo de um contrato ativo (plano familiar) também tem vínculo.
+        where.append("""
+            NOT EXISTS (
+                SELECT 1
+                FROM financeiro_plano_beneficiarios pb
+                JOIN financeiro_paciente_planos pp2 ON pp2.id = pb.contrato_id
+                WHERE pb.paciente_id = p.id
+                  AND pb.ativo = 1
+                  AND COALESCE(pp2.status, 'ativo') = 'ativo'
+            )
+        """)
 
         if apenas_com_atendimento and _table_exists(conn, "atendimentos"):
             atend_cols = _list_columns(conn, "atendimentos")
@@ -1025,6 +1095,54 @@ def api_obter_paciente_plano(plano_id: int):
 
     finally:
         conn.close()
+SEMANAS_POR_MES = 4  # convenção aprovada: sessoes = por_periodo x 4 x meses (periodo 'semana')
+
+
+def _calcular_sessoes_plano(sessoes_por_periodo, periodo, duracao_meses) -> int:
+    por_periodo = _to_int(sessoes_por_periodo, 0)
+    meses = _to_int(duracao_meses, 0)
+
+    if por_periodo <= 0 or meses <= 0:
+        return 0
+
+    if (periodo or "").strip().lower() == "semana":
+        return por_periodo * SEMANAS_POR_MES * meses
+
+    return por_periodo * meses
+
+
+def _validar_profissional(conn, profissional_id) -> bool:
+    """profissional_id = usuarios.id da clínica atual (sem FK no banco; validado aqui)."""
+    pid = _to_int(profissional_id, 0)
+
+    if pid <= 0 or not _table_exists(conn, "usuarios"):
+        return False
+
+    where = ["usuarios.id = ?"]
+    params = [pid]
+    _add_clinica_where(conn, "usuarios", "usuarios", where, params)
+
+    cur = _execute(conn, f"""
+        SELECT 1
+        FROM usuarios
+        WHERE {" AND ".join(where)}
+        LIMIT 1
+    """, params)
+
+    return cur.fetchone() is not None
+
+
+def _inserir_beneficiario_row(conn, contrato_id: int, paciente_id: int):
+    cols = ["contrato_id", "paciente_id", "ativo", "criado_em"]
+    vals = [contrato_id, paciente_id, 1, _now_iso()]
+    cols, vals = _add_clinica_insert(conn, "financeiro_plano_beneficiarios", cols, vals)
+
+    _execute(conn, f"""
+        INSERT INTO financeiro_plano_beneficiarios ({", ".join(cols)})
+        VALUES ({", ".join(["?"] * len(cols))})
+    """, vals)
+
+
 @financeiro_bp.post("/api/pacientes-planos")
 @require_permission("financeiro", "editar")
 def api_criar_paciente_plano():
@@ -1057,6 +1175,20 @@ def api_criar_paciente_plano():
 
     if tipo not in ("combo", "plano"):
         return _fail("Tipo inválido. Use combo ou plano.")
+
+    plano_catalogo_id = _to_int(data.get("plano_catalogo_id"), 0) or None
+
+    if tipo == "combo" and not combo_id:
+        return _fail("Selecione um combo do catálogo (combo_id).")
+
+    if tipo == "plano" and not plano_catalogo_id:
+        return _fail("Selecione um plano do catálogo (plano_catalogo_id).")
+
+    # Cada tipo aponta só para o seu catálogo.
+    if tipo == "combo":
+        plano_catalogo_id = None
+    else:
+        combo_id = None
 
     conn = _conn()
 
@@ -1097,8 +1229,53 @@ def api_criar_paciente_plano():
             if valor_total <= 0:
                 valor_total = _to_float(combo.get("preco"), 0)
 
-        if tipo == "plano" and not nome_plano:
-            nome_plano = "Particular"
+        snap = {
+            "plano_catalogo_id": None,
+            "valor_mensalidade": None,
+            "duracao_meses": None,
+            "sessoes_por_periodo": None,
+            "periodo": None,
+            "max_beneficiarios": 1,
+        }
+
+        if tipo == "plano":
+            where_cat = ["id = ?"]
+            params_cat = [plano_catalogo_id]
+            _add_clinica_where(conn, "financeiro_planos", "financeiro_planos", where_cat, params_cat)
+
+            cur = _execute(conn, f"""
+                SELECT *
+                FROM financeiro_planos
+                WHERE {" AND ".join(where_cat)}
+                LIMIT 1
+            """, params_cat)
+
+            catalogo = _fetchone_dict(cur)
+
+            if not catalogo:
+                return _fail("Plano não encontrado para esta clínica.", 404)
+
+            if not _to_int(catalogo.get("ativo"), 0):
+                return _fail("Este plano do catálogo está inativo.", 409)
+
+            # Snapshot: editar o catálogo depois não altera contratos já vendidos.
+            snap = {
+                "plano_catalogo_id": plano_catalogo_id,
+                "valor_mensalidade": _to_float(catalogo.get("valor_mensalidade"), 0),
+                "duracao_meses": _to_int(catalogo.get("duracao_meses"), 1),
+                "sessoes_por_periodo": _to_int(catalogo.get("sessoes_por_periodo"), 1),
+                "periodo": catalogo.get("periodo") or "semana",
+                "max_beneficiarios": _to_int(catalogo.get("max_beneficiarios"), 1) or 1,
+            }
+
+            nome_plano = catalogo.get("nome") or ""
+            # sessões e valor vêm do catálogo; não do payload
+            sessoes_contratadas = _calcular_sessoes_plano(
+                snap["sessoes_por_periodo"], snap["periodo"], snap["duracao_meses"]
+            )
+
+            if valor_total <= 0:
+                valor_total = snap["valor_mensalidade"] * snap["duracao_meses"]
 
         cols = [
             "paciente_id",
@@ -1123,6 +1300,12 @@ def api_criar_paciente_plano():
             "status",
             "criado_em",
             "atualizado_em",
+            "plano_catalogo_id",
+            "valor_mensalidade",
+            "duracao_meses",
+            "sessoes_por_periodo",
+            "periodo",
+            "max_beneficiarios",
         ]
 
         vals = [
@@ -1148,6 +1331,12 @@ def api_criar_paciente_plano():
             status,
             _now_iso(),
             _now_iso(),
+            snap["plano_catalogo_id"],
+            snap["valor_mensalidade"],
+            snap["duracao_meses"],
+            snap["sessoes_por_periodo"],
+            snap["periodo"],
+            snap["max_beneficiarios"],
         ]
 
         cols, vals = _add_clinica_insert(conn, "financeiro_paciente_planos", cols, vals)
@@ -1171,8 +1360,11 @@ def api_criar_paciente_plano():
 
             plano_id = cur.lastrowid
 
+        # O titular (paciente_id do contrato) é sempre o primeiro beneficiário.
+        _inserir_beneficiario_row(conn, plano_id, paciente_id)
+
         nome_ref = combo_nome if tipo == "combo" else nome_plano
-        desc_fin = f"{'Combo' if tipo == 'combo' else 'Particular'} · {nome_ref} · {paciente_nome}"
+        desc_fin = f"{'Combo' if tipo == 'combo' else 'Plano'} · {nome_ref} · {paciente_nome}"
 
         _gerar_lancamento_plano(
             conn,
