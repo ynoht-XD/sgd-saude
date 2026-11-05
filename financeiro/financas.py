@@ -470,6 +470,27 @@ def ensure_financeiro_schema():
             )
         """)
 
+        # ----- Catálogos de Atendimento Avulso e de Avaliação (um valor por profissional) -----
+        # Mesma forma dos outros catálogos: clinica_id obrigatório, profissional_id =
+        # usuarios.id validado na aplicação (sem FK), ativo 0/1.
+        for tabela, col_valor in (
+            ("financeiro_avulsos", "valor_padrao"),
+            ("financeiro_avaliacoes", "valor"),
+        ):
+            _execute(conn, f"""
+                CREATE TABLE IF NOT EXISTS {tabela} (
+                    id {pk},
+                    clinica_id INTEGER NOT NULL,
+                    profissional_id INTEGER,
+                    {col_valor} {money} NOT NULL DEFAULT 0 CHECK ({col_valor} >= 0),
+                    descricao TEXT NOT NULL,
+                    duracao_prevista_min INTEGER CHECK (duracao_prevista_min IS NULL OR duracao_prevista_min > 0),
+                    ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+                    criado_em {dt},
+                    atualizado_em {ts}
+                )
+            """)
+
         # Colunas obrigatórias de multi-clínica
         _ensure_column(conn, "financeiro_combos", "clinica_id", "INTEGER")
         _ensure_column(conn, "financeiro_paciente_planos", "clinica_id", "INTEGER")
@@ -537,6 +558,10 @@ def ensure_financeiro_schema():
             "CREATE INDEX IF NOT EXISTS idx_fin_planos_pac_catalogo ON financeiro_paciente_planos(plano_catalogo_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_planos_pac_combo ON financeiro_paciente_planos(combo_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_benef_paciente ON financeiro_plano_beneficiarios(clinica_id, paciente_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_avulsos_clinica ON financeiro_avulsos(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_avulsos_prof ON financeiro_avulsos(clinica_id, profissional_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_avaliacoes_clinica ON financeiro_avaliacoes(clinica_id)",
+            "CREATE INDEX IF NOT EXISTS idx_fin_avaliacoes_prof ON financeiro_avaliacoes(clinica_id, profissional_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_planos_clinica ON financeiro_paciente_planos(clinica_id)",
             "CREATE INDEX IF NOT EXISTS idx_fin_lanc_clinica ON financeiro_lancamentos(clinica_id)",
 

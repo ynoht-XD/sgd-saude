@@ -32,6 +32,7 @@ from admin.modulos import require_permission
 # Catálogo de planos e beneficiários (registram suas rotas no blueprint)
 from . import planos_catalogo  # noqa: F401
 from . import beneficiarios  # noqa: F401
+from . import catalogos_atendimento  # noqa: F401
 
 # Novos combos devem ter profissional_id. Fica False enquanto a tela de combos
 # (comercial.js) não envia o campo: ligar para True quando o front for atualizado.
