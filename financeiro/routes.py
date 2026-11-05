@@ -19,6 +19,11 @@ from .financas import (
     _to_bool,
     _now_iso,
     _is_postgres_conn,
+    _list_columns,
+    _has_col,
+    _add_clinica_where,
+    _exigir_coluna_clinica,
+    FiltroClinicaIndisponivel,
 )
 
 from admin.modulos import require_permission
@@ -76,42 +81,15 @@ def _table_exists(conn, table: str) -> bool:
         return False
 
 
-def _cols(conn, table: str) -> set[str]:
-    try:
-        if _is_postgres_conn(conn):
-            cur = _execute(conn, """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = ?
-            """, (table,))
-            rows = _fetchall_dict(cur)
-            return {r.get("column_name") for r in rows if r.get("column_name")}
-
-        cur = _execute(conn, f"PRAGMA table_info({table})")
-        rows = _fetchall_dict(cur)
-        return {r.get("name") for r in rows if r.get("name")}
-    except Exception:
-        return set()
-
-
-def _has_col(conn, table: str, col: str) -> bool:
-    return col in _cols(conn, table)
-
-
-def _add_clinica_where(conn, table: str, alias: str, where_parts: list[str], params: list, clinica_id=None):
-    clinica_id = clinica_id or _clinica_id_atual()
-
-    if not clinica_id:
-        return
-
-    if _has_col(conn, table, "clinica_id"):
-        where_parts.append(f"{alias}.clinica_id = ?")
-        params.append(int(clinica_id))
+# _cols/_has_col/_add_clinica_where vem de financas.py (versao que NAO engole excecao
+# e recusa a consulta se nao der para garantir o filtro de clinica).
+_cols = _list_columns
 
 
 def _insert_with_optional_clinica(conn, table: str, cols: list[str], values: list):
-    if _has_col(conn, table, "clinica_id") and "clinica_id" not in cols:
+    _exigir_coluna_clinica(conn, table)
+
+    if "clinica_id" not in cols:
         cols.insert(0, "clinica_id")
         values.insert(0, _clinica_id_atual())
 
@@ -747,31 +725,41 @@ def api_desvincular_atendimentos_plano(plano_id: int):
 
         atualizados = 0
 
-        if _table_exists(conn, "atendimentos"):
-            colunas_possiveis = [
-                "paciente_plano_id",
-                "plano_id",
-                "financeiro_plano_id",
-                "combo_paciente_id",
-            ]
+        # A coluna que liga atendimento -> plano/combo e atendimentos.combo_plano_id
+        # (gravada em atendimentos/routes.py). Antes a rota procurava quatro nomes
+        # que nao existem e respondia "sucesso" com 0 linhas.
+        atend_cols = _cols(conn, "atendimentos")
 
-            atend_cols = _cols(conn, "atendimentos")
+        if "combo_plano_id" not in atend_cols:
+            return _fail(
+                "Tabela atendimentos sem a coluna combo_plano_id; nada foi desvinculado.",
+                409,
+            )
 
-            for coluna in colunas_possiveis:
-                if coluna not in atend_cols:
-                    continue
+        where = ["combo_plano_id = ?"]
+        params = [plano_id]
+        _add_clinica_where(conn, "atendimentos", "atendimentos", where, params)
 
-                where = [f"{coluna} = ?"]
-                params = [plano_id]
-                _add_clinica_where(conn, "atendimentos", "atendimentos", where, params)
+        # Mesma regra do cadastro do atendimento: sem combo => nao contabiliza.
+        sets = ["combo_plano_id = NULL"]
+        if "contabiliza_sessao" in atend_cols:
+            sets.append("contabiliza_sessao = 0")
 
-                cur = _execute(conn, f"""
-                    UPDATE atendimentos
-                    SET {coluna} = NULL
-                    WHERE {" AND ".join(where)}
-                """, params)
+        cur = _execute(conn, f"""
+            UPDATE atendimentos
+            SET {", ".join(sets)}
+            WHERE {" AND ".join(where)}
+        """, params)
 
-                atualizados += cur.rowcount or 0
+        atualizados = cur.rowcount or 0
+
+        # Todos os atendimentos do plano foram soltos: o contador gravado
+        # (lido pela agenda) volta a zero na mesma transacao.
+        _execute(conn, f"""
+            UPDATE financeiro_paciente_planos
+            SET sessoes_usadas = 0, atualizado_em = ?
+            WHERE {" AND ".join(plano_where)}
+        """, [_now_iso()] + plano_params)
 
         _registrar_log(
             conn,

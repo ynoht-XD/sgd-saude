@@ -341,7 +341,7 @@ def buscar_combo_ativo_paciente(conn, paciente_id: int | str | None) -> dict | N
               FROM atendimentos
              WHERE combo_plano_id = %s
                {filtro_at_clinica}
-               AND COALESCE(contabiliza_sessao, 1) = 1
+               AND COALESCE(contabiliza_sessao, 0) = 1
             """,
             params_usadas,
         )
@@ -412,7 +412,7 @@ def listar_combos_ativos_para_template(conn) -> list[dict]:
                   FROM atendimentos
                  WHERE combo_plano_id = %s
                    {filtro_at_clinica}
-                   AND COALESCE(contabiliza_sessao, 1) = 1
+                   AND COALESCE(contabiliza_sessao, 0) = 1
                 """,
                 params_usadas,
             )
@@ -484,7 +484,7 @@ def recalcular_saldo_combo(conn, combo_plano_id: int | None) -> None:
           FROM atendimentos
          WHERE combo_plano_id = %s
            {filtro_at}
-           AND COALESCE(contabiliza_sessao, 1) = 1
+           AND COALESCE(contabiliza_sessao, 0) = 1
         """,
         params_at,
     )

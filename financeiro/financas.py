@@ -178,30 +178,41 @@ def _table_exists(conn, table: str) -> bool:
         return False
 
 
+class FiltroClinicaIndisponivel(RuntimeError):
+    """Nao foi possivel garantir o filtro de clinica numa consulta.
+
+    Levantada em vez de seguir sem filtro: uma consulta sem clinica_id vazaria
+    (ou gravaria) dados de outra clinica sem aviso.
+    """
+
+
 def _list_columns(conn, table: str) -> set[str]:
-    try:
-        if _is_postgres_conn(conn):
-            cur = _execute(conn, """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = ?
-            """, (table,))
+    """Colunas da tabela. Tabela inexistente => conjunto vazio.
 
-            return {
-                r["column_name"] if hasattr(r, "keys") else r[0]
-                for r in cur.fetchall()
-            }
-
-        cur = _execute(conn, f"PRAGMA table_info({table})")
+    NAO engole excecao: consulta falha (transacao abortada, conexao caida...)
+    sobe para quem chamou. Antes devolvia set() em qualquer erro, e o chamador
+    entendia "a tabela nao tem a coluna" -- foi assim que o filtro de clinica
+    sumia sem aviso.
+    """
+    if _is_postgres_conn(conn):
+        cur = _execute(conn, """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = ?
+        """, (table,))
 
         return {
-            r["name"] if hasattr(r, "keys") else r[1]
+            r["column_name"] if hasattr(r, "keys") else r[0]
             for r in cur.fetchall()
         }
 
-    except Exception:
-        return set()
+    cur = _execute(conn, f"PRAGMA table_info({table})")
+
+    return {
+        r["name"] if hasattr(r, "keys") else r[1]
+        for r in cur.fetchall()
+    }
 
 
 def _has_col(conn, table: str, col: str) -> bool:
@@ -212,28 +223,47 @@ def _ensure_column(conn, table: str, column: str, ddl: str):
     if column in _list_columns(conn, table):
         return
 
-    try:
-        if _is_postgres_conn(conn):
-            _execute(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
-        else:
+    if not _is_postgres_conn(conn):
+        try:
             _execute(conn, f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        except Exception as e:
+            print(f"[FINANCEIRO][SCHEMA] coluna {table}.{column}: {e}")
+        return
+
+    # Postgres: um ALTER que falha aborta a transacao inteira e, sem o
+    # savepoint, todo comando seguinte (inclusive a leitura de colunas) falharia.
+    _execute(conn, "SAVEPOINT sp_ensure_column")
+    try:
+        _execute(conn, f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}")
+        _execute(conn, "RELEASE SAVEPOINT sp_ensure_column")
     except Exception as e:
+        _execute(conn, "ROLLBACK TO SAVEPOINT sp_ensure_column")
         print(f"[FINANCEIRO][SCHEMA] coluna {table}.{column}: {e}")
+
+
+def _exigir_coluna_clinica(conn, table: str):
+    if not _has_col(conn, table, "clinica_id"):
+        raise FiltroClinicaIndisponivel(
+            f"A tabela {table} nao tem a coluna clinica_id; consulta recusada para nao misturar clinicas."
+        )
 
 
 def _add_clinica_where(conn, table: str, alias: str, where: list[str], params: list, clinica_id=None):
     clinica_id = clinica_id or _clinica_id_atual()
 
     if not clinica_id:
-        return
+        raise FiltroClinicaIndisponivel("Clinica nao definida na sessao; consulta recusada.")
 
-    if _has_col(conn, table, "clinica_id"):
-        where.append(f"{alias}.clinica_id = ?")
-        params.append(int(clinica_id))
+    _exigir_coluna_clinica(conn, table)
+
+    where.append(f"{alias}.clinica_id = ?")
+    params.append(int(clinica_id))
 
 
 def _add_clinica_insert(conn, table: str, cols: list[str], vals: list):
-    if _has_col(conn, table, "clinica_id") and "clinica_id" not in cols:
+    _exigir_coluna_clinica(conn, table)
+
+    if "clinica_id" not in cols:
         cols.insert(0, "clinica_id")
         vals.insert(0, _clinica_id_atual())
 
@@ -445,7 +475,7 @@ def ensure_financeiro_schema():
 
         if _table_exists(conn, "atendimentos"):
             _ensure_column(conn, "atendimentos", "combo_plano_id", "INTEGER")
-            _ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 1")
+            _ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 0")
 
         indices = [
             "CREATE INDEX IF NOT EXISTS idx_fin_combos_clinica ON financeiro_combos(clinica_id)",
@@ -758,7 +788,7 @@ def _contar_atendimentos_vinculados(conn, plano_id: int) -> int:
     params = [plano_id]
 
     if "contabiliza_sessao" in cols:
-        where.append("COALESCE(contabiliza_sessao, 1) = 1")
+        where.append("COALESCE(contabiliza_sessao, 0) = 1")
 
     _add_clinica_where(conn, "atendimentos", "atendimentos", where, params)
 

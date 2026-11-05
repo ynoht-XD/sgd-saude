@@ -775,7 +775,7 @@ def salvar_atendimento_view():
                   AND clinica_id = %s
                   AND data_atendimento = %s
                   AND combo_plano_id = %s
-                  AND COALESCE(contabiliza_sessao, 1) = 1
+                  AND COALESCE(contabiliza_sessao, 0) = 1
                 LIMIT 1
             """, (paciente_id, clinica_id, data_atendimento, combo_plano_id))
 
