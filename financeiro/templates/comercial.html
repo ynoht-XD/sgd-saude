@@ -354,6 +354,16 @@
           <input class="com-input" id="nomePlano" name="nome_plano" type="text" placeholder="Ex: Plano mensal">
         </div>
 
+        <!-- Contrato tipo plano: escolhe um plano do catálogo (substitui o nome livre) -->
+        <div class="com-field" id="fieldPlanoCatalogo" hidden>
+          <label class="com-label" for="planoCatalogoSelect">Plano do catálogo</label>
+          <select class="com-select" id="planoCatalogoSelect" name="plano_catalogo_id">
+            <option value="">Selecione...</option>
+          </select>
+        </div>
+
+        <div class="com-field com-field--full" id="planoResumo" hidden aria-live="polite"></div>
+
         <div class="com-field">
           <label class="com-label" for="sessoesContratadas">Sessões contratadas</label>
           <input class="com-input" id="sessoesContratadas" name="sessoes_contratadas" type="number" min="0" step="1" placeholder="0">

@@ -9,6 +9,8 @@
 
   const state = {
     combos: [],
+    planosCatalogo: [],
+    autoPlano: false,
     vinculos: [],
     vinculosFiltrados: [],
     pacientesSemVinculo: [],
@@ -284,6 +286,9 @@
     fieldComboSelect: $("#fieldComboSelect"),
     fieldNomePlano: $("#fieldNomePlano"),
     nomePlano: $("#nomePlano"),
+    fieldPlanoCatalogo: $("#fieldPlanoCatalogo"),
+    planoCatalogoSelect: $("#planoCatalogoSelect"),
+    planoResumo: $("#planoResumo"),
     sessoesContratadas: $("#sessoesContratadas"),
     valorTotal: $("#valorTotal"),
     formaPagamento: $("#formaPagamento"),
@@ -650,7 +655,116 @@
     const isCombo = tipo === "combo";
 
     if (els.fieldComboSelect) els.fieldComboSelect.hidden = !isCombo;
-    if (els.fieldNomePlano) els.fieldNomePlano.hidden = isCombo;
+    // plano usa o seletor do catálogo; o nome livre não é mais usado na criação
+    if (els.fieldNomePlano) els.fieldNomePlano.hidden = true;
+    if (els.fieldPlanoCatalogo) els.fieldPlanoCatalogo.hidden = isCombo;
+
+    if (isCombo) {
+      limparPlanoCatalogoForm();
+    } else if (!state.autoPlano) {
+      // vindo de combo: os campos podem ter o autopreenchimento do combo; o plano recalcula os seus
+      if (els.sessoesContratadas) els.sessoesContratadas.value = "";
+      if (els.valorTotal) els.valorTotal.value = "";
+      if (els.sessoesContratadas) els.sessoesContratadas.readOnly = true;
+      loadPlanosCatalogo().catch(err => toast(err.message));
+    }
+  }
+
+  // =========================================================
+  // CONTRATO TIPO PLANO (catálogo)
+  // =========================================================
+  async function loadPlanosCatalogo() {
+    const data = await requestJSON("/financeiro/api/planos?ativo=1");
+    state.planosCatalogo = Array.isArray(data.items) ? data.items : [];
+
+    if (!els.planoCatalogoSelect) return;
+
+    const atual = els.planoCatalogoSelect.value;
+    els.planoCatalogoSelect.innerHTML = [`<option value="">Selecione...</option>`]
+      .concat(state.planosCatalogo.map(p => `
+        <option value="${p.id}" ${String(p.id) === atual ? "selected" : ""}>
+          ${escapeHtml(p.nome)} · ${money(p.valor_mensalidade)}/mês · ${Number(p.duracao_meses || 0)} mês(es)${Number(p.max_beneficiarios) > 1 ? " · familiar" : ""}
+        </option>
+      `))
+      .join("");
+  }
+
+  // mesma conta do servidor (financas._calcular_sessoes_plano): semana = por_periodo x 4 x meses
+  function sessoesDoPlano(p) {
+    const por = Number(p.sessoes_por_periodo || 0);
+    const meses = Number(p.duracao_meses || 0);
+    if (por <= 0 || meses <= 0) return 0;
+    return p.periodo === "semana" ? por * 4 * meses : por * meses;
+  }
+
+  function limparPlanoCatalogoForm() {
+    if (els.planoCatalogoSelect) els.planoCatalogoSelect.value = "";
+    if (els.planoResumo) {
+      els.planoResumo.hidden = true;
+      els.planoResumo.innerHTML = "";
+    }
+    if (els.sessoesContratadas) els.sessoesContratadas.readOnly = false;
+
+    // desfaz só o que o próprio plano preencheu; o autopreenchimento do combo segue como antes
+    if (state.autoPlano) {
+      if (els.sessoesContratadas) els.sessoesContratadas.value = "";
+      if (els.valorTotal) els.valorTotal.value = "";
+      state.autoPlano = false;
+    }
+  }
+
+  function applyPlanoCatalogoToForm() {
+    const id = els.planoCatalogoSelect?.value;
+    const plano = state.planosCatalogo.find(p => String(p.id) === String(id));
+
+    if (!plano) {
+      if (state.autoPlano) {
+        els.sessoesContratadas.value = "";
+        els.valorTotal.value = "";
+        state.autoPlano = false;
+      }
+      els.planoResumo.hidden = true;
+      els.planoResumo.innerHTML = "";
+      return;
+    }
+
+    const sessoes = sessoesDoPlano(plano);
+    const mensalidade = Number(plano.valor_mensalidade || 0);
+    const meses = Number(plano.duracao_meses || 0);
+    const total = mensalidade * meses;
+    const maxBenef = Number(plano.max_beneficiarios || 1);
+    const por = Number(plano.sessoes_por_periodo || 0);
+    const periodoTxt = plano.periodo === "semana" ? "por semana" : "por mês";
+
+    // sessões vêm do catálogo (o servidor recalcula e ignora o que for enviado); valor pode ser ajustado
+    els.sessoesContratadas.value = sessoes;
+    els.sessoesContratadas.readOnly = true;
+    els.valorTotal.value = total;
+    state.autoPlano = true;
+
+    els.planoResumo.innerHTML = `
+      <div class="com-patient-card" data-plano-resumo="1">
+        <strong>${escapeHtml(plano.nome)}</strong>
+        <div class="com-patient-meta">
+          Mensalidade: <b>${money(mensalidade)}</b> ·
+          Duração: <b>${meses} mês(es)</b> ·
+          Consultas: <b>${por} ${periodoTxt}</b>
+        </div>
+        <div class="com-patient-meta">
+          Total de sessões: <b>${sessoes}</b> ·
+          Valor total do contrato: <b>${money(total)}</b>
+        </div>
+        <div class="com-patient-meta">
+          ${maxBenef > 1
+            ? `Plano familiar: até <b>${maxBenef}</b> beneficiários, contando o titular. O paciente selecionado entra como titular; os demais beneficiários são adicionados depois que o contrato existir.`
+            : `Plano individual (1 beneficiário: o paciente selecionado).`}
+        </div>
+        <div class="com-patient-meta" style="color:#b45309;">
+          Estes valores são copiados do catálogo agora (snapshot): alterar o plano no catálogo depois não muda este contrato.
+        </div>
+      </div>
+    `;
+    els.planoResumo.hidden = false;
   }
 
   function syncTipoVinculoModal() {
@@ -705,7 +819,7 @@
       paciente_id: Number(pacienteId),
       tipo,
       combo_id: tipo === "combo" && els.comboSelect.value ? Number(els.comboSelect.value) : null,
-      nome_plano: tipo === "plano" ? (els.nomePlano.value || "").trim() : "",
+      nome_plano: "",
       sessoes_contratadas: Number(els.sessoesContratadas.value || 0),
       valor_total: Number(els.valorTotal.value || 0),
       forma_pagamento: els.formaPagamento.value,
@@ -722,9 +836,13 @@
       return;
     }
 
-    if (payload.tipo === "plano" && !payload.nome_plano) {
-      toast("Informe o nome do plano.");
-      return;
+    if (payload.tipo === "plano") {
+      payload.plano_catalogo_id = els.planoCatalogoSelect?.value ? Number(els.planoCatalogoSelect.value) : null;
+
+      if (!payload.plano_catalogo_id) {
+        toast("Selecione um plano do catálogo (plano_catalogo_id).");
+        return;
+      }
     }
 
     setLoading(els.btnSalvarVinculo, true);
@@ -1286,6 +1404,7 @@
     // form vínculo
     els.tipoVinculo?.addEventListener("change", syncTipoVinculoForm);
     els.comboSelect?.addEventListener("change", applyComboDataToForm);
+    els.planoCatalogoSelect?.addEventListener("change", applyPlanoCatalogoToForm);
     els.formVinculo?.addEventListener("submit", submitVinculoForm);
     els.btnLimparVinculo?.addEventListener("click", resetVinculoForm);
 
