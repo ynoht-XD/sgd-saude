@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import io
 import csv
 from typing import Optional, Any
@@ -23,6 +23,17 @@ try:
 except Exception:
     def registrar_log(*args, **kwargs): pass
     def log_erro(*args, **kwargs): pass
+
+try:
+    from log import mascarar_cpf
+except Exception:
+    def mascarar_cpf(valor):
+        digitos = "".join(ch for ch in str(valor or "") if ch.isdigit())
+        if not digitos:
+            return ""
+        if len(digitos) == 11:
+            return f"{digitos[:3]}.***.**-{digitos[-2:]}"
+        return "*" * len(digitos)
 
 
 DOW_LABELS_PT = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
@@ -120,6 +131,12 @@ def _ensure_col(conn, table: str, col: str, ddl: str):
     conn.commit()
 
 
+def _ensure_col_se_faltar(conn, table: str, col: str, ddl: str):
+    if _has_column(conn, table, col):
+        return
+    _ensure_col(conn, table, col, ddl)
+
+
 def _ensure_agendamentos_table(conn):
     cur = conn.cursor()
     cur.execute("""
@@ -162,6 +179,14 @@ def ensure_schema_agenda(conn):
     _ensure_col(conn, "agendamentos", "dia", "TEXT")
     _ensure_col(conn, "agendamentos", "criado_em", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
     _ensure_col(conn, "agendamentos", "atualizado_em", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+    # Grupo D: modalidade financeira da agenda semanal (combo/plano) e contrato escolhido.
+    # Ambas opcionais, sem FK (a agenda apaga linhas; o financeiro apaga contratos) e sem
+    # CHECK (validacao na aplicacao). So faz ALTER se a coluna ainda nao existe: o ALTER
+    # ... IF NOT EXISTS pede lock na tabela mesmo quando nao ha nada a fazer, e este
+    # ensure roda a cada requisicao. Linhas antigas ficam NULL = "sem modalidade".
+    _ensure_col_se_faltar(conn, "agendamentos", "modalidade_financeira", "TEXT")
+    _ensure_col_se_faltar(conn, "agendamentos", "contrato_id", "INTEGER")
 
     cur = conn.cursor()
 
@@ -231,6 +256,129 @@ def _usuario_by_cpf(conn, cpf: str):
 
 
 # ============================================================
+# MODALIDADE FINANCEIRA (combo/plano) E CONTRATO
+# ============================================================
+
+MODALIDADES_FINANCEIRAS = ("combo", "plano")
+
+
+class AgendaValidacao(Exception):
+    def __init__(self, mensagem: str, status: int = 400):
+        super().__init__(mensagem)
+        self.mensagem = mensagem
+        self.status = status
+
+
+def _to_int(valor, default=None):
+    if valor is None or isinstance(valor, bool):
+        return default
+    try:
+        txt = str(valor).strip()
+        return int(txt) if txt else default
+    except Exception:
+        return default
+
+
+def _normalizar_modalidade(valor) -> Optional[str]:
+    if valor is None:
+        return None
+    txt = str(valor).strip().lower()
+    if not txt:
+        return None
+    if txt not in MODALIDADES_FINANCEIRAS:
+        raise AgendaValidacao("Modalidade financeira inválida (use combo ou plano).")
+    return txt
+
+
+def _paciente_da_clinica(conn, paciente_id: int, clinica_id: int):
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, nome
+          FROM pacientes
+         WHERE id = %s
+           AND COALESCE(clinica_id, %s) = %s
+         LIMIT 1;
+    """, (paciente_id, clinica_id, clinica_id))
+    return _fetchone_dict(cur)
+
+
+def _validar_vinculo_financeiro(conn, clinica_id: int, paciente_id: Optional[int],
+                                modalidade: Optional[str], contrato_id: Optional[int]):
+    """Valida o par (modalidade, contrato) de um agendamento. Devolve o par normalizado.
+
+    - Sem modalidade: nao pode haver contrato.
+    - Modalidade sem contrato: permitido (a recepcao pode marcar sem contrato).
+    - Com contrato: precisa ser da clinica, do tipo igual a modalidade, ativo, e o
+      paciente precisa ser o titular ou beneficiario ativo dele.
+    """
+    if modalidade is None:
+        if contrato_id is not None:
+            raise AgendaValidacao("Informe a modalidade financeira (combo ou plano) para vincular um contrato.")
+        return None, None
+
+    if paciente_id is None:
+        raise AgendaValidacao("Este agendamento não tem paciente vinculado (horário VAGO ou sem paciente_id): informe o paciente_id para usar modalidade financeira.")
+
+    if contrato_id is None:
+        return modalidade, None
+
+    if contrato_id <= 0:
+        raise AgendaValidacao("Contrato inválido.")
+
+    nao_achou = AgendaValidacao("Contrato não encontrado para esta clínica.", 404)
+
+    # filtro de clinica obrigatorio: sem a coluna nao ha como garantir isolamento
+    if not _has_table(conn, "financeiro_paciente_planos") \
+            or not _has_column(conn, "financeiro_paciente_planos", "clinica_id"):
+        raise nao_achou
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, paciente_id, tipo, status
+          FROM financeiro_paciente_planos
+         WHERE id = %s
+           AND clinica_id = %s
+         LIMIT 1;
+    """, (contrato_id, clinica_id))
+    contrato = _fetchone_dict(cur)
+
+    if not contrato:
+        raise nao_achou
+
+    tipo = (contrato.get("tipo") or "").strip().lower()
+    if tipo != modalidade:
+        raise AgendaValidacao(
+            f"O contrato informado é do tipo '{tipo or 'indefinido'}', diferente da modalidade '{modalidade}'."
+        )
+
+    eh_titular = contrato.get("paciente_id") is not None and int(contrato["paciente_id"]) == int(paciente_id)
+
+    if not eh_titular:
+        beneficiario = False
+
+        if _has_table(conn, "financeiro_plano_beneficiarios") \
+                and _has_column(conn, "financeiro_plano_beneficiarios", "clinica_id"):
+            cur.execute("""
+                SELECT 1
+                  FROM financeiro_plano_beneficiarios
+                 WHERE contrato_id = %s
+                   AND paciente_id = %s
+                   AND clinica_id = %s
+                   AND ativo = 1
+                 LIMIT 1;
+            """, (contrato_id, paciente_id, clinica_id))
+            beneficiario = cur.fetchone() is not None
+
+        if not beneficiario:
+            raise AgendaValidacao("O paciente não é titular nem beneficiário ativo deste contrato.")
+
+    if (contrato.get("status") or "ativo") != "ativo":
+        raise AgendaValidacao("Este contrato não está ativo.", 409)
+
+    return modalidade, contrato_id
+
+
+# ============================================================
 # PÁGINA
 # ============================================================
 
@@ -287,7 +435,7 @@ def agenda_salvar():
     clinica_id = _clinica_id_atual()
     data = request.get_json(silent=True) or {}
 
-    pac_id = data.get("paciente_id")
+    pac_id_raw = data.get("paciente_id")
     pac_nome = (data.get("paciente_nome") or "").strip()
     dia = (data.get("dia") or "").strip()
     hora_de = (data.get("hora_de") or "").strip()
@@ -296,6 +444,25 @@ def agenda_salvar():
     observacao = (data.get("observacao") or "").strip()
 
     is_vago = pac_nome.upper() == "VAGO"
+
+    # paciente_id e opcional (formato antigo: so o nome). Se vier, tem que ser um inteiro valido.
+    pac_id = None
+    if pac_id_raw is not None and str(pac_id_raw).strip() != "":
+        pac_id = _to_int(pac_id_raw)
+        if pac_id is None or pac_id <= 0:
+            return jsonify({"error": "paciente_id inválido."}), 400
+
+    try:
+        modalidade = _normalizar_modalidade(data.get("modalidade_financeira"))
+    except AgendaValidacao as e:
+        return jsonify({"error": e.mensagem}), e.status
+
+    contrato_raw = data.get("contrato_id")
+    contrato_id = None
+    if contrato_raw is not None and str(contrato_raw).strip() != "":
+        contrato_id = _to_int(contrato_raw)
+        if contrato_id is None:
+            return jsonify({"error": "Contrato inválido."}), 400
 
     if not pac_id and not pac_nome and not is_vago:
         return jsonify({"error": "Informe o paciente."}), 400
@@ -356,6 +523,13 @@ def agenda_salvar():
             prof_nome = u["nome"]
             prof_cpf = u["cpf"]
 
+            try:
+                modalidade, contrato_id = _validar_vinculo_financeiro(
+                    conn, clinica_id, pid, modalidade, contrato_id
+                )
+            except AgendaValidacao as e:
+                return jsonify({"error": e.mensagem}), e.status
+
             dow = int(dia)
             today = datetime.now()
             base_day = _next_date_for_dow(today, dow)
@@ -392,10 +566,12 @@ def agenda_salvar():
                     serie_uid,
                     dow_dom,
                     valor_sessao,
+                    modalidade_financeira,
+                    contrato_id,
                     criado_em,
                     atualizado_em
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ativo', 0, NULL, %s, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ativo', 0, NULL, %s, NULL, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 RETURNING id;
             """, (
                 clinica_id,
@@ -408,6 +584,8 @@ def agenda_salvar():
                 dia_label,
                 observacao or None,
                 dow_dom_val,
+                modalidade,
+                contrato_id,
             ))
 
             created = cur.fetchone()
@@ -435,6 +613,8 @@ def agenda_salvar():
                 "profissional_cpf": prof_cpf,
                 "inicio": ini_dt.isoformat(),
                 "fim": fim_dt.isoformat(),
+                "modalidade_financeira": modalidade,
+                "contrato_id": contrato_id,
             },
         )
 
@@ -442,6 +622,8 @@ def agenda_salvar():
             "ok": True,
             "criado": created_id,
             "paciente": {"id": pid, "nome": nome},
+            "modalidade_financeira": modalidade,
+            "contrato_id": contrato_id,
             "redirect": redirect_url,
         }), 201
 
@@ -454,6 +636,229 @@ def agenda_salvar():
             detalhes={"clinica_id": clinica_id, "payload": data},
         )
         return jsonify({"error": "Falha ao criar agendamento", "detail": str(e)}), 500
+
+
+# ============================================================
+# API - PACIENTES (busca com ID) E CONTRATOS DO PACIENTE
+# ============================================================
+
+def _table_columns(conn, table: str) -> set:
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = %s;
+    """, (table,))
+    return {r["column_name"] for r in _fetchall_dicts(cur)}
+
+
+def _idade_de(nasc) -> Optional[int]:
+    if not nasc:
+        return None
+    txt = str(nasc).strip()[:10]
+    nascimento = None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            nascimento = datetime.strptime(txt, fmt).date()
+            break
+        except Exception:
+            continue
+    if not nascimento:
+        return None
+    hoje = date.today()
+    idade = hoje.year - nascimento.year - ((hoje.month, hoje.day) < (nascimento.month, nascimento.day))
+    return idade if 0 <= idade < 130 else None
+
+
+@agenda_bp.get("/api/pacientes", endpoint="api_pacientes_busca")
+@require_permission("agenda", "ver")
+def api_pacientes_busca():
+    """Busca de paciente para a agenda: devolve o ID (sem DISTINCT, homonimos aparecem
+    separados) e o CPF mascarado. Nao registra o texto buscado no log (pode ser um CPF)."""
+    clinica_id = _clinica_id_atual()
+    q = (request.args.get("q") or "").strip()
+    limit = max(1, min(_to_int(request.args.get("limit"), 20), 50))
+
+    if len(q) < 3:
+        return jsonify([])
+
+    try:
+        with _conn() as conn:
+            if not _has_table(conn, "pacientes"):
+                return jsonify([])
+
+            cols = _table_columns(conn, "pacientes")
+
+            cpf_expr = "COALESCE(cpf::text, '')" if "cpf" in cols else "''"
+            cns_expr = "COALESCE(cns::text, '')" if "cns" in cols else "''"
+            pront_expr = "COALESCE(prontuario::text, '')" if "prontuario" in cols else "''"
+            nasc_expr = "COALESCE(nascimento::text, '')" if "nascimento" in cols else "''"
+
+            like_nome = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            filtros = ["COALESCE(nome, '') ILIKE %s ESCAPE '\\'"]
+            params: list[Any] = [clinica_id, clinica_id, f"%{like_nome}%"]
+
+            # CPF/CNS/prontuario so entram quando o texto tem digitos (senao '%%' casaria com todos)
+            q_digits = "".join(ch for ch in q if ch.isdigit())
+            if len(q_digits) >= 3:
+                for expr in (cpf_expr, cns_expr, pront_expr):
+                    filtros.append(f"REGEXP_REPLACE({expr}, '\\D', '', 'g') LIKE %s")
+                    params.append(f"%{q_digits}%")
+
+            params.append(limit)
+
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT id,
+                       COALESCE(nome, '') AS nome,
+                       {nasc_expr} AS nascimento,
+                       {pront_expr} AS prontuario,
+                       {cpf_expr} AS cpf
+                  FROM pacientes
+                 WHERE COALESCE(clinica_id, %s) = %s
+                   AND ({" OR ".join(filtros)})
+                 ORDER BY nome, id
+                 LIMIT %s;
+            """, params)
+
+            out = []
+            for r in _fetchall_dicts(cur):
+                out.append({
+                    "id": int(r["id"]),
+                    "nome": (r.get("nome") or "").strip(),
+                    "nascimento": r.get("nascimento") or None,
+                    "idade": _idade_de(r.get("nascimento")),
+                    "prontuario": r.get("prontuario") or "",
+                    "cpf": mascarar_cpf(r.get("cpf")),
+                })
+
+        return jsonify(out)
+
+    except Exception as e:
+        log_erro(
+            "agenda",
+            e,
+            entidade="pacientes",
+            descricao="Erro ao buscar pacientes para agenda.",
+            detalhes={"clinica_id": clinica_id},
+        )
+        return jsonify({"error": "Falha ao buscar pacientes", "detail": str(e)}), 500
+
+
+@agenda_bp.get("/api/pacientes/<int:paciente_id>/contratos", endpoint="api_contratos_do_paciente")
+@require_permission("agenda", "ver")
+def api_contratos_do_paciente(paciente_id: int):
+    """Contratos ATIVOS em que o paciente e titular ou beneficiario ativo (popula o seletor
+    de contrato). Sem valores financeiros e sem CPF. ?modalidade=combo|plano filtra o tipo."""
+    clinica_id = _clinica_id_atual()
+
+    try:
+        modalidade = _normalizar_modalidade(request.args.get("modalidade"))
+    except AgendaValidacao as e:
+        return jsonify({"error": e.mensagem}), e.status
+
+    try:
+        with _conn() as conn:
+            ensure_schema_agenda(conn)
+
+            if not _paciente_da_clinica(conn, paciente_id, clinica_id):
+                return jsonify({"error": "Paciente não encontrado nesta clínica."}), 404
+
+            if not _has_table(conn, "financeiro_paciente_planos"):
+                return jsonify([])
+
+            fp_cols = _table_columns(conn, "financeiro_paciente_planos")
+
+            # sem clinica_id nao ha como garantir isolamento entre clinicas: nao responde
+            if "clinica_id" not in fp_cols:
+                return jsonify({"error": "Estrutura do financeiro indisponível."}), 503
+
+            def col(nome, padrao="NULL"):
+                return f"fp.{nome}" if nome in fp_cols else padrao
+
+            benef_ok = (
+                _has_table(conn, "financeiro_plano_beneficiarios")
+                and "clinica_id" in _table_columns(conn, "financeiro_plano_beneficiarios")
+            )
+
+            # ordem dos %s no SQL: clinica, [tipo], titular, [beneficiario: paciente, clinica]
+            params: list[Any] = [clinica_id]
+
+            filtro_tipo = ""
+            if modalidade:
+                filtro_tipo = "AND LOWER(COALESCE(fp.tipo, '')) = %s"
+                params.append(modalidade)
+
+            params.append(paciente_id)
+
+            exists_benef = ""
+            if benef_ok:
+                exists_benef = """
+                    OR EXISTS (
+                        SELECT 1
+                          FROM financeiro_plano_beneficiarios b
+                         WHERE b.contrato_id = fp.id
+                           AND b.paciente_id = %s
+                           AND b.clinica_id = %s
+                           AND b.ativo = 1
+                    )
+                """
+                params += [paciente_id, clinica_id]
+
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT fp.id,
+                       COALESCE(fp.tipo, '') AS tipo,
+                       COALESCE(NULLIF({col("combo_nome", "''")}, ''), NULLIF({col("nome_plano", "''")}, ''), '') AS nome,
+                       COALESCE(fp.status, 'ativo') AS status,
+                       COALESCE({col("sessoes_contratadas", "0")}, 0) AS sessoes_contratadas,
+                       COALESCE({col("sessoes_usadas", "0")}, 0) AS sessoes_usadas,
+                       {col("data_inicio")}::text AS data_inicio,
+                       {col("data_fim")}::text AS data_fim,
+                       {col("max_beneficiarios", "1")} AS max_beneficiarios,
+                       fp.paciente_id AS titular_id,
+                       COALESCE({col("paciente_nome", "''")}, '') AS titular_nome
+                  FROM financeiro_paciente_planos fp
+                 WHERE fp.clinica_id = %s
+                   AND COALESCE(fp.status, 'ativo') = 'ativo'
+                   {filtro_tipo}
+                   AND (fp.paciente_id = %s {exists_benef})
+                 ORDER BY fp.id DESC;
+            """, params)
+
+            out = []
+            for r in _fetchall_dicts(cur):
+                contratadas = _to_int(r.get("sessoes_contratadas"), 0) or 0
+                usadas = _to_int(r.get("sessoes_usadas"), 0) or 0
+                titular = r.get("titular_id") is not None and int(r["titular_id"]) == int(paciente_id)
+
+                out.append({
+                    "id": int(r["id"]),
+                    "tipo": r.get("tipo") or "",
+                    "nome": r.get("nome") or "",
+                    "status": r.get("status") or "ativo",
+                    "papel": "titular" if titular else "beneficiario",
+                    "titular_nome": r.get("titular_nome") or "",
+                    "sessoes_contratadas": contratadas,
+                    "sessoes_usadas": usadas,
+                    "sessoes_restantes": max(contratadas - usadas, 0),
+                    "data_inicio": r.get("data_inicio") or None,
+                    "data_fim": r.get("data_fim") or None,
+                    "max_beneficiarios": _to_int(r.get("max_beneficiarios"), 1) or 1,
+                })
+
+        return jsonify(out)
+
+    except Exception as e:
+        log_erro(
+            "agenda",
+            e,
+            entidade="financeiro_paciente_planos",
+            descricao="Erro ao listar contratos do paciente para agenda.",
+            detalhes={"clinica_id": clinica_id, "paciente_id": paciente_id},
+        )
+        return jsonify({"error": "Falha ao listar contratos do paciente", "detail": str(e)}), 500
 
 
 # ============================================================
@@ -547,6 +952,9 @@ def api_agregados():
             has_dia = "dia" in cols_ag
             has_ag_clinica = "clinica_id" in cols_ag
             has_pac_clinica = "clinica_id" in cols_pac
+            has_ag_pac_id = "paciente_id" in cols_ag
+            has_ag_contrato = "contrato_id" in cols_ag
+            has_ag_modalidade = "modalidade_financeira" in cols_ag
 
             nascimento_col = None
             if "nascimento" in cols_pac:
@@ -616,6 +1024,15 @@ def api_agregados():
 
             select_pront = ", MIN(p.prontuario) AS prontuario" if has_pront else ""
             select_dia = ", MIN(a.dia) AS dia_data" if has_dia else ""
+            select_modalidade = (
+                ", MAX(a.modalidade_financeira) AS modalidade_financeira" if has_ag_modalidade
+                else ", NULL::text AS modalidade_financeira"
+            )
+            select_contrato = (
+                ", MAX(a.contrato_id) AS contrato_id" if has_ag_contrato
+                else ", NULL::integer AS contrato_id"
+            )
+            group_extra = ", a.paciente_id" if has_ag_pac_id else ""
 
             if has_financeiro and has_pacientes:
                 fp_has_clinica = _has_column(conn, "financeiro_paciente_planos", "clinica_id")
@@ -631,9 +1048,20 @@ def api_agregados():
                     , MAX(COALESCE(fp.combo_nome, fp.nome_plano, '')) AS nome_combo
                     , MAX(COALESCE(fp.status, '')) AS status_comercial
                 """
+                # Contrato escolhido na agenda (contrato_id) vale para quem agendou, inclusive
+                # beneficiario; sem contrato escolhido, vale o contrato ativo do paciente titular
+                # (comportamento de sempre).
+                if has_ag_contrato:
+                    cond_contrato = """(
+                        (a.contrato_id IS NOT NULL AND fp.id = a.contrato_id)
+                        OR (a.contrato_id IS NULL AND fp.paciente_id = p.id)
+                    )"""
+                else:
+                    cond_contrato = "fp.paciente_id = p.id"
+
                 join_fin = f"""
                     LEFT JOIN financeiro_paciente_planos fp
-                           ON fp.paciente_id = p.id
+                           ON {cond_contrato}
                           AND COALESCE(fp.status, 'ativo') = 'ativo'
                           {join_fin_clinica}
                 """
@@ -649,9 +1077,19 @@ def api_agregados():
 
             join_pacientes = ""
             if has_pacientes:
-                join_pacientes = """
+                # Por ID quando o agendamento tem paciente_id; pelo nome so quando for NULL
+                # (linhas antigas / formato antigo). Homonimos nao se misturam mais.
+                if has_ag_pac_id:
+                    cond_paciente = """(
+                        (a.paciente_id IS NOT NULL AND p.id = a.paciente_id)
+                        OR (a.paciente_id IS NULL AND TRIM(UPPER(a.paciente)) = TRIM(UPPER(p.nome)))
+                    )"""
+                else:
+                    cond_paciente = "TRIM(UPPER(a.paciente)) = TRIM(UPPER(p.nome))"
+
+                join_pacientes = f"""
                     LEFT JOIN pacientes p
-                           ON TRIM(UPPER(a.paciente)) = TRIM(UPPER(p.nome))
+                           ON {cond_paciente}
                 """
                 if has_pac_clinica:
                     join_pacientes += " AND p.clinica_id = a.clinica_id "
@@ -662,17 +1100,19 @@ def api_agregados():
                     TO_CHAR(a.inicio, 'HH24:MI') AS hora_ini,
                     a.profissional,
                     a.paciente,
-                    COUNT(*) AS qtd_agendamentos,
+                    COUNT(DISTINCT a.id) AS qtd_agendamentos,
                     MIN(a.id) AS any_id,
                     {("MIN(p.id) AS paciente_id, MIN(p.telefone) AS telefone" if has_pacientes else "NULL::integer AS paciente_id, NULL::text AS telefone")}
                     {select_pront if has_pacientes else ""}
                     {select_dia}
+                    {select_modalidade}
+                    {select_contrato}
                     {select_fin}
                 FROM agendamentos a
                 {join_pacientes}
                 {join_fin if has_pacientes else ""}
                 WHERE {where_sql}
-                GROUP BY {dow_expr}, TO_CHAR(a.inicio, 'HH24:MI'), a.profissional, a.paciente
+                GROUP BY {dow_expr}, TO_CHAR(a.inicio, 'HH24:MI'), a.profissional, a.paciente{group_extra}
                 ORDER BY dow ASC, hora_ini ASC, a.profissional ASC, a.paciente ASC;
             """
 
@@ -711,6 +1151,8 @@ def api_agregados():
                     "status_comercial": r.get("status_comercial") or "",
                     "any_id": int(r.get("any_id") or 0),
                     "dia_data": r.get("dia_data") if has_dia else None,
+                    "modalidade_financeira": r.get("modalidade_financeira"),
+                    "contrato_id": int(r["contrato_id"]) if r.get("contrato_id") is not None else None,
                 })
 
         registrar_log(
@@ -863,7 +1305,9 @@ def api_get_agendamento(ag_id: int):
                        inicio,
                        fim,
                        dow_dom,
-                       valor_sessao
+                       valor_sessao,
+                       modalidade_financeira,
+                       contrato_id
                   FROM agendamentos
                  WHERE id = %s
                    AND clinica_id = %s
@@ -898,6 +1342,8 @@ def api_get_agendamento(ag_id: int):
                 "hora_de": hora_de,
                 "hora_ate": hora_ate,
                 "valor_sessao": float(row["valor_sessao"]) if row.get("valor_sessao") is not None else None,
+                "modalidade_financeira": row.get("modalidade_financeira"),
+                "contrato_id": row.get("contrato_id"),
             })
 
     except Exception as e:
@@ -928,6 +1374,28 @@ def api_editar_agendamento(ag_id: int):
     novo_prof_cpf = (data.get("profissional_cpf") or "").strip()
     valor_sessao = data.get("valor_sessao", None)
 
+    # Campos novos: ausente = nao mexe; presente (inclusive null/"") = altera/limpa.
+    tem_paciente_id = "paciente_id" in data
+    tem_modalidade = "modalidade_financeira" in data
+    tem_contrato = "contrato_id" in data
+
+    novo_pac_id = None
+    if tem_paciente_id and data.get("paciente_id") not in (None, ""):
+        novo_pac_id = _to_int(data.get("paciente_id"))
+        if novo_pac_id is None or novo_pac_id <= 0:
+            return jsonify({"error": "paciente_id inválido."}), 400
+
+    try:
+        nova_modalidade = _normalizar_modalidade(data.get("modalidade_financeira")) if tem_modalidade else None
+    except AgendaValidacao as e:
+        return jsonify({"error": e.mensagem}), e.status
+
+    novo_contrato = None
+    if tem_contrato and data.get("contrato_id") not in (None, ""):
+        novo_contrato = _to_int(data.get("contrato_id"))
+        if novo_contrato is None:
+            return jsonify({"error": "Contrato inválido."}), 400
+
     try:
         with _conn() as conn:
             ensure_schema_agenda(conn)
@@ -935,13 +1403,16 @@ def api_editar_agendamento(ag_id: int):
 
             cur.execute("""
                 SELECT id,
+                       paciente_id,
                        paciente,
                        profissional,
                        profissional_cpf,
                        inicio,
                        fim,
                        dow_dom,
-                       valor_sessao
+                       valor_sessao,
+                       modalidade_financeira,
+                       contrato_id
                   FROM agendamentos
                  WHERE id = %s
                    AND clinica_id = %s
@@ -952,6 +1423,40 @@ def api_editar_agendamento(ag_id: int):
 
             if not row:
                 return jsonify({"error": "Agendamento não encontrado nesta clínica."}), 404
+
+            # --- paciente / modalidade / contrato (so valida o que mudou) ---
+            pac_id_efetivo = row.get("paciente_id")
+            nome_paciente_novo = None
+
+            if tem_paciente_id and novo_pac_id is not None and novo_pac_id != row.get("paciente_id"):
+                pac = _paciente_da_clinica(conn, novo_pac_id, clinica_id)
+                if not pac:
+                    return jsonify({"error": "Paciente não encontrado nesta clínica."}), 404
+                pac_id_efetivo = int(pac["id"])
+                nome_paciente_novo = pac["nome"]
+
+            mod_efetiva = nova_modalidade if tem_modalidade else row.get("modalidade_financeira")
+
+            if tem_contrato:
+                contrato_efetivo = novo_contrato
+            elif tem_modalidade and mod_efetiva is None:
+                contrato_efetivo = None          # sem modalidade nao existe contrato
+            else:
+                contrato_efetivo = row.get("contrato_id")
+
+            vinculo_mudou = (
+                mod_efetiva != row.get("modalidade_financeira")
+                or contrato_efetivo != row.get("contrato_id")
+                or pac_id_efetivo != row.get("paciente_id")
+            )
+
+            if vinculo_mudou:
+                try:
+                    mod_efetiva, contrato_efetivo = _validar_vinculo_financeiro(
+                        conn, clinica_id, pac_id_efetivo, mod_efetiva, contrato_efetivo
+                    )
+                except AgendaValidacao as e:
+                    return jsonify({"error": e.mensagem}), e.status
 
             dt_ini = _to_dt(row["inicio"])
             dt_fim = _to_dt(row["fim"])
@@ -1034,6 +1539,18 @@ def api_editar_agendamento(ag_id: int):
                 set_parts.append("valor_sessao = %s")
                 params_up.append(val_float)
 
+            if vinculo_mudou:
+                set_parts.append("modalidade_financeira = %s")
+                params_up.append(mod_efetiva)
+                set_parts.append("contrato_id = %s")
+                params_up.append(contrato_efetivo)
+
+            if nome_paciente_novo is not None:
+                set_parts.append("paciente_id = %s")
+                params_up.append(pac_id_efetivo)
+                set_parts.append("paciente = %s")
+                params_up.append(nome_paciente_novo)
+
             params_up.extend([ag_id, clinica_id])
 
             cur.execute(f"""
@@ -1056,10 +1573,17 @@ def api_editar_agendamento(ag_id: int):
                 "inicio": dt_ini_new.isoformat(),
                 "fim": dt_fim_new.isoformat(),
                 "profissional": novo_prof_nome,
+                "modalidade_financeira": mod_efetiva,
+                "contrato_id": contrato_efetivo,
             },
         )
 
-        return jsonify({"ok": True, "updated_id": ag_id})
+        return jsonify({
+            "ok": True,
+            "updated_id": ag_id,
+            "modalidade_financeira": mod_efetiva,
+            "contrato_id": contrato_efetivo,
+        })
 
     except Exception as e:
         log_erro(
@@ -1155,18 +1679,35 @@ def api_excluir_grupo():
         if not prof or not pac:
             return jsonify({"error": "Parâmetros 'profissional' e 'paciente' são obrigatórios."}), 400
 
+        # paciente_id e opcional (telas antigas nao enviam). Quando vem, separa homonimos:
+        # apaga as linhas daquele paciente e as antigas sem paciente_id (NULL) com o mesmo nome.
+        pac_id_param = (request.args.get("paciente_id") or "").strip()
+        pac_id = None
+        if pac_id_param:
+            pac_id = _to_int(pac_id_param)
+            if pac_id is None or pac_id <= 0:
+                return jsonify({"error": "paciente_id inválido."}), 400
+
         with _conn() as conn:
             ensure_schema_agenda(conn)
             cur = conn.cursor()
 
-            cur.execute("""
+            filtro_pac_id = ""
+            params_del = [clinica_id, int(dow), prof, pac, hora_ini]
+
+            if pac_id is not None:
+                filtro_pac_id = "AND (paciente_id = %s OR paciente_id IS NULL)"
+                params_del.append(pac_id)
+
+            cur.execute(f"""
                 DELETE FROM agendamentos
                  WHERE clinica_id = %s
                    AND dow_dom = %s
                    AND TRIM(UPPER(profissional)) = TRIM(UPPER(%s))
                    AND TRIM(UPPER(paciente)) = TRIM(UPPER(%s))
-                   AND TO_CHAR(inicio, 'HH24:MI') = %s;
-            """, (clinica_id, int(dow), prof, pac, hora_ini))
+                   AND TO_CHAR(inicio, 'HH24:MI') = %s
+                   {filtro_pac_id};
+            """, params_del)
 
             deleted = cur.rowcount or 0
             conn.commit()
@@ -1182,6 +1723,7 @@ def api_excluir_grupo():
                 "hora_ini": hora_ini,
                 "profissional": prof,
                 "paciente": pac,
+                "paciente_id": pac_id,
                 "deleted": deleted,
             },
         )
