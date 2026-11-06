@@ -1487,3 +1487,28 @@
     min-height: 88px;
   }
 }
+/* =========================================================
+   CATÁLOGOS (planos, avulsos, avaliações)
+   ========================================================= */
+.com-toolbar--catalogo{
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(130px, .6fr) auto;
+}
+
+#secaoCatalogos .com-panel-mode{
+  margin-top: 14px;
+}
+
+#secaoCatalogos .com-panel-mode > .com-section{
+  margin-top: 14px;
+  box-shadow: none;
+}
+
+.com-field-erro{
+  border-color: #dc2626 !important;
+}
+
+@media (max-width: 920px){
+  .com-toolbar--catalogo{
+    grid-template-columns: 1fr 1fr;
+  }
+}

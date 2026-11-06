@@ -6,6 +6,98 @@
 <link rel="stylesheet" href="{{ url_for('financeiro.static', filename='css/comercial.css') }}">
 {% endblock %}
 
+{% macro catalogo_panel(chave, singular, plural, artigo) %}
+      <div class="com-panel-mode" id="catPainel-{{ chave }}" data-catalogo="{{ chave }}" {% if chave != 'planos' %}hidden{% endif %}>
+        <div class="com-actions">
+          <button type="button" class="com-btn com-btn--primary" data-cat-action="toggle-cadastro" aria-expanded="false">
+            + Cadastrar {{ singular }}
+          </button>
+          <button type="button" class="com-btn com-btn--ghost" data-cat-action="toggle-gestao" aria-expanded="false">
+            Gerenciar {{ plural }}
+          </button>
+        </div>
+
+        <!-- CADASTRO -->
+        <section class="com-card com-section" data-cat-role="painel-cadastro" hidden>
+          <div class="com-head">
+            <div>
+              <span class="com-eyebrow">Cadastro</span>
+              <h2>{{ artigo|capitalize }} {{ singular }}</h2>
+              <p data-cat-role="ajuda-cadastro"></p>
+            </div>
+          </div>
+
+          <form class="com-form-grid" data-cat-role="form" novalidate>
+            <div class="com-form-grid-campos" data-cat-role="campos" style="display:contents;"></div>
+
+            <div class="com-field com-field--full">
+              <label class="com-switch">
+                <input type="checkbox" data-cat-field="ativo" checked>
+                <span class="com-switch-ui"></span>
+                <span class="com-switch-text">{{ singular|capitalize }} ativo</span>
+              </label>
+            </div>
+
+            <div class="com-field com-field--full">
+              <div class="com-actions">
+                <button type="submit" class="com-btn com-btn--primary" data-cat-role="salvar">Salvar {{ singular }}</button>
+                <button type="button" class="com-btn com-btn--ghost" data-cat-action="limpar">Limpar</button>
+                <button type="button" class="com-btn com-btn--ghost" data-cat-action="fechar-cadastro">Fechar</button>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <!-- GESTÃO -->
+        <section class="com-card com-section" data-cat-role="painel-gestao" hidden>
+          <div class="com-head">
+            <div>
+              <span class="com-eyebrow">Gestão</span>
+              <h2>{{ plural|capitalize }} cadastrados</h2>
+              <p>Edite os campos e use "Salvar alterações". Ativar/desativar vale na hora. Não há exclusão: o histórico financeiro continua apontando para o cadastro.</p>
+            </div>
+          </div>
+
+          <div class="com-toolbar com-toolbar--catalogo">
+            <div class="com-field">
+              <label class="com-label">Pesquisar</label>
+              <input class="com-input" type="text" data-cat-role="filtro-busca" placeholder="Nome ou descrição">
+            </div>
+
+            <div class="com-field">
+              <label class="com-label">Profissional</label>
+              <select class="com-select" data-cat-role="filtro-prof"></select>
+            </div>
+
+            <div class="com-field">
+              <label class="com-label">Status</label>
+              <select class="com-select" data-cat-role="filtro-ativo">
+                <option value="">Todos</option>
+                <option value="1">Ativos</option>
+                <option value="0">Inativos</option>
+              </select>
+            </div>
+
+            <div class="com-toolbar-actions">
+              <button type="button" class="com-btn com-btn--ghost" data-cat-action="atualizar">Atualizar</button>
+            </div>
+          </div>
+
+          <div class="com-actions" style="margin-bottom:14px;">
+            <button type="button" class="com-btn com-btn--primary" data-cat-action="salvar-tudo">Salvar alterações</button>
+            <button type="button" class="com-btn com-btn--ghost" data-cat-action="fechar-gestao">Fechar</button>
+          </div>
+
+          <div class="combo-grid" data-cat-role="lista">
+            <div class="com-empty">
+              <strong>Nenhum item carregado.</strong>
+              <span>A lista aparece aqui com os campos abertos para edição.</span>
+            </div>
+          </div>
+        </section>
+      </div>
+{% endmacro %}
+
 {% block content %}
 <section class="com-page">
   <div class="com-shell">
@@ -188,6 +280,30 @@
           </div>
         </div>
       </section>
+    </section>
+
+    <!-- SEÇÃO 1B · CATÁLOGOS DE PLANOS, AVULSOS E AVALIAÇÕES -->
+    <section class="com-card com-section" id="secaoCatalogos">
+      <div class="com-head">
+        <div>
+          <span class="com-eyebrow">Catálogos</span>
+          <h2>Planos, atendimentos avulsos e avaliações</h2>
+          <p>
+            Cada item pertence a um profissional. Planos têm mensalidade, duração, consultas por período
+            e limite de beneficiários (plano familiar). Avulsos e avaliações têm um valor padrão por profissional.
+          </p>
+        </div>
+      </div>
+
+      <div class="com-segment" role="tablist" aria-label="Catálogo">
+        <button type="button" class="com-segment-btn is-active" data-cat-tab="planos" aria-selected="true">Planos</button>
+        <button type="button" class="com-segment-btn" data-cat-tab="avulsos" aria-selected="false">Atendimentos avulsos</button>
+        <button type="button" class="com-segment-btn" data-cat-tab="avaliacoes" aria-selected="false">Avaliações</button>
+      </div>
+
+      {{ catalogo_panel('planos', 'plano', 'planos', 'novo') }}
+      {{ catalogo_panel('avulsos', 'atendimento avulso', 'atendimentos avulsos', 'novo') }}
+      {{ catalogo_panel('avaliacoes', 'avaliação', 'avaliações', 'nova') }}
     </section>
 
     <!-- SEÇÃO 2 · PACIENTE -->
@@ -562,4 +678,5 @@
 
 {% block extra_js %}
 <script src="{{ url_for('financeiro.static', filename='js/comercial.js') }}"></script>
+<script src="{{ url_for('financeiro.static', filename='js/catalogos.js') }}"></script>
 {% endblock %}

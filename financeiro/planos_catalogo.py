@@ -22,6 +22,8 @@ from .financas import (
     _to_bool,
     _now_iso,
     _is_postgres_conn,
+    _list_columns,
+    _table_exists,
     _add_clinica_where,
     _add_clinica_insert,
     _validar_profissional,
@@ -284,6 +286,72 @@ def api_alterar_status_plano(plano_id: int):
     except Exception as e:
         conn.rollback()
         return _fail(f"Erro ao alterar status do plano: {e}", 500)
+
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ profissionais (select dos catálogos)
+
+@financeiro_bp.get("/api/profissionais")
+@require_permission("financeiro", "ver")
+def api_profissionais_catalogo():
+    """Usuários ATIVOS da clínica atual, para escolher o profissional (usuarios.id) nos
+    catálogos de combos, planos, avulsos e avaliações.
+
+    É exatamente o conjunto que _validar_profissional aceita (mesma clínica). Quem tem
+    role PROFISSIONAL vem marcado (`profissional: true`) para a tela agrupar primeiro;
+    os demais usuários continuam listados, para não esconder um dono de catálogo cujo
+    cadastro use outro perfil. Não expõe CPF.
+    """
+    ensure_financeiro_schema()
+
+    conn = _conn()
+
+    try:
+        if not _table_exists(conn, "usuarios"):
+            return _ok(items=[])
+
+        cols = _list_columns(conn, "usuarios")
+
+        if "nome" not in cols:
+            return _ok(items=[])
+
+        where = ["TRIM(COALESCE(u.nome, '')) <> ''"]
+        params = []
+
+        if "is_active" in cols:
+            where.append("(u.is_active IS NULL OR u.is_active = TRUE)" if _is_postgres_conn(conn)
+                         else "(u.is_active IS NULL OR u.is_active <> 0)")
+
+        _add_clinica_where(conn, "usuarios", "u", where, params)
+
+        role_expr = "UPPER(TRIM(COALESCE(u.role, '')))" if "role" in cols else "''"
+        cbo_expr = "TRIM(COALESCE(CAST(u.cbo AS TEXT), ''))" if "cbo" in cols else "''"
+
+        cur = _execute(conn, f"""
+            SELECT u.id, TRIM(u.nome) AS nome, {role_expr} AS role, {cbo_expr} AS cbo
+            FROM usuarios u
+            WHERE {" AND ".join(where)}
+            ORDER BY TRIM(u.nome) ASC
+            LIMIT 500
+        """, params)
+
+        itens = []
+        for r in _fetchall_dict(cur):
+            role = r.get("role") or ""
+            itens.append({
+                "id": r["id"],
+                "nome": r["nome"],
+                "role": role,
+                "cbo": r.get("cbo") or "",
+                "profissional": role in ("PROFISSIONAL", "PROFISSIONAIS"),
+            })
+
+        return _ok(items=itens)
+
+    except Exception as e:
+        return _fail(f"Erro ao listar profissionais: {e}", 500)
 
     finally:
         conn.close()
