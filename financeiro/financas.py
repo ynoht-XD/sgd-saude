@@ -716,15 +716,16 @@ def api_buscar_pacientes():
             like = "ILIKE" if _is_postgres_conn(conn) else "LIKE"
             q_digits = _normalize_digits(q)
 
-            where.append(f"""
-                (
-                    COALESCE(nome, '') {like} ?
-                    OR REPLACE(REPLACE(REPLACE({cpf_expr}, '.', ''), '-', ''), ' ', '') {like} ?
-                    OR REPLACE(REPLACE(REPLACE({cns_expr}, '.', ''), '-', ''), ' ', '') {like} ?
-                )
-            """)
+            # Sem dígitos no texto, CPF/CNS ficam de fora: '%%' casaria com todos os pacientes.
+            filtros = [f"COALESCE(nome, '') {like} ?"]
+            params.append(f"%{q}%")
 
-            params += [f"%{q}%", f"%{q_digits}%", f"%{q_digits}%"]
+            if q_digits:
+                filtros.append(f"REPLACE(REPLACE(REPLACE({cpf_expr}, '.', ''), '-', ''), ' ', '') {like} ?")
+                filtros.append(f"REPLACE(REPLACE(REPLACE({cns_expr}, '.', ''), '-', ''), ' ', '') {like} ?")
+                params += [f"%{q_digits}%", f"%{q_digits}%"]
+
+            where.append("(" + " OR ".join(filtros) + ")")
 
         params.append(limit)
 

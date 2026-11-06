@@ -58,11 +58,6 @@
 
   const digits = (v) => String(v ?? "").replace(/\D+/g, "");
 
-  const semAcento = (v) => String(v ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-
   function debounce(fn, delay = 250) {
     let timer = null;
     return (...args) => {
@@ -244,24 +239,14 @@
     }
 
     try {
-      const data = await requestJSON(`${BASE}/pacientes/buscar?q=${encodeURIComponent(termo)}&limit=100`);
+      const data = await requestJSON(`${BASE}/pacientes/buscar?q=${encodeURIComponent(termo)}`);
 
       // resposta de uma digitação antiga: descarta
       if (minha !== state.seq) return;
 
+      // quem já está no contrato não é candidato
       const jaNaLista = new Set(state.itens.map((it) => String(it.paciente_id)));
-      const nTermo = semAcento(termo);
-      const dTermo = digits(termo);
-
-      // A busca do servidor devolve pacientes que não batem com o nome digitado
-      // (o filtro de CPF/CNS casa tudo quando não há dígitos). Aqui só mostramos
-      // quem realmente combina com o que foi digitado.
-      const itens = (Array.isArray(data.items) ? data.items : []).filter((it) => {
-        if (jaNaLista.has(String(it.id))) return false;
-        if (semAcento(it.nome).includes(nTermo)) return true;
-        if (!dTermo) return false;
-        return digits(it.cpf).includes(dTermo) || digits(it.cns).includes(dTermo);
-      });
+      const itens = (Array.isArray(data.items) ? data.items : []).filter((it) => !jaNaLista.has(String(it.id)));
 
       els.resultados.hidden = false;
 
