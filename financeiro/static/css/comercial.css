@@ -1512,3 +1512,72 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* =========================================================
+   BENEFICIÁRIOS (plano familiar)
+   ========================================================= */
+.com-benef-vagas{
+  color: var(--com-muted);
+  font-size: .9rem;
+  margin-bottom: 10px;
+}
+
+.com-benef-lista{
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.com-benef-item{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--com-line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.com-benef-item--titular{
+  background: #f8fbff;
+}
+
+.com-benef-nome{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.com-benef-nome strong{
+  color: var(--com-text);
+  overflow-wrap: anywhere;
+}
+
+.com-benef-nome span{
+  color: var(--com-muted);
+  font-size: .84rem;
+}
+
+.com-benef-add{
+  display: grid;
+  gap: 12px;
+}
+
+.com-benef-add.is-cheio .com-input{
+  opacity: .6;
+}
+
+.com-benef-add-actions{
+  display: flex;
+  justify-content: flex-end;
+}
+
+.com-benef-aviso{
+  min-height: 1.2em;
+  margin-top: 10px;
+  color: #15803d;
+  font-size: .9rem;
+}

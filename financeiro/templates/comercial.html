@@ -684,9 +684,54 @@
     </footer>
   </form>
 </dialog>
+
+<!-- MODAL BENEFICIÁRIOS (plano familiar) -->
+<dialog id="modalBeneficiarios" class="com-dialog" aria-labelledby="benefTitulo">
+  <div class="com-dialog-card">
+    <header class="com-dialog-head">
+      <div>
+        <h3 id="benefTitulo">Gerenciar beneficiários</h3>
+        <p id="benefSubtitulo">—</p>
+      </div>
+      <button type="button" class="com-dialog-close" id="benefFecharX" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="com-dialog-body">
+      <div class="com-benef-vagas" id="benefVagas" aria-live="polite"></div>
+
+      <ul class="com-benef-lista" id="benefLista"></ul>
+
+      <div class="com-benef-add" id="benefAddBox">
+        <div class="com-field">
+          <label class="com-label" for="benefBusca">Adicionar beneficiário</label>
+          <input class="com-input" id="benefBusca" type="text" placeholder="Nome, CPF ou CNS do paciente" autocomplete="off">
+          <div id="benefResultados" class="com-search-results" hidden></div>
+        </div>
+
+        <div class="com-patient-box" id="benefSelecionado">
+          <div class="com-patient-empty">Nenhum paciente selecionado.</div>
+        </div>
+
+        <div class="com-benef-add-actions">
+          <button type="button" class="com-btn com-btn--primary" id="benefAdicionar" disabled>Adicionar</button>
+        </div>
+      </div>
+
+      <div class="com-benef-aviso" id="benefAviso" role="status" aria-live="polite"></div>
+    </div>
+
+    <footer class="com-dialog-actions">
+      <div class="com-dialog-actions-left"></div>
+      <div class="com-dialog-actions-right">
+        <button type="button" class="com-btn com-btn--ghost" id="benefFechar">Fechar</button>
+      </div>
+    </footer>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('financeiro.static', filename='js/comercial.js') }}"></script>
 <script src="{{ url_for('financeiro.static', filename='js/catalogos.js') }}"></script>
+<script src="{{ url_for('financeiro.static', filename='js/beneficiarios.js') }}"></script>
 {% endblock %}

@@ -1094,6 +1094,13 @@
             </div>
 
             <div class="com-vinculo-actions">
+              ${item.tipo === "plano" && Number(item.max_beneficiarios || 1) > 1 ? `
+              <button type="button" class="com-btn com-btn--ghost" data-action="gerenciar-beneficiarios"
+                      data-id="${item.id}" data-max="${Number(item.max_beneficiarios)}"
+                      data-nome="${escapeHtml(item.paciente_nome || "")}"
+                      data-plano="${escapeHtml(nomeCombo)}">
+                Gerenciar beneficiários
+              </button>` : ""}
               <button type="button" class="com-btn com-btn--ghost" data-action="editar-vinculo" data-id="${item.id}">
                 Editar
               </button>
@@ -1446,6 +1453,11 @@
     els.btnDesvincularAtendimentosModal?.addEventListener("click", desvincularAtendimentosModal);
     els.btnExcluirVinculoModal?.addEventListener("click", deleteVinculoModal);
     els.btnFecharVinculoModal?.addEventListener("click", () => closeDialog(els.modalVinculo));
+
+    // beneficiários (beneficiarios.js): quem entra/sai de um plano familiar muda a lista "sem vínculo"
+    document.addEventListener("financeiro:beneficiarios-alterados", () => {
+      loadPacientesSemVinculo().catch(err => toast(err.message));
+    });
 
     // fechar busca ao clicar fora
     document.addEventListener("click", (ev) => {
