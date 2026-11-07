@@ -86,6 +86,30 @@
   --info-line: #bfdbfe;
   --info-ink: #1d4ed8;
 
+  /* UX.2 · LOTE 0.5 · mais tokens NOVOS e inertes (nenhuma regra os usa ainda).
+     --line-soft: linha mais clara que --line, para separar linhas de tabela/lista/cartao.
+       #eef2f7 = valor mais usado como borda clara (26 usos em 17 arquivos), ja era o --line-soft
+       do agenda.css, e os outros candidatos claros (#edf2f7, #f0f2f5, #f3f4f6, #f1f5f9) ficam a
+       dE <= 2,2 dele. Nao e para texto (contraste 1,1:1 sobre branco; e uma linha decorativa). */
+  --line-soft: #eef2f7;
+
+  /* Status "chip": fundo nivel 100 + texto escuro, para etiquetas/pilulas/botoes suaves de status.
+     Diferente de --x-soft (nivel 50, para areas grandes: alerta, linha realcada). Par = o texto
+     que mais aparece JUNTO do fundo na mesma regra, nos CSS e <style> do sistema.
+     Contraste do texto sobre o proprio fundo: success 6,5:1 | warning 6,4:1 | danger 6,8:1 | info 5,5:1.
+     (info usa #1d4ed8 = blue-700, nao #1e3a8a: 7 usos juntos com #dbeafe contra 0; mesmo valor do --info-ink.) */
+  --success-chip: #dcfce7;
+  --success-chip-ink: #166534;
+
+  --warning-chip: #fef3c7;
+  --warning-chip-ink: #92400e;
+
+  --danger-chip: #fee2e2;
+  --danger-chip-ink: #991b1b;
+
+  --info-chip: #dbeafe;
+  --info-chip-ink: #1d4ed8;
+
   /* Aliases DEPRECADOS: nomes antigos que os modulos usam, apontando para o canonico.
      Quem define o proprio valor no seu CSS continua valendo (o modulo carrega depois).
      Nao usar em codigo novo; serao removidos quando o ultimo uso migrar.
