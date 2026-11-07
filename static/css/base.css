@@ -19,7 +19,7 @@
   --bg: #f4f7fb;
   --bg-soft: #eef4ff;
   --surface: #ffffff;
-  --surface-2: #f8fbff;
+  --surface-2: #f8fafc;
 
   --text: #0f172a;
   --muted: #64748b;
@@ -49,6 +49,56 @@
   --radius-lg: 24px;
 
   --ease: 220ms cubic-bezier(.2,.8,.2,1);
+
+  /* =======================================================
+     UX.2 · LOTE 0 · FUNDACAO DE TOKENS
+     Tokens NOVOS: ainda nao sao usados por nenhuma regra (nenhum efeito visual). Os lotes
+     seguintes trocam as cores fixas dos CSS por estes nomes. O CSS dos modulos deve usar
+     os nomes canonicos abaixo; o valor de cada tema (UX.3) sera trocado so neste arquivo.
+     ======================================================= */
+
+  /* Neutros que faltavam (papeis hoje escritos como hex solto) */
+  --text-2: #334155;            /* texto secundario: rotulos, corpo de tabela (slate-700) */
+  --surface-3: #f1f5f9;         /* hover, zebra, fundo de pilula (slate-100) */
+  --on-brand: #ffffff;          /* texto/icone SOBRE cor solida (botao, badge solido).
+                                   Nunca usar --surface para isso: no tema escuro o
+                                   --surface escurece e o texto sobre o botao tem que ficar claro */
+  --brand-tint: #eff6ff;        /* fundo claro de destaque da marca, solido (blue-50) */
+
+  /* Status. Cada um: --x (solido, ja existente acima), --x-soft (fundo), --x-line (borda),
+     --x-ink (texto sobre o fundo suave; contraste >= 6:1 sobre --x-soft).
+     Aviso: branco sobre --success (3,3:1) e --warning (2,1:1) NAO passa de 4,5:1; para texto
+     use --x-ink sobre --x-soft. Branco sobre --danger (4,8:1) e --info (5,2:1) passa. */
+  --success-soft: #ecfdf5;
+  --success-line: #a7f3d0;
+  --success-ink: #065f46;
+
+  --warning-soft: #fffbeb;
+  --warning-line: #fde68a;
+  --warning-ink: #92400e;
+
+  --danger-soft: #fef2f2;
+  --danger-line: #fecaca;
+  --danger-ink: #991b1b;
+
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+  --info-line: #bfdbfe;
+  --info-ink: #1d4ed8;
+
+  /* Aliases DEPRECADOS: nomes antigos que os modulos usam, apontando para o canonico.
+     Quem define o proprio valor no seu CSS continua valendo (o modulo carrega depois).
+     Nao usar em codigo novo; serao removidos quando o ultimo uso migrar.
+     (--border-color NAO entra aqui: os usos em bibliotecas.css tem fallback rgba(0,0,0,.08/.12)
+     diferente de --line; ele sai junto com a migracao desse arquivo.) */
+  --border: var(--line);
+  --card: var(--surface);
+  --panel: var(--surface);
+  --primary: var(--brand);
+  --primary-600: var(--brand-2);
+  --brand-600: var(--brand-2);
+  --brand-50: var(--brand-tint);
+  --warn: var(--warning);
 }
 
 /* =========================================================
