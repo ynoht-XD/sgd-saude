@@ -4,12 +4,9 @@
    =============================== */
 
 :root {
-  --bg: #f3f4f6;            /* cinza claro */
   --card: var(--surface);          /* card branco */
   --text: #111827;          /* cinza 900 */
   --muted: #6b7280;         /* cinza 500/600 */
-  --line: #e5e7eb;          /* borda leve */
-           /* azul principal */
   --brand-600: var(--brand-2);
   --accent: #10b981;        /* verde sucesso */
   --warn: var(--warning);          /* amarelo */
@@ -70,7 +67,7 @@ body {
 
 .btn.primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 .btn.primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
-.btn.ghost   { background: #f9fafb; }
+.btn.ghost   { background: var(--surface-2); }
 
 /* ===== cards ===== */
 .card {
@@ -127,7 +124,7 @@ body {
 
 .field input[readonly],
 .field select[disabled] {
-  background: #f9fafb;
+  background: var(--surface-2);
   color: var(--muted);
 }
 
@@ -168,7 +165,7 @@ body {
   border-bottom: 1px solid #f3f4f6;
 }
 .sugg-item:last-child { border-bottom: 0; }
-.sugg-item:hover, .sugg-item[aria-selected="true"] { background: #f3f7ff; }
+.sugg-item:hover, .sugg-item[aria-selected="true"] { background: var(--brand-tint); }
 
 /* ===== save bar (sticky) ===== */
 .save-bar {
@@ -214,7 +211,7 @@ input::placeholder, textarea::placeholder { color: #9ca3af; }
 }
 .table-like th, .table-like td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
 .table-like thead th { background: var(--surface-2); font-weight: 700; font-size: .9rem; }
-.table-like tbody tr:hover { background: #f9fafb; }
+.table-like tbody tr:hover { background: var(--surface-2); }
 
 /* ===== badges (se for usar) ===== */
 .badge {
