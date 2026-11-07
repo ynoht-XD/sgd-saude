@@ -20,8 +20,12 @@
 
 /* =========================================================
    TOKENS
+   Os <dialog> ficam FORA da <section class="com-page"> no HTML (sao irmaos dela), entao
+   herdariam nenhum token: var(--com-*) nao resolvia e botoes/bordas/sombras dos dialogos
+   sumiam. Por isso os tokens tambem sao declarados em .com-dialog (mesmos valores).
    ========================================================= */
-.com-page{
+.com-page,
+.com-dialog{
   --com-bg: transparent;
   --com-card: #ffffff;
   --com-card-soft: #fbfdff;
