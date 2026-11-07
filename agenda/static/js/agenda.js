@@ -6,7 +6,8 @@
   const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content || "";
 
   const ENDPOINT_SAVE         = meta("agenda-save-endpoint");
-  const ENDPOINT_SUGGEST      = meta("pacientes-suggest-endpoint");
+  const ENDPOINT_SUGGEST      = meta("pacientes-suggest-endpoint");        // antigo (so nome) - usado so como reserva
+  const ENDPOINT_PAC_BUSCA    = meta("pacientes-busca-endpoint") || "/agenda/api/pacientes"; // novo: devolve ID
   const ENDPOINT_PROS         = meta("profissionais-endpoint");
   const ENDPOINT_AGREG        = meta("agregados-endpoint");
   const ENDPOINT_EXPORT       = meta("agregados-export-endpoint");
@@ -17,6 +18,22 @@
   // CPF do profissional logado vindo do template
   const CURRENT_PROF_CPF = meta("current-prof-cpf") || "";
   const onlyDigits = (v) => (v || "").replace(/\D/g, "");
+
+  const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+
+  const MODALIDADE_LABEL = { combo: "Combo", plano: "Plano" };
+  const modalidadeLabel = (m) => MODALIDADE_LABEL[String(m || "").toLowerCase()] || "";
+
+  const chaveNome = (n) => String(n || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/\s+/g, " ").trim();
+
+  const dataBR = (iso) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+  };
 
   function whatsappHref(numero) {
     const digits = onlyDigits(numero);
@@ -69,6 +86,12 @@
   // ================== elementos do formulário (cadastro) ==================
   const elPacienteBusca = $("#paciente_busca");
   const elPacienteNome  = $("#paciente_nome");
+  const elPacienteId    = $("#paciente_id");
+  const elPacStatus     = $("#paciente_status");
+  const elModalidade    = $("#modalidade_select");
+  const elContratoWrap  = $("#ag_contrato_wrap");
+  const elContrato      = $("#ag_contrato");
+  const elContratoAviso = $("#ag_contrato_aviso");
   const elSug           = $("#sugestoes");
   const elMsg           = $("#msg");
 
@@ -93,6 +116,13 @@
   const elEditQtd         = $("#ag_edit_qtd");
   const elEditValor       = $("#ag_edit_valor");
   const elEditMsg         = $("#ag_edit_msg");
+  const elEditResumo      = $("#ag_edit_resumo");
+  const elEditTrocar      = $("#ag_edit_trocar");
+  const elEditVincMod     = $("#ag_edit_vinculo_form_mod");
+  const elEditVincCtr     = $("#ag_edit_vinculo_form_ctr");
+  const elEditModalidade  = $("#ag_edit_modalidade");
+  const elEditContrato    = $("#ag_edit_contrato");
+  const elEditContratoAv  = $("#ag_edit_contrato_aviso");
   const elBtnSalvarEdicao = $("#btnAgendaSalvarEdicao");
 
   // ================== elementos dos filtros/lista ==================
@@ -200,29 +230,135 @@
     }
   }
 
+  // ================== contratos do paciente (usado no formulario e no modal) ==================
+  async function buscarContratos(pacienteId, modalidade) {
+    const base = ENDPOINT_PAC_BUSCA.replace(/\/$/, "");
+    const url = new URL(`${base}/${encodeURIComponent(pacienteId)}/contratos`, location.origin);
+    if (modalidade) url.searchParams.set("modalidade", modalidade);
+    const res = await fetch(url.toString());
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(data)) {
+      throw new Error((data && data.error) || "Falha ao carregar contratos.");
+    }
+    return data;
+  }
+
+  function textoContrato(c) {
+    const nome = c.nome || modalidadeLabel(c.tipo) || "Contrato";
+    const sess = `${c.sessoes_usadas}/${c.sessoes_contratadas} sessões`;
+    const papel = c.papel === "beneficiario"
+      ? ` · beneficiário${c.titular_nome ? " de " + c.titular_nome : ""}`
+      : "";
+    return `${nome} · ${sess}${papel}`;
+  }
+
+  // Preenche um <select> de contrato. `selecionado` = contrato ja gravado (mantido mesmo que
+  // nao esteja mais entre os ativos, para nao ser apagado sem querer).
+  // Devolve { lista, erro } ou null se o usuario mudou paciente/modalidade no meio do caminho.
+  async function preencherSelectContrato(selectEl, avisoEl, pacienteId, modalidade, selecionado, aindaValido) {
+    const SEM = `<option value="">Sem contrato vinculado</option>`;
+    selectEl.innerHTML = SEM;
+    selectEl.disabled = true;
+    avisoEl.classList.remove("is-ok", "is-aviso", "is-erro");
+    avisoEl.textContent = "Carregando contratos…";
+
+    let lista = [];
+    let erro = null;
+    try {
+      lista = await buscarContratos(pacienteId, modalidade);
+    } catch (e) {
+      erro = e;
+    }
+    if (aindaValido && !aindaValido()) return null;
+
+    const opcoes = lista.map((c) =>
+      `<option value="${esc(c.id)}">${esc(textoContrato(c))}</option>`
+    );
+    const idSel = selecionado != null && selecionado !== "" ? String(selecionado) : "";
+    if (idSel && !lista.some((c) => String(c.id) === idSel)) {
+      opcoes.push(`<option value="${esc(idSel)}">Contrato #${esc(idSel)} · não consta entre os ativos</option>`);
+    }
+    selectEl.innerHTML = SEM + opcoes.join("");
+    selectEl.disabled = false;
+
+    if (erro) {
+      avisoEl.textContent = "Não foi possível carregar os contratos. Você pode salvar mesmo assim, sem contrato.";
+      avisoEl.classList.add("is-erro");
+    } else if (idSel) {
+      selectEl.value = idSel;
+      avisoEl.textContent = "";
+    } else if (!lista.length) {
+      avisoEl.textContent = "Sem contrato ativo. Você pode salvar mesmo assim.";
+      avisoEl.classList.add("is-aviso");
+    } else if (lista.length === 1) {
+      selectEl.value = String(lista[0].id);
+      avisoEl.textContent = "Contrato pré-selecionado (único ativo).";
+      avisoEl.classList.add("is-ok");
+    } else {
+      avisoEl.textContent = `${lista.length} contratos ativos: escolha um ou deixe sem vínculo.`;
+    }
+    return { lista, erro };
+  }
+
   // ================== autocomplete paciente ==================
+  let buscaSeq = 0;          // descarta respostas de buscas antigas
+  let contratoSeq = 0;       // idem para o seletor de contrato do formulario
+
   function hideSuggest() {
     if (!elSug) return;
     elSug.classList.add("hidden");
     elSug.innerHTML = "";
   }
 
-  function renderSuggest(list) {
+  function setPacStatus(texto, tipo) {
+    if (!elPacStatus) return;
+    elPacStatus.textContent = texto || "";
+    elPacStatus.className = "ag-hint" + (tipo ? ` is-${tipo}` : "");
+  }
+
+  function limparSelecaoPaciente() {
+    if (elPacienteNome) elPacienteNome.value = "";
+    if (elPacienteId)   elPacienteId.value = "";
+  }
+
+  // `comId` = true quando a lista veio do endpoint novo (tem id); false = reserva (so nome)
+  function renderSuggest(list, comId = true) {
     if (!elSug) return;
     if (!list || !list.length) {
       hideSuggest();
       return;
     }
+
+    // homonimos: mesmo nome (sem acento/caixa) aparecendo mais de uma vez na lista
+    const contagem = {};
+    list.forEach((it) => { const k = chaveNome(it.nome); contagem[k] = (contagem[k] || 0) + 1; });
+
     const html = `
       <div class="suggest-list">
         ${list.map(it => {
           const nome  = (it.nome || "").toString();
+          const homonimo = comId && contagem[chaveNome(nome)] > 1;
           const idade = it.idade != null ? `${it.idade} anos` : "idade —";
-          const cpf   = it.cpf ? `${it.cpf}` : "CPF —";
+          let sub;
+          if (comId) {
+            const partes = [];
+            if (homonimo) partes.push(`<span class="ag-sug-homonimo">Homônimo</span>`);
+            partes.push(esc(idade));
+            if (homonimo) {
+              const nasc = dataBR(it.nascimento);
+              if (nasc) partes.push(`nasc. ${esc(nasc)}`);
+              partes.push(it.cpf ? `CPF ${esc(it.cpf)}` : "CPF não informado");
+            }
+            if (it.prontuario) partes.push(`Pront.: ${esc(it.prontuario)}`);
+            sub = partes.join(" • ");
+          } else {
+            const cpf = it.cpf ? `${it.cpf}` : "CPF —";
+            sub = esc(`${idade} • ${cpf}${it.prontuario ? ` • Pront.: ${it.prontuario}` : ""}`);
+          }
           return `
-            <div class="suggest-item" data-nome="${encodeURIComponent(nome)}">
-              <span class="title">${nome}</span>
-              <span class="sub">${idade} • ${cpf}${it.prontuario ? ` • Pront.: ${it.prontuario}` : ""}</span>
+            <div class="suggest-item" data-nome="${encodeURIComponent(nome)}" data-id="${comId && it.id != null ? esc(it.id) : ""}">
+              <span class="title">${esc(nome)}</span>
+              <span class="sub">${sub}</span>
             </div>
           `;
         }).join("")}
@@ -234,32 +370,106 @@
     $$(".suggest-item", elSug).forEach(item => {
       item.addEventListener("click", () => {
         const nome = decodeURIComponent(item.dataset.nome || "");
+        const id   = item.dataset.id || "";
         if (elPacienteBusca) elPacienteBusca.value = nome;
         if (elPacienteNome)  elPacienteNome.value  = nome;
+        if (elPacienteId)    elPacienteId.value    = id;
         hideSuggest();
+        if (id) {
+          setPacStatus(`✔ Paciente selecionado (ID ${id}).`, "ok");
+        } else {
+          setPacStatus("Paciente escolhido sem ID (modo texto): será localizado pelo nome.", "aviso");
+        }
+        atualizarContratosForm();
       });
     });
   }
 
-  const onPacienteInput = debounce(async () => {
+  // Ao DIGITAR, a escolha anterior cai na hora (nao depois do debounce): senao um "Salvar" rapido
+  // mandaria o ID antigo junto com o nome novo que esta na tela.
+  function onPacienteDigitou() {
+    if (!elPacienteBusca) return;
+    const eraSelecionado = !!(elPacienteId?.value || elPacienteNome?.value);
+    limparSelecaoPaciente();
+    if (eraSelecionado) {
+      setPacStatus("");
+      atualizarContratosForm();
+    }
+    buscarPacientes();
+  }
+
+  // Ao FOCAR o campo ja escolhido (texto igual ao paciente escolhido) mantem a escolha.
+  function onPacienteFocou() {
+    if (!elPacienteBusca) return;
+    const escolhido = (elPacienteNome?.value || "").trim();
+    if (escolhido && (elPacienteBusca.value || "").trim() === escolhido) return;
+    buscarPacientes();
+  }
+
+  const buscarPacientes = debounce(async () => {
     if (!elPacienteBusca) return;
     const q = (elPacienteBusca.value || "").trim();
-    if (elPacienteNome) elPacienteNome.value = ""; // reseta até escolher
+    if (elPacienteId?.value || elPacienteNome?.value) return; // escolheu na lista enquanto esperava
     if (q.length < 3) {
+      setPacStatus("");
       hideSuggest();
       return;
     }
+    setPacStatus("Sem seleção da lista: o paciente será localizado pelo nome.", "aviso");
+    const seq = ++buscaSeq;
     try {
-      const url = new URL(ENDPOINT_SUGGEST, location.origin);
+      const url = new URL(ENDPOINT_PAC_BUSCA, location.origin);
       url.searchParams.set("q", q);
       const res = await fetch(url.toString());
       const data = await res.json();
-      renderSuggest(data);
+      if (!res.ok || !Array.isArray(data)) throw new Error((data && data.error) || "busca indisponível");
+      if (seq !== buscaSeq) return;
+      renderSuggest(data, true);
     } catch (e) {
-      console.error("sugestões pacientes failed", e);
-      hideSuggest();
+      console.error("busca de pacientes (com ID) falhou; usando a busca antiga por nome", e);
+      try {
+        const url = new URL(ENDPOINT_SUGGEST, location.origin);
+        url.searchParams.set("q", q);
+        const res = await fetch(url.toString());
+        const data = await res.json();
+        if (seq !== buscaSeq) return;
+        renderSuggest(Array.isArray(data) ? data : [], false);
+      } catch (e2) {
+        console.error("sugestões pacientes failed", e2);
+        if (seq === buscaSeq) hideSuggest();
+      }
     }
   }, 300);
+
+  // ================== modalidade / contrato (formulario de cadastro) ==================
+  async function atualizarContratosForm() {
+    if (!elModalidade || !elContratoWrap || !elContrato) return;
+    const modalidade = (elModalidade.value || "").trim();
+    const pacId = (elPacienteId?.value || "").trim();
+    const seq = ++contratoSeq;
+
+    elContrato.innerHTML = `<option value="">Sem contrato vinculado</option>`;
+    elContratoAviso.classList.remove("is-ok", "is-aviso", "is-erro");
+    elContratoAviso.textContent = "";
+
+    if (!modalidade) {
+      elContratoWrap.hidden = true;
+      return;
+    }
+    elContratoWrap.hidden = false;
+
+    if (!pacId) {
+      elContrato.disabled = true;
+      elContratoAviso.textContent =
+        "Escolha o paciente na lista de busca para ver os contratos. Você pode salvar mesmo assim, sem contrato.";
+      return;
+    }
+    elContrato.disabled = false;
+    await preencherSelectContrato(
+      elContrato, elContratoAviso, pacId, modalidade, null,
+      () => seq === contratoSeq
+    );
+  }
 
   // ================== salvar agendamento (novo / vago) ==================
   async function salvarAgendamento(isVago = false) {
@@ -304,6 +514,18 @@
       valor_sessao
     };
 
+    // Campos novos: so vao quando existem. Sem eles o payload e identico ao formato antigo.
+    const pacienteIdSel = (elPacienteId?.value || "").trim();
+    const modalidadeSel = (elModalidade?.value || "").trim();
+    const contratoSel   = (elContrato?.value || "").trim();
+    if (!isVago) {
+      if (pacienteIdSel) payload.paciente_id = Number(pacienteIdSel);
+      if (modalidadeSel) {
+        payload.modalidade_financeira = modalidadeSel;
+        if (contratoSel) payload.contrato_id = Number(contratoSel);
+      }
+    }
+
     const btn = isVago ? elBtnSalvarVago : elBtnSalvar;
     if (btn) btn.disabled = true;
 
@@ -322,7 +544,10 @@
 
       const n = (data.criados && data.criados.length) ? data.criados.length : qtd;
       const labelPac = isVago ? "horário VAGO" : paciente_nome;
-      elMsg.textContent = `✅ ${n} sessão(ões) criada(s) para ${labelPac}.`;
+      const labelMod = !isVago && data.modalidade_financeira
+        ? ` (${modalidadeLabel(data.modalidade_financeira)}${data.contrato_id ? " · contrato vinculado" : " · sem contrato"})`
+        : "";
+      elMsg.textContent = `✅ ${n} sessão(ões) criada(s) para ${labelPac}${labelMod}.`;
       if (!isVago && data.redirect) {
         const a = document.createElement("a");
         a.href = data.redirect;
@@ -395,6 +620,22 @@
     return buildAgregadosURL(ENDPOINT_EXPORT);
   }
 
+  // Linha "Modalidade · nome do contrato · usadas/total" do cartao (so quando ha modalidade gravada).
+  // Agendamentos antigos (sem modalidade) nao mostram a linha: a regra e nao classificar retroativamente.
+  function vinculoCartao(it) {
+    const mod = modalidadeLabel(it.modalidade_financeira);
+    if (!mod) return null;
+    if (!it.contrato_id) return { texto: `${mod} · sem contrato vinculado`, alerta: false };
+    const nome = (it.combo_nome || "").trim();
+    const usadas = Number(it.sessoes_usadas || 0);
+    const total  = Number(it.qtd_sessoes != null ? it.qtd_sessoes : (it.qtd || 0));
+    if (!nome && total === 0) {
+      // contrato gravado, mas a agenda nao o encontrou ativo (cancelado/encerrado/removido)
+      return { texto: `${mod} · contrato #${it.contrato_id} não está ativo`, alerta: true };
+    }
+    return { texto: `${mod} · ${nome || "contrato #" + it.contrato_id} · ${usadas}/${total}`, alerta: false };
+  }
+
   // ======== renderização em CARDS ========
   function renderCardsPage(items, page, pageSize) {
     if (!elCardsList) return;
@@ -451,6 +692,13 @@
 
       const dowNum = (it.dia_num != null ? it.dia_num : it.dia);
 
+      const vinc = vinculoCartao(it);
+      const vincHTML = vinc ? `
+            <div class="ag-card-line ag-card-line--vinculo">
+              <span class="label">Modalidade</span>
+              <span class="value${vinc.alerta ? " is-alerta" : ""}">${esc(vinc.texto)}</span>
+            </div>` : "";
+
       const delBtn = `
         <button
           class="icon-btn danger btn-del"
@@ -460,6 +708,7 @@
           data-hora="${it.hora_ini}"
           data-prof="${encodeURIComponent(it.profissional || "")}"
           data-pac="${encodeURIComponent(it.paciente || "")}"
+          data-pid="${it.paciente_id || ""}"
         >
           <svg viewBox="0 0 24 24">
             <path d="M3 6h18"/><path d="M8 6l1-2h6l1 2"/><path d="M6 6v14h12V6"/>
@@ -484,7 +733,7 @@
             <div class="ag-card-line">
               <span class="label">Qtd. sessões</span>
               <span class="value">${qtd}</span>
-            </div>
+            </div>${vincHTML}
             <div class="ag-card-line">
               <span class="label">Profissional</span>
               <span class="value">${prof}</span>
@@ -558,6 +807,145 @@
     if (elFiltrosMsg) elFiltrosMsg.textContent = "";
   }
 
+  // ================== modal de edição: vínculo (modalidade / contrato) ==================
+  const editCtx = {
+    seq: 0, contratoSeq: 0,
+    pacienteId: null,      // paciente_id REAL da linha (GET /api/agendamentos/<id>), nao o do JOIN por nome
+    modalidade: "",        // vinculo gravado hoje
+    contrato: null,
+    podeEditar: false,
+    editando: false
+  };
+
+  function resumoVinculo(linhas) {
+    if (!elEditResumo) return;
+    elEditResumo.innerHTML = linhas.map((l) => `<div>${l}</div>`).join("");
+  }
+
+  function resetVinculoEdicao() {
+    editCtx.pacienteId = null;
+    editCtx.modalidade = "";
+    editCtx.contrato = null;
+    editCtx.podeEditar = false;
+    editCtx.editando = false;
+    if (elEditTrocar) { elEditTrocar.hidden = true; elEditTrocar.textContent = "Trocar vínculo"; }
+    if (elEditVincMod) elEditVincMod.hidden = true;
+    if (elEditVincCtr) elEditVincCtr.hidden = true;
+    if (elEditModalidade) elEditModalidade.value = "";
+    if (elEditContrato) { elEditContrato.innerHTML = `<option value="">Sem contrato vinculado</option>`; elEditContrato.disabled = false; }
+    if (elEditContratoAv) { elEditContratoAv.textContent = ""; elEditContratoAv.classList.remove("is-ok", "is-aviso", "is-erro"); }
+  }
+
+  async function carregarVinculoEdicao(item) {
+    if (!elEditResumo) return;
+    const seq = ++editCtx.seq;
+    resetVinculoEdicao();
+
+    const vago = !item.paciente || String(item.paciente).trim().toUpperCase() === "VAGO";
+    if (vago) {
+      resumoVinculo(["Horário VAGO: não tem modalidade nem contrato."]);
+      return;
+    }
+    resumoVinculo(["Carregando vínculo…"]);
+
+    let row;
+    try {
+      const res = await fetch(`${ENDPOINT_AGEND_BASE}/${encodeURIComponent(item.any_id)}`);
+      row = await res.json();
+      if (!res.ok || !row || row.error) throw new Error((row && row.error) || "falha");
+    } catch (e) {
+      if (seq !== editCtx.seq) return;
+      console.error("vinculo do agendamento nao carregou", e);
+      resumoVinculo(["Não foi possível carregar o vínculo atual. Os demais campos continuam editáveis."]);
+      return;
+    }
+    if (seq !== editCtx.seq) return;
+
+    if (!row.paciente_id) {
+      resumoVinculo([
+        "Agendamento antigo, sem paciente vinculado por ID (modo texto).",
+        "A modalidade só pode ser definida em agendamentos cujo paciente foi escolhido na busca."
+      ]);
+      return;
+    }
+
+    editCtx.pacienteId = Number(row.paciente_id);
+    editCtx.modalidade = String(row.modalidade_financeira || "").toLowerCase();
+    editCtx.contrato   = row.contrato_id != null ? Number(row.contrato_id) : null;
+    editCtx.podeEditar = true;
+
+    if (!editCtx.modalidade) {
+      resumoVinculo(["<strong>Modalidade:</strong> sem modalidade (agendamento antigo ou não classificado)."]);
+    } else {
+      const linhas = [`<strong>Modalidade:</strong> ${esc(modalidadeLabel(editCtx.modalidade))}`];
+      if (!editCtx.contrato) {
+        linhas.push("<strong>Contrato:</strong> sem contrato vinculado (permitido).");
+      } else {
+        resumoVinculo(linhas.concat([`<strong>Contrato:</strong> #${esc(editCtx.contrato)} (consultando…)`]));
+        let lista = null;
+        try {
+          lista = await buscarContratos(editCtx.pacienteId, editCtx.modalidade);
+        } catch (e) {
+          console.error("contratos do paciente nao carregaram", e);
+        }
+        if (seq !== editCtx.seq) return;
+        const c = lista ? lista.find((x) => Number(x.id) === editCtx.contrato) : null;
+        if (c) {
+          linhas.push(`<strong>Contrato:</strong> ${esc(c.nome || modalidadeLabel(c.tipo))} (#${esc(c.id)})`);
+          linhas.push(`<strong>Sessões:</strong> ${esc(c.sessoes_usadas)}/${esc(c.sessoes_contratadas)} usadas · ${esc(c.sessoes_restantes)} restantes`);
+          const papel = c.papel === "beneficiario"
+            ? `beneficiário${c.titular_nome ? " de " + esc(c.titular_nome) : ""}`
+            : "titular";
+          linhas.push(`<strong>Situação:</strong> <span class="is-ok">Ativo</span> · paciente ${papel}`);
+        } else if (lista) {
+          linhas.push(`<strong>Contrato:</strong> #${esc(editCtx.contrato)}`);
+          linhas.push(`<strong>Situação:</strong> <span class="is-aviso">não consta entre os contratos ativos do paciente</span> (cancelado, encerrado ou paciente fora do contrato).`);
+        } else {
+          linhas.push(`<strong>Contrato:</strong> #${esc(editCtx.contrato)}`);
+          linhas.push(`<strong>Situação:</strong> <span class="is-aviso">não foi possível consultar o contrato agora</span>.`);
+        }
+      }
+      resumoVinculo(linhas);
+    }
+
+    if (elEditTrocar) {
+      elEditTrocar.textContent = editCtx.modalidade ? "Trocar vínculo" : "Definir vínculo";
+      elEditTrocar.hidden = false;
+    }
+  }
+
+  async function atualizarContratosEdicao(selecionado) {
+    if (!elEditModalidade || !elEditContrato || !elEditContratoAv) return;
+    const mod = (elEditModalidade.value || "").trim();
+    const seq = ++editCtx.contratoSeq;
+
+    if (!mod) {
+      elEditContrato.innerHTML = `<option value="">Sem contrato vinculado</option>`;
+      elEditContrato.disabled = true;
+      elEditContratoAv.classList.remove("is-ok", "is-aviso", "is-erro");
+      elEditContratoAv.textContent = "Sem modalidade: nenhum contrato será vinculado.";
+      return;
+    }
+    elEditContrato.disabled = false;
+    await preencherSelectContrato(
+      elEditContrato, elEditContratoAv, editCtx.pacienteId, mod, selecionado,
+      () => seq === editCtx.contratoSeq && editCtx.editando
+    );
+  }
+
+  // devolve os campos de vinculo para o PUT, ou null se nada mudou (ai o payload fica identico ao antigo)
+  function camposVinculoEdicao() {
+    if (!editCtx.podeEditar || !editCtx.editando) return null;
+    const modNova = (elEditModalidade?.value || "").trim();
+    const ctrNovo = modNova ? (elEditContrato?.value || "").trim() : "";
+    const ctrAtual = editCtx.contrato ? String(editCtx.contrato) : "";
+    if (modNova === editCtx.modalidade && ctrNovo === ctrAtual) return null;
+    return {
+      modalidade_financeira: modNova || null,
+      contrato_id: ctrNovo ? Number(ctrNovo) : null
+    };
+  }
+
   // ================== modal de edição: preencher & salvar ==================
   function preencherModalEdicao(item) {
     if (!dlgEdit) return;
@@ -595,6 +983,7 @@
       }
     }
 
+    carregarVinculoEdicao(item); // assincrono: o modal abre ja, o resumo preenche em seguida
     openModal(dlgEdit);
   }
 
@@ -632,6 +1021,19 @@
       paciente_nome,
       profissional_cpf: profissional_cpf || undefined
     };
+
+    // vinculo (modalidade/contrato): so entra no payload se o usuario trocou algo
+    const vinculo = camposVinculoEdicao();
+    if (vinculo) {
+      if (vinculo.modalidade_financeira && elEditContrato?.disabled) {
+        if (elEditMsg) {
+          elEditMsg.textContent = "Aguarde o carregamento dos contratos para salvar o vínculo.";
+          elEditMsg.style.color = "#dc2626";
+        }
+        return;
+      }
+      Object.assign(payload, vinculo);
+    }
 
     if (elEditMsg) {
       elEditMsg.textContent = "Salvando alterações…";
@@ -692,8 +1094,31 @@
   });
 
   if (elPacienteBusca) {
-    elPacienteBusca.addEventListener("input", onPacienteInput);
-    elPacienteBusca.addEventListener("focus", onPacienteInput);
+    elPacienteBusca.addEventListener("input", onPacienteDigitou);
+    elPacienteBusca.addEventListener("focus", onPacienteFocou);
+  }
+
+  if (elModalidade) {
+    elModalidade.addEventListener("change", atualizarContratosForm);
+  }
+
+  if (elEditTrocar) {
+    elEditTrocar.addEventListener("click", async () => {
+      if (!editCtx.podeEditar) return;
+      editCtx.editando = true;
+      if (elEditVincMod) elEditVincMod.hidden = false;
+      if (elEditVincCtr) elEditVincCtr.hidden = false;
+      elEditTrocar.hidden = true;
+      if (elEditModalidade) elEditModalidade.value = editCtx.modalidade;
+      await atualizarContratosEdicao(editCtx.contrato);
+    });
+  }
+  if (elEditModalidade) {
+    elEditModalidade.addEventListener("change", () => {
+      const mod = (elEditModalidade.value || "").trim();
+      // voltando para a modalidade original, mantem o contrato gravado; senao recomeca sem contrato
+      atualizarContratosEdicao(mod && mod === editCtx.modalidade ? editCtx.contrato : null);
+    });
   }
 
   if (elBtnSalvar) {
@@ -794,6 +1219,7 @@
         const hora = delBtn.getAttribute("data-hora");
         const prof = decodeURIComponent(delBtn.getAttribute("data-prof") || "");
         const pac  = decodeURIComponent(delBtn.getAttribute("data-pac")  || "");
+        const pid  = (delBtn.getAttribute("data-pid") || "").trim();
 
         const ok = confirm(
           `Excluir TODAS as sessões deste grupo?\n\n${DIA_LABEL(dow)} • ${hora}\nProfissional: ${prof}\nPaciente: ${pac}`
@@ -808,6 +1234,8 @@
           url.searchParams.set("hora_ini", hora);
           url.searchParams.set("profissional", prof);
           url.searchParams.set("paciente", pac);
+          // separa homonimos: sem o ID a exclusao por nome apagaria os dois pacientes
+          if (pid) url.searchParams.set("paciente_id", pid);
 
           const res  = await fetch(url.toString(), { method: "DELETE" });
           const data = await res.json();

@@ -868,3 +868,46 @@ input[readonly]{
   color: #94a3b8;
   font-weight: 600;
 }
+/* ===========================================================
+   MODALIDADE / CONTRATO (formulario, cartao e modal de edicao)
+   =========================================================== */
+.ag-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.ag-hint:empty { display: none; }
+.ag-hint.is-ok    { color: #15803d; }
+.ag-hint.is-aviso { color: #b45309; }
+.ag-hint.is-erro  { color: #dc2626; }
+
+/* lista de sugestoes com mais folga: o campo e estreito e agora mostra homonimos */
+#sugestoes .suggest-list { min-width: min(380px, 92vw); }
+.suggest-item .sub .ag-sug-homonimo {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.ag-card-line.ag-card-line--vinculo .value { color: #1d4ed8; }
+.ag-card-line.ag-card-line--vinculo .value.is-alerta { color: #b45309; }
+
+.mae-resumo {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-weight: 500;
+}
+.mae-resumo strong { font-weight: 700; }
+.mae-resumo .is-ok    { color: #15803d; font-weight: 700; }
+.mae-resumo .is-aviso { color: #b45309; font-weight: 700; }
+.mae-resumo-acoes { margin-top: 8px; }
+.mae-helper.is-ok    { color: #15803d; }
+.mae-helper.is-aviso { color: #b45309; }
+.mae-helper.is-erro  { color: #dc2626; }

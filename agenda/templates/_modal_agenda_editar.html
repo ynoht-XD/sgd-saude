@@ -65,9 +65,29 @@
 
           <div class="mae-col-6">
             <label for="ag_edit_resumo">Resumo do vínculo</label>
-            <div id="ag_edit_resumo" class="mae-readonly">
+            <div id="ag_edit_resumo" class="mae-readonly mae-resumo" aria-live="polite">
               A agenda mostra apenas o vínculo operacional. Sessões e valores ficam no comercial.
             </div>
+            <div class="mae-resumo-acoes">
+              <button type="button" class="btn ghost" id="ag_edit_trocar" hidden>Trocar vínculo</button>
+            </div>
+          </div>
+
+          <div class="mae-col-3" id="ag_edit_vinculo_form_mod" hidden>
+            <label for="ag_edit_modalidade">Modalidade</label>
+            <select id="ag_edit_modalidade">
+              <option value="">Sem modalidade</option>
+              <option value="combo">Combo</option>
+              <option value="plano">Plano</option>
+            </select>
+          </div>
+
+          <div class="mae-col-3" id="ag_edit_vinculo_form_ctr" hidden>
+            <label for="ag_edit_contrato">Contrato</label>
+            <select id="ag_edit_contrato">
+              <option value="">Sem contrato vinculado</option>
+            </select>
+            <p class="mae-helper" id="ag_edit_contrato_aviso" aria-live="polite"></p>
           </div>
 
         </div>

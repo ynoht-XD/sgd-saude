@@ -15,6 +15,7 @@
   <!-- endpoints p/ JS -->
   <meta name="agenda-save-endpoint" content="{{ url_for('agenda.agenda_salvar') }}">
   <meta name="pacientes-suggest-endpoint" content="{{ url_for('pacientes.api_sugestoes_nomes') }}">
+  <meta name="pacientes-busca-endpoint" content="{{ url_for('agenda.api_pacientes_busca') }}">
   <meta name="profissionais-endpoint" content="{{ url_for('agenda.api_profissionais') }}">
   <meta name="agregados-endpoint" content="{{ url_for('agenda.api_agregados') }}">
   <meta name="agregados-export-endpoint" content="{{ url_for('agenda.api_agregados_export') }}">
@@ -45,21 +46,39 @@
 
     <div class="grid ag-grid-form">
 
-      <div class="col-4">
+      <div class="col-2">
         <label for="paciente_busca">Paciente</label>
-        <input id="paciente_busca" placeholder="Digite 3+ letras para buscar…">
+        <input id="paciente_busca" placeholder="Digite 3+ letras para buscar…" autocomplete="off">
         <input id="paciente_nome" type="hidden">
+        <input id="paciente_id" type="hidden">
         <div id="sugestoes" class="suggest hidden"></div>
-
+        <p id="paciente_status" class="ag-hint" aria-live="polite"></p>
       </div>
 
-      <div class="col-3">
+      <div class="col-2">
         <label for="profissional_select">
           Profissional <span style="color:#ef4444">*</span>
         </label>
         <select id="profissional_select" required>
           <option value="">Selecione…</option>
         </select>
+      </div>
+
+      <div class="col-2">
+        <label for="modalidade_select">Modalidade</label>
+        <select id="modalidade_select">
+          <option value="">Sem modalidade</option>
+          <option value="combo">Combo</option>
+          <option value="plano">Plano</option>
+        </select>
+      </div>
+
+      <div class="col-6" id="ag_contrato_wrap" hidden>
+        <label for="ag_contrato">Contrato</label>
+        <select id="ag_contrato">
+          <option value="">Sem contrato vinculado</option>
+        </select>
+        <p id="ag_contrato_aviso" class="ag-hint" aria-live="polite"></p>
       </div>
 
       <div class="col-2">
