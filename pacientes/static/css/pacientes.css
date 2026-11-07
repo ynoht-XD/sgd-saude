@@ -5,20 +5,18 @@
 
 :root{
   --bg:#f7f9fc;
-  --card:#ffffff;
-  --text:#0f172a;
-  --muted:#64748b;
+  --card:var(--surface);
   --line:#e5e7eb;
 
-  --primary:#2563eb;
-  --primary-hover:#1d4ed8;
+  --primary:var(--brand);
+  --primary-hover:var(--brand-2);
 
   --green:#10b981;
   --green-dark:#047857;
 
   --danger:#dc3545;
   --warning:#ffc107;
-  --neutral:#64748b;
+  --neutral:var(--muted);
 
   --radius:18px;
   --shadow:0 18px 45px rgba(15,23,42,.10);
@@ -70,7 +68,7 @@ body{
   border:1px solid var(--line);
   border-radius:13px;
   font-size:13px;
-  background:#fff;
+  background:var(--surface);
   color:var(--text);
   transition:border-color .2s,box-shadow .2s,transform .12s;
 }
@@ -107,7 +105,7 @@ body{
 
 .botao-filtrar{
   background:linear-gradient(135deg,#2563eb,#0891b2);
-  color:#fff;
+  color:var(--on-brand);
 }
 
 .botao-exportar{
@@ -194,7 +192,7 @@ body{
 .pac-clean-title h2{
   margin:0;
   font-size:1.08rem;
-  color:#0f172a;
+  color:var(--text);
   line-height:1.2;
   word-break:break-word;
 }
@@ -253,7 +251,7 @@ body{
 
 .btn-prontuario{
   background:linear-gradient(135deg,#2563eb,#0891b2);
-  color:#fff;
+  color:var(--on-brand);
 }
 
 .btn-prontuario:hover{
@@ -262,7 +260,7 @@ body{
 
 .btn-editar{
   background:rgba(16,185,129,.12);
-  color:#065f46;
+  color:var(--success-ink);
   border-color:rgba(16,185,129,.28);
 }
 
@@ -314,7 +312,7 @@ body{
   min-width:0;
   padding:10px 12px;
   border-radius:15px;
-  background:#f8fafc;
+  background:var(--surface-2);
   border:1px solid rgba(226,232,240,.9);
 }
 
@@ -324,13 +322,13 @@ body{
   font-weight:950;
   text-transform:uppercase;
   letter-spacing:.06em;
-  color:#64748b;
+  color:var(--muted);
   margin-bottom:4px;
 }
 
 .kv .v{
   display:block;
-  color:#0f172a;
+  color:var(--text);
   font-size:.9rem;
   font-weight:750;
   line-height:1.25;
@@ -363,7 +361,7 @@ body{
 .chip-status{
   border-color:rgba(100,116,139,.25);
   background:rgba(100,116,139,.10);
-  color:#334155;
+  color:var(--text-2);
 }
 
 .chip-mod{
@@ -383,7 +381,7 @@ body{
   margin:2px 3px 2px 0;
   border-color:rgba(16,185,129,.28);
   background:rgba(16,185,129,.12);
-  color:#065f46;
+  color:var(--success-ink);
 }
 
 .muted{
@@ -402,7 +400,7 @@ body{
   padding:8px 9px;
   border-radius:12px;
   border:1px solid var(--line);
-  background:#fff;
+  background:var(--surface);
   color:var(--text);
   font-size:13px;
   font-weight:750;
@@ -432,7 +430,7 @@ body{
 .pac-collapse{
   border:1px solid rgba(226,232,240,.95);
   border-radius:17px;
-  background:#fff;
+  background:var(--surface);
   overflow:hidden;
 }
 
@@ -445,7 +443,7 @@ body{
   gap:12px;
   padding:12px 14px;
   background:linear-gradient(135deg,#f1f5f9,#ecfeff);
-  color:#0f172a;
+  color:var(--text);
   font-weight:950;
 }
 
@@ -456,7 +454,7 @@ body{
 .pac-collapse summary::after{
   content:"＋";
   font-weight:950;
-  color:#2563eb;
+  color:var(--brand);
 }
 
 .pac-collapse[open] summary::after{
@@ -464,7 +462,7 @@ body{
 }
 
 .pac-collapse summary small{
-  color:#64748b;
+  color:var(--muted);
   font-size:.75rem;
   font-weight:750;
 }
@@ -492,7 +490,7 @@ body{
 .chip-pick{
   background:rgba(100,116,139,.10);
   border-color:rgba(100,116,139,.22);
-  color:#334155;
+  color:var(--text-2);
   transition:transform .12s,background-color .2s,border-color .2s,box-shadow .2s;
 }
 
@@ -528,7 +526,7 @@ body{
   padding:13px 18px;
   border-radius:16px;
   background:linear-gradient(135deg,#111827,#1e293b);
-  color:#fff;
+  color:var(--on-brand);
   text-decoration:none;
   font-weight:950;
   box-shadow:0 14px 34px rgba(15,23,42,.18);
@@ -544,8 +542,8 @@ body{
 .pacientes-container p{
   padding:24px;
   border-radius:18px;
-  background:#f8fafc;
-  color:#64748b;
+  background:var(--surface-2);
+  color:var(--muted);
   text-align:center;
   font-weight:750;
 }
