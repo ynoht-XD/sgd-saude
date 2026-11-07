@@ -1,23 +1,21 @@
 :root {
   --page-bg: #f5f8fc;
   --page-bg-2: #eef4fb;
-  --card: #ffffff;
+  --card: var(--surface);
   --card-soft: #f8fbff;
   --line: #dbe5f0;
   --line-strong: #c7d5e6;
 
   --text: #1e293b;
   --text-strong: #0f172a;
-  --muted: #64748b;
 
-  --accent: #16a34a;
+  --accent: var(--success);
   --accent-dark: #15803d;
   --accent-soft: #e8f8ee;
 
-  --accent-2: #2563eb;
+  --accent-2: var(--brand);
   --accent-2-soft: #eaf1ff;
 
-  --danger: #dc2626;
   --danger-soft: #fff1f2;
 
   --warning: #d97706;
@@ -129,7 +127,7 @@
   display: block;
   margin-bottom: 7px;
   font-size: 13px;
-  color: #334155;
+  color: var(--text-2);
   letter-spacing: .2px;
   font-weight: 750;
 }
@@ -137,7 +135,7 @@
 .export-page .field {
   width: 100%;
   min-height: 44px;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 11px 13px;
@@ -158,7 +156,7 @@
 }
 
 .export-page .field::placeholder {
-  color: #94a3b8;
+  color: var(--muted-2);
 }
 
 .export-page .field.is-valid {
@@ -206,8 +204,8 @@
 }
 
 .export-page .chip {
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  color: var(--info-ink);
+  border: 1px solid var(--info-line);
   background: var(--accent-2-soft);
 }
 
@@ -218,14 +216,14 @@
 }
 
 .export-page .warn-chip {
-  color: #92400e;
+  color: var(--warning-ink);
   border-color: #fed7aa;
   background: var(--warning-soft);
 }
 
 .export-page .badge-erro {
   color: #b91c1c;
-  border: 1px solid #fecaca;
+  border: 1px solid var(--danger-line);
   background: var(--danger-soft);
 }
 
@@ -245,7 +243,7 @@
   appearance: none;
   border: 0;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--on-brand);
   min-height: 44px;
   padding: 12px 17px;
   border-radius: 14px;
@@ -281,20 +279,20 @@
 }
 
 .export-page .ghost {
-  background: #ffffff;
-  color: #334155;
+  background: var(--surface);
+  color: var(--text-2);
   border: 1px solid var(--line);
   box-shadow: 0 8px 18px rgba(15, 23, 42, .06);
 }
 
 .export-page .ghost:hover {
   box-shadow: 0 12px 22px rgba(15, 23, 42, .09);
-  background: #f8fbff;
+  background: var(--card-soft);
 }
 
 .export-page .danger-soft-btn {
   color: #b91c1c;
-  border-color: #fecaca;
+  border-color: var(--danger-line);
   background: var(--danger-soft);
 }
 
@@ -310,9 +308,9 @@
 }
 
 .export-page .error {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: var(--danger-soft);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--danger-line);
   margin-top: 10px;
   display: none;
 }
@@ -337,7 +335,7 @@
 
 .export-page .file input[type="file"] {
   padding: 9px;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 14px;
   border: 1px solid var(--line);
 }
@@ -347,7 +345,7 @@
   margin-right: 10px;
   padding: 9px 12px;
   border-radius: 11px;
-  color: #1d4ed8;
+  color: var(--brand-2);
   background: var(--accent-2-soft);
   cursor: pointer;
   font-weight: 800;
@@ -459,7 +457,7 @@
   margin-top: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: #ffffff;
+  background: var(--surface);
   overflow: hidden;
   box-shadow: 0 10px 26px rgba(15, 23, 42, .045);
 }
@@ -541,14 +539,14 @@
   overflow: auto;
   border-radius: 15px;
   border: 1px solid var(--line);
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .export-page .audit-table {
   width: 100%;
   border-collapse: collapse;
   min-width: 780px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .export-page .audit-table.compact {
@@ -576,16 +574,16 @@
 }
 
 .export-page .audit-table tr:hover td {
-  background: #f8fbff;
+  background: var(--card-soft);
 }
 
 .export-page .audit-table td {
-  color: #334155;
+  color: var(--text-2);
 }
 
 .export-page .audit-table td:first-child,
 .export-page .audit-table td:last-child {
-  color: #0f172a;
+  color: var(--text-strong);
 }
 
 /* COLUNAS */

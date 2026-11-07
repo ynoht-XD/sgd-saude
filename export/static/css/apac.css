@@ -4,15 +4,14 @@
 
 :root{
   --bg:#f7f8fa;
-  --card:#ffffff;
+  --card:var(--surface);
   --border:#e5e7eb;
   --text:#111827;
   --muted:#6b7280;
-  --primary:#2563eb;
-  --primary-600:#1d4ed8;
+  --primary:var(--brand);
+  --primary-600:var(--brand-2);
   --success:#10b981;
   --danger:#ef4444;
-  --warning:#f59e0b;
   --info:#0ea5e9;
   --shadow:0 2px 10px rgba(0,0,0,.06);
   --radius:12px;
@@ -45,7 +44,7 @@
   display:inline-flex; align-items:center; justify-content:center;
   gap:8px;
   border:1px solid var(--border);
-  background:#fff;
+  background:var(--surface);
   color:var(--text);
   padding:8px 12px;
   border-radius:10px;
@@ -54,11 +53,11 @@
 }
 .btn:hover{ box-shadow:var(--shadow); }
 .btn:active{ transform:translateY(1px); }
-.btn.primary{ background:var(--primary); color:#fff; border-color:var(--primary); }
+.btn.primary{ background:var(--primary); color:var(--on-brand); border-color:var(--primary); }
 .btn.primary:hover{ background:var(--primary-600); border-color:var(--primary-600); }
-.btn.success{ background:var(--success); color:#fff; border-color:var(--success); }
+.btn.success{ background:var(--success); color:var(--on-brand); border-color:var(--success); }
 .btn.gray{ background:#f3f4f6; }
-.btn.danger{ background:var(--danger); color:#fff; border-color:var(--danger); }
+.btn.danger{ background:var(--danger); color:var(--on-brand); border-color:var(--danger); }
 
 /* Grupo de ações genérico */
 .actions{ display:flex; gap:10px; flex-wrap:wrap; }
@@ -107,7 +106,7 @@
   border-radius:8px;
   padding:0 10px;
   font-size:.95rem;
-  background:#fff;
+  background:var(--surface);
   transition:border-color .15s ease, box-shadow .15s ease;
 }
 .apac-filters input:focus,
@@ -130,7 +129,7 @@
   width:100%;
   border-collapse:separate;
   border-spacing:0;
-  background:#fff;
+  background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--radius);
   overflow:hidden;
@@ -149,7 +148,7 @@
   padding:10px 12px;
   border-top:1px solid #f0f2f5;
   vertical-align:middle;
-  color:#111827;
+  color:var(--text);
 }
 .apac-table tbody tr:hover{ background:#fafafa; }
 .apac-table .actions-col{ display:flex; gap:6px; flex-wrap:wrap; }
@@ -171,10 +170,10 @@
   display:inline-flex; align-items:center; gap:6px;
   padding:2px 8px; border-radius:999px; font-size:.8rem; border:1px solid;
 }
-.badge.success{ color:#065f46; border-color:#d1fae5; background:#ecfdf5; }
-.badge.warn{    color:#92400e; border-color:#fde68a; background:#fffbeb; }
-.badge.info{    color:#075985; border-color:#bae6fd; background:#eff6ff; }
-.badge.danger{  color:#991b1b; border-color:#fecaca; background:#fef2f2; }
+.badge.success{ color:var(--success-ink); border-color:#d1fae5; background:var(--success-soft); }
+.badge.warn{    color:var(--warning-ink); border-color:var(--warning-line); background:var(--warning-soft); }
+.badge.info{    color:#075985; border-color:#bae6fd; background:var(--info-soft); }
+.badge.danger{  color:var(--danger-ink); border-color:var(--danger-line); background:var(--danger-soft); }
 
 /* ---------- Modal de Edição ---------- */
 #modal-edicao-apac{
@@ -185,7 +184,7 @@
 #modal-edicao-apac .modal-card{
   width:min(1100px,96vw);
   max-height:90vh; overflow:auto;
-  background:#fff; border-radius:12px;
+  background:var(--surface); border-radius:12px;
   padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
 #modal-edicao-apac .modal-head{
@@ -210,7 +209,7 @@
 .field input, .field select, .field textarea{
   border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.95rem;
 }
-.section-title{ margin:16px 0 6px; font-weight:600; color:#111827; }
+.section-title{ margin:16px 0 6px; font-weight:600; color:var(--text); }
 .modal-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
 
 /* aliases de contêiner */
@@ -248,7 +247,7 @@
 }
 
 .apac-card {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid #e5e7eb;
   border-left: 6px solid #94a3b8;
   border-radius: 18px;
@@ -256,8 +255,8 @@
   box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
 }
 
-.card-aberto { border-left-color: #ef4444; }
-.card-pago { border-left-color: #f59e0b; }
+.card-aberto { border-left-color: var(--danger); }
+.card-pago { border-left-color: var(--warning); }
 .card-entregue { border-left-color: #22c55e; }
 .card-instituicao { border-left-color: #3b82f6; }
 
@@ -302,7 +301,7 @@
 }
 
 .badge.entrega {
-  background: #ecfdf5;
+  background: var(--success-soft);
   color: #166534;
 }
 
@@ -314,7 +313,7 @@
 }
 
 .card-grid div {
-  background: #f8fafc;
+  background: var(--surface-2);
   border-radius: 12px;
   padding: 9px;
 }
@@ -339,7 +338,7 @@
   gap: 12px;
   padding: 10px;
   border-radius: 12px;
-  background: #f1f5f9;
+  background: var(--surface-3);
   margin-bottom: 12px;
 }
 
@@ -348,7 +347,7 @@
   align-items: center;
   gap: 6px;
   font-weight: 800;
-  color: #334155;
+  color: var(--text-2);
   font-size: .88rem;
 }
 
@@ -385,7 +384,7 @@
 }
 
 .empty-state {
-  background: #fff;
+  background: var(--surface);
   border: 1px dashed #cbd5e1;
   border-radius: 16px;
   padding: 28px;
