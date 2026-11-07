@@ -37,6 +37,21 @@
     --success: #34d399;
     --warning: #fbbf24;
   }
+
+  /* Os dialogos desta tela ficam escuros (--card/--text acima): os controles nativos
+     (calendario do campo de data, lista do select, barra de rolagem) acompanham. */
+  dialog.modal{
+    color-scheme: dark;
+  }
+
+  /* Branco sobre o --brand escuro (#3b82f6) da so 3,7:1; no dialogo usa o tom 600 (5,2:1) */
+  dialog.modal .btn.primary{
+    background: var(--brand-600);
+    border-color: var(--brand-600);
+  }
+  dialog.modal .btn.primary:hover{
+    background: #1d4ed8;
+  }
 }
 
 /* ---------- Containers ---------- */
@@ -473,6 +488,7 @@ dialog.modal::backdrop{
   box-shadow: var(--shadow);
   animation: fadeIn .22s ease-out both;
   border:1px solid var(--border);
+  color: var(--text);
 }
 
 .modal-header{
@@ -885,7 +901,8 @@ dialog.modal::backdrop{
     margin-bottom:6px;
     font-size:13px;
     font-weight:700;
-    color:#374151;
+    /* mesma cor que a 1a definicao deste seletor (var, acompanha o tema); antes era #374151 fixo */
+    color: color-mix(in srgb, var(--text) 80%, var(--muted));
 }
 
 .field input,
@@ -900,9 +917,17 @@ dialog.modal::backdrop{
 
     padding:0 14px;
 
-    background:#fff;
+    /* antes: background:#fff fixo, com o texto em var(--text) (claro no escuro) = invisivel */
+    background: var(--card);
+    color: var(--text);
 
     transition:.18s;
+}
+
+.field input::placeholder,
+.field textarea::placeholder{
+    color: var(--muted);
+    opacity: 1;
 }
 
 .field textarea{

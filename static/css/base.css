@@ -4,6 +4,13 @@
    ========================================================= */
 
 :root{
+  /* Esquema de cores dos elementos NATIVOS (dialog, select, calendario, barra de rolagem).
+     O app e claro por padrao (as telas usam fundos claros fixos), entao o padrao e "light".
+     Telas/dialogos que trocam as variaveis para escuro no modo escuro do sistema declaram
+     "color-scheme: dark" no proprio bloco escuro (ex.: usuarios.css). Nao usar "light dark"
+     aqui: viraria escuro os controles de todas as paginas que ainda tem fundo claro fixo. */
+  color-scheme: light;
+
   --topbar-h: 64px;
 
   --sidebar-w: 280px;
@@ -74,6 +81,13 @@ body{
 body.menu-open,
 body.no-scroll{
   overflow:hidden;
+}
+
+/* <dialog> nativo: o navegador pinta o texto com a cor padrao (preto) e NAO herda do body.
+   Sem esta regra, quando uma tela troca --text/--card para o tema escuro o dialogo fica
+   preto sobre azul-marinho. A cor vem da mesma variavel do resto da tela. */
+dialog{
+  color: var(--text);
 }
 
 img{
