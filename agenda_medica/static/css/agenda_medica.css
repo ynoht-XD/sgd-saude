@@ -185,7 +185,7 @@
 }
 
 .am-btn-light {
-  background: #eef2f7;
+  background: var(--surface-3);
   color: var(--text-2);
 }
 

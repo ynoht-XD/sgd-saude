@@ -4,9 +4,7 @@
    ========================================================== */
 
 :root{
-  --bg:#f7f9fc;
   --card:var(--surface);
-  --line:#e5e7eb;
 
   --primary:var(--brand);
   --primary-hover:var(--brand-2);

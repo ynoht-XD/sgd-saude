@@ -404,7 +404,7 @@
 }
 
 .fin-table tbody tr:hover {
-  background: #fbfdff;
+  background: var(--surface-2);
 }
 
 .text-right {
