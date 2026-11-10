@@ -116,12 +116,12 @@
 }
 
 .flash.success {
-  color: #065f46;
+  color: var(--success-ink);
   background: rgba(16,185,129,.12);
 }
 
 .flash.error {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: rgba(239,68,68,.12);
 }
 
@@ -144,7 +144,7 @@
   gap: 16px;
   align-items: center;
   background: white;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--line);
   border-radius: 24px;
   padding: 20px;
   box-shadow: 0 14px 34px rgba(15,23,42,.07);
@@ -172,17 +172,17 @@
 
 .clinica-card h2 {
   margin: 0;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .clinica-card p {
   margin: 4px 0;
-  color: #64748b;
+  color: var(--muted);
   font-weight: 800;
 }
 
 .clinica-card small {
-  color: #64748b;
+  color: var(--muted);
 }
 
 .actions {

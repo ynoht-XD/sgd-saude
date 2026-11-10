@@ -17,7 +17,7 @@
     gap:12px;flex-wrap:wrap;margin:10px 0 14px;
   }
   .head h2{margin:0;font-size:22px;font-weight:950}
-  .head p{margin:4px 0 0;color:#64748b}
+  .head p{margin:4px 0 0;color:var(--muted)}
 
   .btn{
     appearance:none;border:0;cursor:pointer;
@@ -25,11 +25,11 @@
     font-weight:900;font-size:.95rem;
     text-decoration:none;display:inline-flex;align-items:center;gap:8px;
   }
-  .btn-primary{background:#1e3a8a;color:#fff}
-  .btn-ghost{background:#f1f5f9;color:#0f172a}
+  .btn-primary{background:#1e3a8a;color:var(--on-brand)}
+  .btn-ghost{background:var(--surface-3);color:var(--text)}
 
   .card{
-    background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+    background:var(--surface);border:1px solid #e5e7eb;border-radius:16px;
     box-shadow:0 10px 30px rgba(2,6,23,.06);
   }
   form{padding:14px}
@@ -55,11 +55,11 @@
   }
   summary{
     cursor:pointer;font-weight:950;padding:12px;
-    background:#f8fafc;list-style:none;
+    background:var(--surface-2);list-style:none;
     display:flex;justify-content:space-between;align-items:center;
   }
   summary::-webkit-details-marker{display:none}
-  .sec{padding:12px;border-top:1px solid #eef2f7}
+  .sec{padding:12px;border-top:1px solid var(--line-soft)}
 
   .opt-row{display:flex;gap:10px;flex-wrap:wrap}
   .pill{
