@@ -18,7 +18,7 @@
 
     .ag-modal-card > header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 18px; border-bottom: 1px solid #e5e7eb;
+      padding: 16px 18px; border-bottom: 1px solid var(--line);
       background: linear-gradient(180deg,#f8fafc, #ffffff 60%);
       border-top-left-radius: 16px; border-top-right-radius: 16px;
     }
@@ -43,7 +43,7 @@
     .ag-modal-body input[type="time"],
     .ag-modal-body input[type="number"],
     .ag-modal-body select {
-      width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px;
+      width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
       font-size: 14px; background: var(--surface); outline: none;
     }
     .ag-modal-body input:focus,
@@ -72,7 +72,7 @@
     }
     .tipo-extra .qtd-box {
       display: flex; align-items: center; gap: 8px;
-      background: var(--surface); border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 8px;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px;
     }
     .tipo-extra input[type="number"] {
       width: 110px; padding: 6px 8px; border: none; outline: none;
@@ -81,11 +81,11 @@
 
     .ag-modal-card > footer {
       display: flex; gap: 8px; align-items: center; justify-content: flex-end;
-      padding: 14px 18px; border-top: 1px solid #e5e7eb;
+      padding: 14px 18px; border-top: 1px solid var(--line);
       border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;
-      background: #fafafa;
+      background: var(--surface-2);
     }
-    .btn { border: 1px solid #e5e7eb; background: var(--surface); padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+    .btn { border: 1px solid var(--line); background: var(--surface); padding: 10px 14px; border-radius: 10px; cursor: pointer; }
     .btn:hover { background: var(--surface-2); }
     .btn.pri { background: #2c7be5; color:var(--on-brand); border-color:#2c7be5; }
     .btn.pri:hover { filter: brightness(.95); }
