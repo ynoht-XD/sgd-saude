@@ -5,12 +5,12 @@
    =========================================================== */
 
 :root{
-  --rh-bg: #f3f4f6;
+  --rh-bg: var(--bg);
   --rh-panel: var(--surface);
   --rh-text: var(--text);
   --rh-muted: #6b7280;
-  --rh-line: #e5e7eb;
-  --rh-line-soft: #f3f4f6;
+  --rh-line: var(--line);
+  --rh-line-soft: var(--line-soft);
   --rh-primary: var(--brand);
   --rh-primary-600: var(--brand-2);
   --rh-success: #10b981;

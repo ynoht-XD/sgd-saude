@@ -8,7 +8,7 @@
   --mod-card: rgba(255, 255, 255, .88);
   --mod-card-solid: var(--surface);
   --mod-text: #172033;
-  --mod-muted: #6b768c;
+  --mod-muted: var(--muted);
   --mod-line: rgba(120, 135, 170, .24);
 
   --mod-primary: var(--brand);

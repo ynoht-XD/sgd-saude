@@ -3,7 +3,7 @@
    =========================================================== */
 
 :root {
-  --pts-bg: #eef3f8;
+  --pts-bg: var(--bg);
   --pts-bg-2: var(--surface-2);
   --pts-panel: rgba(255, 255, 255, .92);
   --pts-panel-solid: var(--surface);

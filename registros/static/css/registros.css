@@ -6,11 +6,11 @@
 :root{
   --reg-bg:var(--bg);
   --reg-card:var(--surface);
-  --reg-card-soft:#fbfdff;
+  --reg-card-soft:var(--surface-2);
   --reg-text:var(--text);
   --reg-text-2:var(--text-2);
   --reg-muted:var(--muted);
-  --reg-line:#e5e7eb;
+  --reg-line:var(--line);
   --reg-line-2:#dbe3ef;
 
   --reg-primary:var(--brand);
