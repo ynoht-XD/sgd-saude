@@ -9,13 +9,13 @@
     --fisio-primary:#0f766e;
     --fisio-primary-dark:#115e59;
     --fisio-bg:#f4f8f8;
-    --fisio-card:#ffffff;
+    --fisio-card:var(--surface);
     --fisio-border:#dbe7e6;
     --fisio-text:#173b3a;
-    --fisio-muted:#64748b;
-    --fisio-soft:#ecfdf5;
-    --fisio-danger:#dc2626;
-    --fisio-blue:#eff6ff;
+    --fisio-muted:var(--muted);
+    --fisio-soft:var(--success-soft);
+    --fisio-danger:var(--danger);
+    --fisio-blue:var(--info-soft);
     --fisio-purple:#f5f3ff;
     --fisio-orange:#fff7ed;
 }
@@ -28,7 +28,7 @@
 
 .fisio-header{
     background:linear-gradient(135deg,#0f766e,#14b8a6);
-    color:#fff;
+    color:var(--on-brand);
     padding:18px 22px;
     border-radius:20px;
     margin-bottom:16px;
@@ -101,7 +101,7 @@
     padding:9px 10px;
     font-size:13px;
     outline:none;
-    background:#fff;
+    background:var(--surface);
     transition:.2s;
 }
 
@@ -162,7 +162,7 @@
     padding:8px 10px;
     border:1px solid var(--fisio-border);
     border-radius:999px;
-    background:#f8fafc;
+    background:var(--surface-2);
     color:var(--fisio-text);
     font-size:13px;
     font-weight:800;
@@ -185,7 +185,7 @@
 
 .option-pill:has(input:checked){
     background:var(--fisio-primary);
-    color:#fff;
+    color:var(--on-brand);
     border-color:var(--fisio-primary);
     box-shadow:0 6px 14px rgba(15,118,110,.22);
 }
@@ -197,7 +197,7 @@
 }
 
 .eva-box{
-    background:#f8fafc;
+    background:var(--surface-2);
     border:1px solid var(--fisio-border);
     border-radius:14px;
     padding:12px;
@@ -275,7 +275,7 @@ input[type="range"]{
 }
 
 .btn-remove{
-    background:#fee2e2;
+    background:var(--danger-chip);
     color:var(--fisio-danger);
 }
 
@@ -308,7 +308,7 @@ input[type="range"]{
     top:100%;
     left:0;
     right:0;
-    background:#fff;
+    background:var(--surface);
     border:1px solid var(--fisio-border);
     border-radius:12px;
     box-shadow:0 12px 25px rgba(15,23,42,.12);
@@ -321,7 +321,7 @@ input[type="range"]{
 .paciente-item{
     padding:10px 12px;
     cursor:pointer;
-    border-bottom:1px solid #eef2f7;
+    border-bottom:1px solid var(--line-soft);
 }
 
 .paciente-item:hover{

@@ -391,27 +391,27 @@ C910
 
 <style>
 :root{
-  --l-bg:#f8fafc;
-  --l-card:#ffffff;
+  --l-bg:var(--surface-2);
+  --l-card:var(--surface);
   --l-line:#e5e7eb;
   --l-line-2:#dbe3ee;
-  --l-text:#0f172a;
-  --l-muted:#64748b;
-  --l-soft:#f1f5f9;
-  --l-primary:#2563eb;
-  --l-primary-2:#1d4ed8;
+  --l-text:var(--text);
+  --l-muted:var(--muted);
+  --l-soft:var(--surface-3);
+  --l-primary:var(--brand);
+  --l-primary-2:var(--brand-2);
   --l-shadow:0 18px 50px rgba(15,23,42,.08);
   --l-radius-lg:24px;
   --l-radius-md:16px;
   --l-radius-sm:12px;
-  --l-green-bg:#dcfce7;
-  --l-green-text:#166534;
-  --l-yellow-bg:#fef3c7;
-  --l-yellow-text:#92400e;
-  --l-red-bg:#fee2e2;
-  --l-red-text:#991b1b;
+  --l-green-bg:var(--success-chip);
+  --l-green-text:var(--success-chip-ink);
+  --l-yellow-bg:var(--warning-chip);
+  --l-yellow-text:var(--warning-chip-ink);
+  --l-red-bg:var(--danger-chip);
+  --l-red-text:var(--danger-chip-ink);
   --l-neutral-bg:#e2e8f0;
-  --l-neutral-text:#334155;
+  --l-neutral-text:var(--text-2);
 }
 
 .lote-page{
@@ -437,8 +437,8 @@ C910
   display:inline-flex;
   align-items:center;
   gap:8px;
-  background:#dbeafe;
-  color:#1d4ed8;
+  background:var(--info-chip);
+  color:var(--info-chip-ink);
   border-radius:999px;
   padding:7px 12px;
   font-size:.82rem;
@@ -514,7 +514,7 @@ C910
   width:100%;
   border:1px solid var(--l-line-2);
   border-radius:14px;
-  background:#fff;
+  background:var(--surface);
   padding:12px 14px;
   font-size:.96rem;
   color:var(--l-text);
@@ -567,7 +567,7 @@ C910
 
 .btn-primary{
   background:var(--l-primary);
-  color:#fff;
+  color:var(--on-brand);
 }
 
 .btn-primary:hover{
@@ -576,7 +576,7 @@ C910
 
 .btn-secondary{
   background:#0f172a;
-  color:#fff;
+  color:var(--on-brand);
 }
 
 .btn-secondary:hover{
@@ -584,13 +584,13 @@ C910
 }
 
 .btn-ghost{
-  background:#fff;
+  background:var(--surface);
   color:var(--l-text);
   border-color:var(--l-line);
 }
 
 .btn-ghost:hover{
-  background:#f8fafc;
+  background:var(--surface-2);
 }
 
 .filebox{
@@ -645,21 +645,21 @@ C910
 }
 
 .flash-success{
-  background:#ecfdf5;
-  border-color:#a7f3d0;
-  color:#065f46;
+  background:var(--success-soft);
+  border-color:var(--success-line);
+  color:var(--success-ink);
 }
 
 .flash-error{
-  background:#fef2f2;
-  border-color:#fecaca;
-  color:#991b1b;
+  background:var(--danger-soft);
+  border-color:var(--danger-line);
+  color:var(--danger-ink);
 }
 
 .flash-warning{
-  background:#fffbeb;
-  border-color:#fde68a;
-  color:#92400e;
+  background:var(--warning-soft);
+  border-color:var(--warning-line);
+  color:var(--warning-ink);
 }
 
 .lote-summary{
@@ -674,7 +674,7 @@ C910
   align-items:center;
   gap:10px;
   padding:12px 14px;
-  background:#fff;
+  background:var(--surface);
   border:1px solid var(--l-line);
   border-radius:999px;
   box-shadow:0 10px 24px rgba(15,23,42,.05);
@@ -702,8 +702,8 @@ C910
   position:sticky;
   top:0;
   z-index:2;
-  background:#f8fafc;
-  color:#334155;
+  background:var(--surface-2);
+  color:var(--text-2);
   text-align:left;
   font-size:.86rem;
   letter-spacing:.02em;
@@ -714,9 +714,9 @@ C910
 .lote-table tbody td{
   vertical-align:top;
   padding:14px;
-  border-bottom:1px solid #eef2f7;
+  border-bottom:1px solid var(--line-soft);
   color:var(--l-text);
-  background:#fff;
+  background:var(--surface);
 }
 
 .lote-table tbody tr:hover td{
@@ -769,13 +769,13 @@ C910
 }
 
 .badge-flag{
-  background:#fee2e2;
-  color:#991b1b;
+  background:var(--danger-chip);
+  color:var(--danger-chip-ink);
 }
 
 .badge-fin{
-  background:#dbeafe;
-  color:#1d4ed8;
+  background:var(--info-chip);
+  color:var(--info-chip-ink);
 }
 
 .badge-rubrica{
@@ -807,9 +807,9 @@ C910
 }
 
 .chip-cbo{
-  background:#eff6ff;
-  color:#1d4ed8;
-  border-color:#bfdbfe;
+  background:var(--info-soft);
+  color:var(--info-ink);
+  border-color:var(--info-line);
 }
 
 .chip-serv{
@@ -823,8 +823,8 @@ C910
   padding:0 11px;
   border:1px dashed #94a3b8;
   border-radius:12px;
-  background:#fff;
-  color:#334155;
+  background:var(--surface);
+  color:var(--text-2);
   font-size:.82rem;
   font-weight:700;
   cursor:pointer;
@@ -832,7 +832,7 @@ C910
 }
 
 .chip-more:hover{
-  background:#f8fafc;
+  background:var(--surface-2);
 }
 
 .muted{
@@ -852,7 +852,7 @@ C910
 .mob-card{
   border:1px solid var(--l-line);
   border-radius:18px;
-  background:#fff;
+  background:var(--surface);
   padding:16px;
   box-shadow:0 10px 26px rgba(15,23,42,.04);
 }
@@ -921,7 +921,7 @@ C910
   width:min(760px, calc(100vw - 24px));
   max-height:82vh;
   overflow:auto;
-  background:#fff;
+  background:var(--surface);
   border-radius:24px;
   box-shadow:0 24px 80px rgba(15,23,42,.24);
 }
@@ -935,7 +935,7 @@ C910
   border-bottom:1px solid var(--l-line);
   position:sticky;
   top:0;
-  background:#fff;
+  background:var(--surface);
 }
 
 .lote-modal__head h3{
@@ -949,7 +949,7 @@ C910
   height:40px;
   border:1px solid var(--l-line);
   border-radius:12px;
-  background:#fff;
+  background:var(--surface);
   font-size:1.4rem;
   cursor:pointer;
 }

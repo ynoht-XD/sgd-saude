@@ -32,12 +32,12 @@
     font-size:clamp(1.45rem,2.2vw,2rem);
     font-weight:900;
     letter-spacing:-.04em;
-    color:#0f172a;
+    color:var(--text);
   }
 
   .pts-hero-sub{
     margin:6px 0 0;
-    color:#64748b;
+    color:var(--muted);
     line-height:1.45;
   }
 
@@ -48,7 +48,7 @@
     place-items:center;
     border-radius:16px;
     background:linear-gradient(135deg,#2563eb,#0ea5e9);
-    color:#fff;
+    color:var(--on-brand);
     box-shadow:0 14px 28px rgba(37,99,235,.25);
   }
 
@@ -83,7 +83,7 @@
     gap:8px;
     font-size:1rem;
     font-weight:900;
-    color:#0f172a;
+    color:var(--text);
   }
 
   .pts-panel-title::before{
@@ -114,17 +114,17 @@
   .pts-field input{
     width:100%;
     min-height:42px;
-    border:1px solid #e2e8f0;
+    border:1px solid var(--line);
     border-radius:14px;
     padding:0 12px;
-    background:#fff;
-    color:#0f172a;
+    background:var(--surface);
+    color:var(--text);
     font-weight:700;
     outline:none;
   }
 
   .pts-field input:focus{
-    border-color:#2563eb;
+    border-color:var(--brand);
     box-shadow:0 0 0 4px rgba(37,99,235,.13);
   }
 
@@ -136,9 +136,9 @@
     gap:8px;
     padding:9px 14px;
     border-radius:14px;
-    border:1px solid #e2e8f0;
-    background:#fff;
-    color:#0f172a;
+    border:1px solid var(--line);
+    background:var(--surface);
+    color:var(--text);
     text-decoration:none;
     font-weight:900;
     cursor:pointer;
@@ -152,8 +152,8 @@
   }
 
   .pts-btn.primary{
-    color:#fff;
-    border-color:#2563eb;
+    color:var(--on-brand);
+    border-color:var(--brand);
     background:linear-gradient(135deg,#2563eb,#0ea5e9);
   }
 
@@ -164,7 +164,7 @@
   }
 
   .pts-btn.ghost{
-    background:#f8fafc;
+    background:var(--surface-2);
   }
 
   .pts-badge{
@@ -173,8 +173,8 @@
     gap:6px;
     padding:6px 10px;
     border-radius:999px;
-    border:1px solid #e2e8f0;
-    background:#f8fafc;
+    border:1px solid var(--line);
+    background:var(--surface-2);
     color:#475569;
     font-size:.78rem;
     font-weight:900;
@@ -182,9 +182,9 @@
   }
 
   .pts-badge.blue{
-    color:#1d4ed8;
+    color:var(--info-chip-ink);
     border-color:rgba(37,99,235,.18);
-    background:#dbeafe;
+    background:var(--info-chip);
   }
 
   .pts-badge.green{
@@ -218,7 +218,7 @@
 
   .pts-patient{
     margin:0;
-    color:#0f172a;
+    color:var(--text);
     font-size:1.05rem;
     font-weight:950;
     letter-spacing:-.02em;
@@ -228,7 +228,7 @@
     display:flex;
     flex-wrap:wrap;
     gap:8px;
-    color:#64748b;
+    color:var(--muted);
     font-size:.86rem;
     font-weight:750;
   }
@@ -236,7 +236,7 @@
   .pts-team{
     padding:10px 12px;
     border-radius:16px;
-    background:#f1f5f9;
+    background:var(--surface-3);
     color:#475569;
     font-size:.88rem;
     line-height:1.4;
@@ -254,8 +254,8 @@
     text-align:center;
     border:1px dashed #cbd5e1;
     border-radius:20px;
-    background:#f8fafc;
-    color:#64748b;
+    background:var(--surface-2);
+    color:var(--muted);
     font-weight:800;
   }
 
@@ -288,7 +288,7 @@
   }
 
   .pts-k{
-    color:#64748b;
+    color:var(--muted);
     font-size:.82rem;
     font-weight:900;
     text-transform:uppercase;
@@ -296,7 +296,7 @@
   }
 
   .pts-v{
-    color:#0f172a;
+    color:var(--text);
     font-weight:800;
     overflow-wrap:anywhere;
   }
@@ -308,22 +308,22 @@
 
   .pts-text-box{
     padding:13px;
-    border:1px solid #e2e8f0;
+    border:1px solid var(--line);
     border-radius:16px;
-    background:#f8fafc;
+    background:var(--surface-2);
   }
 
   .pts-text-box strong{
     display:block;
     margin-bottom:5px;
-    color:#334155;
+    color:var(--text-2);
     font-size:.8rem;
     text-transform:uppercase;
     letter-spacing:.03em;
   }
 
   .pts-text-box div{
-    color:#0f172a;
+    color:var(--text);
     line-height:1.5;
     font-weight:650;
   }
@@ -340,17 +340,17 @@
     align-items:center;
     padding:12px;
     border-radius:16px;
-    background:#f8fafc;
-    border:1px solid #e2e8f0;
+    background:var(--surface-2);
+    border:1px solid var(--line);
   }
 
   .pts-member-name{
     font-weight:950;
-    color:#0f172a;
+    color:var(--text);
   }
 
   .pts-member-role{
-    color:#64748b;
+    color:var(--muted);
     font-size:.86rem;
     font-weight:750;
     margin-top:2px;
