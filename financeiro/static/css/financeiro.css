@@ -284,7 +284,7 @@
 
 .fin-divider {
   height: 1px;
-  background: #eef2f7;
+  background: var(--line-soft);
   margin: 18px 0;
 }
 
