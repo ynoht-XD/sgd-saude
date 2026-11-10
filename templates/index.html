@@ -162,7 +162,7 @@
   }
   .kpi{
     background:var(--surface);
-    border:1px solid #e5e7eb;
+    border:1px solid var(--line);
     border-radius:14px;
     padding:14px 14px;
     box-shadow:0 8px 22px rgba(2,6,23,.06)
@@ -172,7 +172,7 @@
 
   .card{
     background:var(--surface);
-    border:1px solid #e5e7eb;
+    border:1px solid var(--line);
     border-radius:14px;
     padding:14px;
     box-shadow:0 8px 22px rgba(2,6,23,.06)
@@ -193,13 +193,13 @@
     padding:6px 10px;
     border-radius:999px;
     font-size:.85rem;
-    border:1px solid #e5e7eb;
+    border:1px solid var(--line);
     background:var(--surface-2);
     color:var(--text);
     white-space:nowrap
   }
 
-  .table-wrap{overflow:auto;border:1px solid #e5e7eb;border-radius:12px}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
   table.t{width:100%;border-collapse:collapse}
   .t thead th{
     background:var(--surface-2);
@@ -207,7 +207,7 @@
     padding:10px 12px;
     font-size:.85rem;
     color:#475569;
-    border-bottom:1px solid #e5e7eb;
+    border-bottom:1px solid var(--line);
     white-space:nowrap
   }
   .t tbody td{
@@ -215,7 +215,7 @@
     border-bottom:1px solid var(--line-soft);
     vertical-align:top
   }
-  .t tbody tr:hover{background:#fafafa}
+  .t tbody tr:hover{background:var(--surface-2)}
 
   .muted{color:var(--muted)}
   .empty{margin:0;color:var(--muted)}

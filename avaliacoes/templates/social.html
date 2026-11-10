@@ -29,7 +29,7 @@
   .btn-ghost{background:var(--surface-3);color:var(--text)}
 
   .card{
-    background:var(--surface);border:1px solid #e5e7eb;border-radius:16px;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;
     box-shadow:0 10px 30px rgba(2,6,23,.06);
   }
   form{padding:14px}
@@ -44,13 +44,13 @@
   .label{font-weight:900;font-size:.9rem}
 
   input, textarea, select{
-    border:1px solid #e5e7eb;border-radius:12px;
+    border:1px solid var(--line);border-radius:12px;
     padding:10px 12px;font-size:.95rem;
   }
   textarea{min-height:90px}
 
   details{
-    border:1px solid #e5e7eb;border-radius:14px;margin-top:10px;
+    border:1px solid var(--line);border-radius:14px;margin-top:10px;
     overflow:hidden;
   }
   summary{
@@ -65,12 +65,12 @@
   .pill{
     display:inline-flex;align-items:center;gap:6px;
     padding:8px 10px;border-radius:999px;
-    border:1px solid #e5e7eb;font-weight:900;font-size:.85rem;
+    border:1px solid var(--line);font-weight:900;font-size:.85rem;
   }
 
   .footer{
     display:flex;justify-content:flex-end;gap:10px;margin-top:14px;
-    border-top:1px dashed #e5e7eb;padding-top:12px;
+    border-top:1px dashed var(--line);padding-top:12px;
   }
 </style>
 {% endblock %}
