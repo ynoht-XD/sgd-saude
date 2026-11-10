@@ -9,7 +9,7 @@
   min-width: 0;
   margin: 0;
   padding: 0;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .com-page *,
@@ -27,21 +27,21 @@
 .com-page,
 .com-dialog{
   --com-bg: transparent;
-  --com-card: #ffffff;
+  --com-card: var(--surface);
   --com-card-soft: #fbfdff;
-  --com-text: #0f172a;
-  --com-muted: #64748b;
+  --com-text: var(--text);
+  --com-muted: var(--muted);
   --com-soft-text: #475569;
 
   --com-line: #e5e7eb;
   --com-line-strong: #d7dfeb;
-  --com-line-soft: #eef2f7;
+  --com-line-soft: var(--line-soft);
 
-  --com-primary: #2563eb;
-  --com-primary-600: #1d4ed8;
+  --com-primary: var(--brand);
+  --com-primary-600: var(--brand-2);
   --com-primary-soft: rgba(37, 99, 235, .10);
 
-  --com-success: #16a34a;
+  --com-success: var(--success);
   --com-success-600: #15803d;
   --com-success-soft: rgba(22, 163, 74, .10);
 
@@ -286,7 +286,7 @@
 .com-label{
   font-size: .88rem;
   font-weight: 700;
-  color: #334155;
+  color: var(--text-2);
 }
 
 .com-input,
@@ -297,7 +297,7 @@
   min-width: 0;
   min-height: 46px;
   border: 1px solid var(--com-line-strong);
-  background: #fff;
+  background: var(--surface);
   color: var(--com-text);
   border-radius: 14px;
   padding: 0 14px;
@@ -314,7 +314,7 @@
 
 .com-input::placeholder,
 .com-textarea::placeholder{
-  color: #94a3b8;
+  color: var(--muted-2);
 }
 
 .com-input:focus,
@@ -326,7 +326,7 @@
 
 .com-input[readonly],
 .com-select[readonly]{
-  background: #f8fafc;
+  background: var(--surface-2);
   cursor: default;
 }
 
@@ -338,21 +338,21 @@
   border-radius: 14px;
   border: 1px dashed var(--com-line-strong);
   background: #f8fbff;
-  color: #334155;
+  color: var(--text-2);
   font-weight: 700;
   line-height: 1.5;
 }
 
 .com-readonly.is-warning{
   border: 1px solid #facc15;
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--warning-soft);
+  color: var(--warning-ink);
 }
 
 .com-readonly.is-expired{
   border: 1px solid #ef4444;
-  background: #fef2f2;
-  color: #991b1b;
+  background: var(--danger-soft);
+  color: var(--danger-ink);
 }
 
 /* =========================================================
@@ -388,25 +388,25 @@
 }
 
 .com-btn--primary{
-  color: #fff;
+  color: var(--on-brand);
   background: linear-gradient(135deg, var(--com-primary), var(--com-primary-600));
   box-shadow: 0 12px 24px rgba(37,99,235,.20);
 }
 
 .com-btn--ghost{
-  color: #334155;
+  color: var(--text-2);
   background: #f4f7fc;
   border: 1px solid #dbe3ef;
 }
 
 .com-btn--danger{
-  color: #fff;
+  color: var(--on-brand);
   background: linear-gradient(135deg, #ef4444, #dc2626);
   box-shadow: 0 12px 24px rgba(220,38,38,.18);
 }
 
 .com-btn--warning{
-  color: #fff;
+  color: var(--on-brand);
   background: linear-gradient(135deg, #f59e0b, #d97706);
   box-shadow: 0 12px 24px rgba(217,119,6,.20);
 }
@@ -465,7 +465,7 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px;
-  background: #f8fafc;
+  background: var(--surface-2);
   border: 1px solid var(--com-line);
   border-radius: 18px;
   margin-bottom: 18px;
@@ -488,7 +488,7 @@
 .com-segment-btn.is-active,
 .com-segment-btn[aria-selected="true"]{
   background: linear-gradient(135deg, var(--com-primary), var(--com-primary-600));
-  color: #fff;
+  color: var(--on-brand);
   box-shadow: 0 10px 20px rgba(37,99,235,.18);
 }
 
@@ -586,7 +586,7 @@
 
 .com-badge--sessions{
   background: rgba(37,99,235,.10);
-  color: #1d4ed8;
+  color: var(--brand-2);
 }
 
 .com-badge--price{
@@ -606,7 +606,7 @@
 
 .com-badge--combo{
   background: rgba(37,99,235,.10);
-  color: #1d4ed8;
+  color: var(--brand-2);
 }
 
 .com-badge--plan{
@@ -615,18 +615,18 @@
 }
 
 .com-badge--status{
-  background: #f1f5f9;
-  color: #334155;
+  background: var(--surface-3);
+  color: var(--text-2);
 }
 
 .com-badge--soft{
-  background: #f1f5f9;
-  color: #334155;
+  background: var(--surface-3);
+  color: var(--text-2);
 }
 
 .com-badge--info{
   background: rgba(37,99,235,.10);
-  color: #1d4ed8;
+  color: var(--info-ink);
 }
 
 .com-badge--warn{
@@ -658,7 +658,7 @@
   margin-top: 8px;
   border: 1px solid var(--com-line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--com-shadow-md);
   max-height: 260px;
   overflow: auto;
@@ -674,7 +674,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .com-search-item:last-child{
@@ -787,7 +787,7 @@
 
 .com-switch-text{
   font-weight: 700;
-  color: #334155;
+  color: var(--text-2);
 }
 
 /* =========================================================
@@ -897,7 +897,7 @@
 
 .com-mini{
   border: 1px solid var(--com-line);
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px;
   padding: 12px;
   min-width: 0;
@@ -946,7 +946,7 @@
 .com-consumo-title{
   font-size: .9rem;
   font-weight: 800;
-  color: #334155;
+  color: var(--text-2);
 }
 
 .com-consumo-numbers{
@@ -999,7 +999,7 @@
 }
 
 .com-vinculo-datas strong{
-  color: #334155;
+  color: var(--text-2);
   font-size: .88rem;
 }
 
@@ -1068,7 +1068,7 @@
   gap: 8px;
   padding: 12px;
   border-radius: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
   border: 1px solid var(--com-line);
 }
 
@@ -1083,14 +1083,14 @@
   overflow-y: hidden;
   border: 1px solid var(--com-line);
   border-radius: 18px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .com-table{
   width: 100%;
   min-width: 880px;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--surface);
 }
 
 .com-table thead th{
@@ -1100,14 +1100,14 @@
   text-transform: uppercase;
   letter-spacing: .04em;
   color: var(--com-muted);
-  background: #f8fafc;
+  background: var(--surface-2);
   border-bottom: 1px solid var(--com-line);
   white-space: nowrap;
 }
 
 .com-table tbody td{
   padding: 14px;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid var(--line-soft);
   vertical-align: top;
 }
 
@@ -1194,7 +1194,7 @@
 
 .com-dialog-card{
   width: 100%;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--com-line);
   border-radius: 24px;
   overflow: hidden;
@@ -1228,7 +1228,7 @@
 .com-dialog-close{
   border: 0;
   background: #f3f6fb;
-  color: #334155;
+  color: var(--text-2);
   width: 42px;
   height: 42px;
   border-radius: 14px;
@@ -1508,7 +1508,7 @@
 }
 
 .com-field-erro{
-  border-color: #dc2626 !important;
+  border-color: var(--danger) !important;
 }
 
 @media (max-width: 920px){
@@ -1542,7 +1542,7 @@
   padding: 10px 14px;
   border: 1px solid var(--com-line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .com-benef-item--titular{
