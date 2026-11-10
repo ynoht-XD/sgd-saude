@@ -32,7 +32,7 @@
   .btn-ghost{background:var(--surface-3);color:var(--text)}
 
   .card{
-    background:var(--surface);border:1px solid #e5e7eb;border-radius:16px;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;
     box-shadow:0 10px 30px rgba(2,6,23,.06);
     overflow:hidden;
   }
@@ -51,7 +51,7 @@
 
   input[type="text"], input[type="date"], textarea, select{
     width:100%;
-    border:1px solid #e5e7eb;border-radius:12px;
+    border:1px solid var(--line);border-radius:12px;
     padding:10px 12px;font-size:.95rem;outline:none;background:var(--surface);
   }
   input[readonly]{background:var(--surface-2)}
@@ -62,7 +62,7 @@
   }
 
   details.sec{
-    border:1px solid #e5e7eb;border-radius:14px;background:var(--surface);overflow:hidden;
+    border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden;
   }
   details.sec + details.sec{margin-top:10px}
   summary.st{
@@ -82,7 +82,7 @@
   .opt-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .pill{
     display:inline-flex;align-items:center;gap:8px;
-    padding:8px 10px;border:1px solid #e5e7eb;border-radius:999px;
+    padding:8px 10px;border:1px solid var(--line);border-radius:999px;
     background:var(--surface);font-weight:900;font-size:.88rem;color:var(--text);
     white-space:nowrap;
   }
@@ -98,7 +98,7 @@
 
   .footer{
     display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;
-    padding-top:12px;margin-top:14px;border-top:1px dashed #e5e7eb;
+    padding-top:12px;margin-top:14px;border-top:1px dashed var(--line);
   }
 
   @media (prefers-color-scheme: dark){

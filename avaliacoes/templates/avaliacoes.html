@@ -4,13 +4,13 @@
 {% block extra_css %}
 <style>
   :root{
-    --av-bg:#f6f8fc;
+    --av-bg:var(--bg);
     --av-card:var(--surface);
-    --av-card-2:#fbfcff;
+    --av-card-2:var(--surface-2);
     --av-text:var(--text);
     --av-muted:var(--muted);
-    --av-border:#e5e7eb;
-    --av-border-strong:#dbe3ee;
+    --av-border:var(--line);
+    --av-border-strong:var(--line);
     --av-primary:var(--brand-2);
     --av-primary-2:#4338ca;
     --av-soft:#eef2ff;
@@ -228,7 +228,7 @@
   .pick{
     position:relative;
     overflow:hidden;
-    border:1px solid #e5e7eb;
+    border:1px solid var(--line);
     border-radius:20px;
     padding:16px;
     background:
@@ -313,7 +313,7 @@
   }
 
   .f-input,.f-select{
-    border:1px solid #e5e7eb;
+    border:1px solid var(--line);
     border-radius:14px;
     padding:11px 12px;
     font-size:.95rem;

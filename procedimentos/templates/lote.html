@@ -393,8 +393,8 @@ C910
 :root{
   --l-bg:var(--surface-2);
   --l-card:var(--surface);
-  --l-line:#e5e7eb;
-  --l-line-2:#dbe3ee;
+  --l-line:var(--line);
+  --l-line-2:var(--line);
   --l-text:var(--text);
   --l-muted:var(--muted);
   --l-soft:var(--surface-3);
@@ -614,8 +614,8 @@ C910
   justify-content:center;
   padding:11px 16px;
   border-radius:12px;
-  background:#e0ecff;
-  color:#1d4ed8;
+  background:var(--info-chip);
+  color:var(--info-chip-ink);
   font-weight:700;
   cursor:pointer;
   transition:.2s ease;
@@ -720,7 +720,7 @@ C910
 }
 
 .lote-table tbody tr:hover td{
-  background:#fbfdff;
+  background:var(--surface-2);
 }
 
 .proc-main strong{

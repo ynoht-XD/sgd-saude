@@ -316,14 +316,14 @@
   .bk-search{display:flex;align-items:center;gap:10px;width:min(100%,340px);min-height:48px;padding:0 14px;border-radius:16px;background:var(--surface-2);border:1px solid var(--bk-border);}
   .bk-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;}
 
-  .bk-table-wrap{overflow:auto;border-radius:20px;border:1px solid #e5e7eb;}
+  .bk-table-wrap{overflow:auto;border-radius:20px;border:1px solid var(--line);}
   .bk-table{width:100%;min-width:980px;border-collapse:collapse;}
   .bk-table th{text-align:left;padding:14px 16px;background:var(--surface-2);color:#475569;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;}
   .bk-table td{padding:16px;border-top:1px solid var(--line-soft);vertical-align:middle;}
   .bk-file{display:flex;align-items:center;gap:12px;}
   .bk-file__icon{width:46px;height:46px;display:grid;place-items:center;border-radius:16px;background:var(--brand-tint);font-size:1.15rem;}
   .bk-file small{display:block;color:var(--bk-muted);margin-top:3px;}
-  .bk-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:999px;background:var(--surface-2);border:1px solid #e5e7eb;font-weight:800;color:var(--text-2);}
+  .bk-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-weight:800;color:var(--text-2);}
   .bk-pill--date{color:var(--info-ink);background:var(--info-soft);border-color:#dbeafe;}
   .bk-pill--master{color:#581c87;background:#faf5ff;border-color:#e9d5ff;}
   .bk-pill--clinic{color:var(--success-ink);background:var(--success-soft);border-color:#bbf7d0;}
@@ -353,7 +353,7 @@
     .bk-table{min-width:0;}
     .bk-table thead{display:none;}
     .bk-table tbody{display:grid;gap:12px;}
-    .bk-table tr{border:1px solid #e5e7eb;border-radius:18px;overflow:hidden;background:var(--surface);}
+    .bk-table tr{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--surface);}
     .bk-table td{border:0;padding:14px;}
     .bk-table td::before{content:attr(data-label);display:block;color:var(--muted);font-size:.75rem;font-weight:900;text-transform:uppercase;margin-bottom:8px;}
     .bk-actions-cell{text-align:left;}

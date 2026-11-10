@@ -30,13 +30,13 @@
   .btn-ghost{background:var(--surface-3);color:var(--text)}
 
   .card{
-    background:var(--surface);border:1px solid #e5e7eb;border-radius:16px;
+    background:var(--surface);border:1px solid var(--line);border-radius:16px;
     box-shadow:0 10px 30px rgba(2,6,23,.06);
   }
   form{padding:14px}
 
   details{
-    border:1px solid #e5e7eb;border-radius:14px;margin-top:10px;
+    border:1px solid var(--line);border-radius:14px;margin-top:10px;
     overflow:hidden;
     background:var(--surface);
   }
@@ -56,7 +56,7 @@
   .field{display:flex;flex-direction:column;gap:6px}
   .label{font-weight:900;font-size:.9rem}
   input[type="text"], input[type="date"], input[type="number"], textarea, select{
-    border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font-size:.95rem;
+    border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:.95rem;
     outline:none;background:var(--surface);
   }
   input:focus, textarea:focus, select:focus{
@@ -68,7 +68,7 @@
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .pill{
     display:inline-flex;align-items:center;gap:8px;
-    padding:8px 10px;border-radius:999px;border:1px solid #e5e7eb;
+    padding:8px 10px;border-radius:999px;border:1px solid var(--line);
     background:var(--surface);font-weight:900;font-size:.88rem;
   }
   .pill input{transform:translateY(1px)}
@@ -76,7 +76,7 @@
 
   .footer{
     display:flex;justify-content:flex-end;gap:10px;margin-top:14px;
-    border-top:1px dashed #e5e7eb;padding-top:12px;
+    border-top:1px dashed var(--line);padding-top:12px;
   }
 
   @media (prefers-color-scheme: dark){
