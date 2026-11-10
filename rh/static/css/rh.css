@@ -6,16 +6,16 @@
 
 :root{
   --rh-bg: #f3f4f6;
-  --rh-panel: #ffffff;
-  --rh-text: #0f172a;
+  --rh-panel: var(--surface);
+  --rh-text: var(--text);
   --rh-muted: #6b7280;
   --rh-line: #e5e7eb;
   --rh-line-soft: #f3f4f6;
-  --rh-primary: #2563eb;
-  --rh-primary-600: #1d4ed8;
+  --rh-primary: var(--brand);
+  --rh-primary-600: var(--brand-2);
   --rh-success: #10b981;
   --rh-danger: #ef4444;
-  --rh-warning: #f59e0b;
+  --rh-warning: var(--warning);
 
   --rh-shadow: 0 2px 8px rgba(0,0,0,.06);
   --rh-shadow-lg: 0 10px 34px rgba(0,0,0,.12);

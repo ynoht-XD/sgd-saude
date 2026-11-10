@@ -4,22 +4,22 @@
    ======================================================= */
 
 :root{
-  --reg-bg:#f4f7fb;
-  --reg-card:#ffffff;
+  --reg-bg:var(--bg);
+  --reg-card:var(--surface);
   --reg-card-soft:#fbfdff;
-  --reg-text:#0f172a;
-  --reg-text-2:#334155;
-  --reg-muted:#64748b;
+  --reg-text:var(--text);
+  --reg-text-2:var(--text-2);
+  --reg-muted:var(--muted);
   --reg-line:#e5e7eb;
   --reg-line-2:#dbe3ef;
 
-  --reg-primary:#2563eb;
-  --reg-primary-2:#1d4ed8;
+  --reg-primary:var(--brand);
+  --reg-primary-2:var(--brand-2);
   --reg-primary-soft:rgba(37,99,235,.10);
 
   --reg-sky:#0ea5e9;
-  --reg-green:#16a34a;
-  --reg-yellow:#f59e0b;
+  --reg-green:var(--success);
+  --reg-yellow:var(--warning);
   --reg-red:#ef4444;
   --reg-purple:#7c3aed;
 
