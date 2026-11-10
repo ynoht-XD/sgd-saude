@@ -1,8 +1,8 @@
 :root{
   --proced-bg:#f8fafc;
   --proced-card:var(--surface);
-  --proced-line:#e5e7eb;
-  --proced-line-2:#dbe3ee;
+  --proced-line:var(--line);
+  --proced-line-2:var(--line);
   --proced-text:var(--text);
   --proced-muted:var(--muted);
   --proced-soft:var(--surface-3);
@@ -195,8 +195,8 @@
   min-height:42px;
   padding:0 16px;
   border-radius:12px;
-  background:#e0ecff;
-  color:#1d4ed8;
+  background:var(--info-chip);
+  color:var(--info-chip-ink);
   font-weight:900;
   cursor:pointer;
   transition:.2s ease;
@@ -493,7 +493,7 @@
 .proced-item-card__section{
   padding:12px;
   background:rgba(248,250,252,.96);
-  border:1px solid #edf2f7;
+  border:1px solid var(--line-soft);
   border-radius:16px;
   min-width:0;
 }
