@@ -9,8 +9,8 @@
       max-width: 720px;
       border-radius: 16px;
       box-shadow: 0 24px 60px rgba(2,6,23,.25);
-      background: #ffffff;
-      color: #0f172a;
+      background: var(--surface);
+      color: var(--text);
     }
     #dlg-ag::backdrop { background: rgba(2,6,23,.55); }
 
@@ -29,7 +29,7 @@
       border: none; background: transparent; font-size: 18px; line-height: 1;
       padding: 8px; border-radius: 10px; cursor: pointer;
     }
-    #ag-fechar.btn.icon:hover { background: #f1f5f9; }
+    #ag-fechar.btn.icon:hover { background: var(--surface-3); }
 
     .ag-modal-body {
       display: grid; gap: 12px; padding: 18px; grid-template-columns: 1fr 1fr;
@@ -44,7 +44,7 @@
     .ag-modal-body input[type="number"],
     .ag-modal-body select {
       width: 100%; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px;
-      font-size: 14px; background: #ffffff; outline: none;
+      font-size: 14px; background: var(--surface); outline: none;
     }
     .ag-modal-body input:focus,
     .ag-modal-body select:focus { border-color: #2c7be5; box-shadow: 0 0 0 3px rgba(44,123,229,.12); }
@@ -60,24 +60,24 @@
       grid-column: span 2;
       display: grid; gap: 10px;
       grid-template-columns: 1fr 1fr;
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
       padding: 12px;
     }
     .tipo-row {
       display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
     }
-    .tipo-row label { margin-top: 0; font-size: 13px; color: #0f172a; }
+    .tipo-row label { margin-top: 0; font-size: 13px; color: var(--text); }
     .tipo-extra {
       display: flex; gap: 12px; align-items: center; justify-content: flex-start;
     }
     .tipo-extra .qtd-box {
       display: flex; align-items: center; gap: 8px;
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 8px;
+      background: var(--surface); border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px 8px;
     }
     .tipo-extra input[type="number"] {
       width: 110px; padding: 6px 8px; border: none; outline: none;
     }
-    .tipo-hint { font-size: 12px; color: #64748b; }
+    .tipo-hint { font-size: 12px; color: var(--muted); }
 
     .ag-modal-card > footer {
       display: flex; gap: 8px; align-items: center; justify-content: flex-end;
@@ -85,11 +85,11 @@
       border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;
       background: #fafafa;
     }
-    .btn { border: 1px solid #e5e7eb; background: #fff; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
-    .btn:hover { background: #f8fafc; }
-    .btn.pri { background: #2c7be5; color:#fff; border-color:#2c7be5; }
+    .btn { border: 1px solid #e5e7eb; background: var(--surface); padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+    .btn:hover { background: var(--surface-2); }
+    .btn.pri { background: #2c7be5; color:var(--on-brand); border-color:#2c7be5; }
     .btn.pri:hover { filter: brightness(.95); }
-    .btn.danger { background: #ef4444; color:#fff; border-color:#ef4444; }
+    .btn.danger { background: #ef4444; color:var(--on-brand); border-color:#ef4444; }
     .hidden { display: none !important; }
 
     @media (max-width: 640px) {

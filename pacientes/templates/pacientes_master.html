@@ -104,7 +104,7 @@
 <style>
 .pm-page{
   padding:24px;
-  background:#f8fafc;
+  background:var(--surface-2);
   min-height:calc(100vh - 70px);
 }
 
@@ -178,7 +178,7 @@
 .pm-filters select,
 .bind-form select{
   width:100%;
-  border:1px solid #e2e8f0;
+  border:1px solid var(--line);
   border-radius:14px;
   padding:12px 14px;
   outline:none;
@@ -201,13 +201,13 @@
 
 .pm-filters button,
 .btn-bind{
-  background:#2563eb;
+  background:var(--brand);
   color:white;
 }
 
 .pm-filters a{
-  background:#f1f5f9;
-  color:#334155;
+  background:var(--surface-3);
+  color:var(--text-2);
 }
 
 .pm-card{
@@ -230,30 +230,30 @@
 .pm-table th{
   position:sticky;
   top:0;
-  background:#f8fafc;
+  background:var(--surface-2);
   color:#475569;
   font-size:.78rem;
   text-transform:uppercase;
   letter-spacing:.08em;
   padding:14px;
   text-align:left;
-  border-bottom:1px solid #e2e8f0;
+  border-bottom:1px solid var(--line);
 }
 
 .pm-table td{
   padding:14px;
-  border-bottom:1px solid #eef2f7;
+  border-bottom:1px solid var(--line-soft);
   vertical-align:middle;
 }
 
 .pm-table strong{
   display:block;
-  color:#0f172a;
+  color:var(--text);
 }
 
 .pm-table small{
   display:block;
-  color:#64748b;
+  color:var(--muted);
   margin-top:4px;
 }
 
@@ -271,18 +271,18 @@
 }
 
 .badge.warn{
-  color:#92400e;
-  background:#fef3c7;
+  color:var(--warning-chip-ink);
+  background:var(--warning-chip);
 }
 
 .empty{
   text-align:center;
-  color:#64748b;
+  color:var(--muted);
   padding:28px !important;
 }
 
 tr[data-clinica=""]{
-  background:#fffbeb;
+  background:var(--warning-soft);
 }
 
 @media(max-width:900px){

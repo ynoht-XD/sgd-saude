@@ -14,7 +14,7 @@
     width: min(1180px, 98vw);
     max-height: 92vh;
     overflow: hidden;
-    background: #fff;
+    background: var(--surface);
     border-radius: 18px;
     box-shadow: 0 18px 50px rgba(0,0,0,.28);
     display: flex;
@@ -27,7 +27,7 @@
     align-items: center;
     padding: 16px 18px;
     border-bottom: 1px solid #e5e7eb;
-    background: #f8fafc;
+    background: var(--surface-2);
   }
 
   .modal-head h3 {
@@ -60,8 +60,8 @@
 
   .tab-btn {
     border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #334155;
+    background: var(--surface-2);
+    color: var(--text-2);
     padding: 8px 12px;
     border-radius: 999px;
     cursor: pointer;
@@ -70,7 +70,7 @@
 
   .tab-btn.active {
     background: #1f4e85;
-    color: #fff;
+    color: var(--on-brand);
     border-color: #1f4e85;
   }
 
@@ -79,7 +79,7 @@
     border: 1px solid #e5e7eb;
     border-radius: 16px;
     padding: 14px;
-    background: #fff;
+    background: var(--surface);
   }
 
   .tab-panel.active {
@@ -124,7 +124,7 @@
     padding: 9px 10px;
     font-size: .95rem;
     outline: none;
-    background: #fff;
+    background: var(--surface);
   }
 
   .field input:focus,
@@ -145,12 +145,12 @@
     justify-content: flex-end;
     padding: 14px 18px;
     border-top: 1px solid #e5e7eb;
-    background: #f8fafc;
+    background: var(--surface-2);
   }
 
   .btn {
     border: 1px solid #d1d5db;
-    background: #fff;
+    background: var(--surface);
     padding: 9px 13px;
     border-radius: 10px;
     cursor: pointer;
@@ -159,7 +159,7 @@
 
   .btn.primary {
     background: #1f4e85;
-    color: #fff;
+    color: var(--on-brand);
     border-color: #1f4e85;
   }
 
