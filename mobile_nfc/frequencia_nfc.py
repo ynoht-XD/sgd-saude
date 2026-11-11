@@ -9,7 +9,7 @@ from flask import g, jsonify, request, session, render_template_string
 from PIL import Image, UnidentifiedImageError
 from db import conectar_db
 from . import mobile_nfc_bp
-from .auth import require_mobile_token, _one
+from .auth import require_mobile_token, _one, _rows
 
 TZ = ZoneInfo('America/Maceio')
 MAX_PNG = 500_000
@@ -220,6 +220,8 @@ def recusar():
 def pagina_recepcao():
     if not session.get('usuario_id') or not session.get('clinica_id'):
         return 'Acesse primeiro o SGD com uma conta da recepção.',401
+    # Mesmo token do painel (controle_pagina): session['csrf_freq_nfc'], validado em designar().
+    session.setdefault('csrf_freq_nfc', secrets.token_urlsafe(32))
     return render_template_string('''<!doctype html><html lang="pt-BR"><meta charset="utf-8">
 <title>SGD | Enviar assinatura ao celular</title><style>
 body{font:16px Arial;max-width:780px;margin:45px auto;padding:20px;color:#172b44}
@@ -232,13 +234,14 @@ li{padding:12px;border-bottom:1px solid #eee;cursor:pointer}li:hover{background:
 <label>Nome ou prontuário do paciente</label><input id="busca" placeholder="Pesquisar paciente">
 <button onclick="pesquisar()">Pesquisar</button><ul id="lista"></ul><p id="aviso"></p>
 <script>
+const CSRF={{ csrf|tojson }};
 const api=location.pathname.replace(/\\/recepcao$/, '');
-async function req(path,body){const r=await fetch(api+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(j.erro||'HTTP '+r.status);return j;}
+async function req(path,body){const r=await fetch(api+path,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw Error(j.erro||'HTTP '+r.status);return j;}
 async function pesquisar(){const q=document.getElementById('busca').value;
 try{const r=await fetch(api+'/recepcao/pacientes?q='+encodeURIComponent(q));const j=await r.json();if(!r.ok)throw Error(j.erro);document.getElementById('lista').innerHTML='';j.pacientes.forEach(p=>{const li=document.createElement('li');li.textContent=p.nome+' | '+(p.prontuario||'')+' | Nasc.: '+(p.nascimento||'—');li.onclick=()=>enviar(p.id,p.nome);document.getElementById('lista').append(li)})}catch(e){document.getElementById('aviso').textContent=e.message}}
 async function enviar(id,nome){if(!confirm('Enviar '+nome+' para assinatura no celular?'))return;
 try{const j=await req('/recepcao/designar',{codigo:document.getElementById('codigo').value,paciente_id:id});document.getElementById('aviso').textContent='Solicitação enviada ao celular. Designação nº '+j.designacao_id;}catch(e){document.getElementById('aviso').textContent=e.message}}
-</script></html>''')
+</script></html>''', csrf=session['csrf_freq_nfc'])
 
 def recepcao_auth():
     uid=session.get('usuario_id'); cid=session.get('clinica_id')
@@ -257,8 +260,7 @@ def recepcao_pacientes():
             cur.execute('''SELECT id,nome,prontuario,nascimento FROM public.pacientes
                            WHERE clinica_id=%s AND (nome ILIKE %s OR prontuario=%s)
                            ORDER BY nome LIMIT 25''',(auth[1],'%'+q+'%',q))
-            cols=[d.name for d in cur.description]
-            items=[dict(zip(cols,row)) for row in cur.fetchall()]
+            items=_rows(cur)  # a conexao devolve dict_row: dict(zip(cols,row)) gravava os NOMES das colunas como valores
         return jsonify(ok=True,pacientes=items)
     finally: conn.close()
 
@@ -266,6 +268,8 @@ def recepcao_pacientes():
 def designar():
     auth=recepcao_auth()
     if not auth: return erro('Sessão SGD não autenticada.',401)
+    from .controle_freq import csrf_ok  # import tardio: controle_freq importa este modulo
+    if not csrf_ok(): return erro('Token de proteção inválido. Recarregue a página.',403)
     data=request.get_json(silent=True) or {}
     codigo=str(data.get('codigo') or '').strip()
     if len(codigo)!=6 or not codigo.isdigit(): return erro('Informe o código de seis dígitos do celular.')

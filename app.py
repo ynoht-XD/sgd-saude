@@ -136,6 +136,19 @@ app.view_functions["auth.login"] = limiter.limit(
     deduct_when=_login_falhou,
 )(app.view_functions["auth.login"])
 
+
+# Login do app Android NFC (Bearer): mesmo teto, 5 FALHAS por minuto por IP. Falha = 400/401/403
+# (credencial errada, clínica inválida/não autorizada); login correto (200) não consome.
+def _login_nfc_falhou(response) -> bool:
+    return response.status_code in (400, 401, 403)
+
+
+app.view_functions["mobile_nfc.mobile_login"] = limiter.limit(
+    "5 per minute",
+    methods=["POST"],
+    deduct_when=_login_nfc_falhou,
+)(app.view_functions["mobile_nfc.mobile_login"])
+
 # ============================================================
 # ENDPOINTS PÚBLICOS
 # ============================================================
@@ -770,6 +783,12 @@ def erro_429(e):
     if request.endpoint == "auth.login":
         flash("Muitas tentativas de login. Aguarde 1 minuto e tente novamente.", "error")
         resp = make_response(render_template("login.html", next_url=request.values.get("next") or ""), 429)
+        resp.headers["Retry-After"] = "60"
+        return resp
+    # App Android NFC: JSON (o app não lê HTML).
+    if request.endpoint == "mobile_nfc.mobile_login":
+        resp = jsonify(ok=False, erro="Muitas tentativas. Aguarde 1 minuto e tente novamente.")
+        resp.status_code = 429
         resp.headers["Retry-After"] = "60"
         return resp
     return e

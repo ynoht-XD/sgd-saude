@@ -28,7 +28,10 @@ def deny():
 
 def csrf_ok():
     import hmac
-    return hmac.compare_digest(str(session.get('csrf_freq_nfc') or ''), str(request.headers.get('X-CSRF-Token') or ''))
+    esperado = str(session.get('csrf_freq_nfc') or '')
+    enviado = str(request.headers.get('X-CSRF-Token') or '')
+    # Sessao sem token (pagina do painel/recepcao nunca aberta) NUNCA vale: '' == '' nao pode passar.
+    return bool(esperado) and hmac.compare_digest(esperado, enviado)
 
 def connect():
     conn = conectar_db()
