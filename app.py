@@ -32,6 +32,7 @@ from avaliacoes import avaliacoes_bp
 from agenda_medica import agenda_medica_bp
 from clinica_config import clinica_config_bp
 from logs import logs_bp
+from mobile_nfc import mobile_nfc_bp
 
 from db import conectar_db
 
@@ -107,6 +108,17 @@ app.register_blueprint(avaliacoes_bp)
 app.register_blueprint(agenda_medica_bp)
 app.register_blueprint(clinica_config_bp)
 app.register_blueprint(logs_bp)
+
+# Prefixo da API do app Android NFC. O app nunca tem cookie de navegador: cada rota
+# se autentica sozinha (Bearer no celular; sessão própria no painel de controle).
+MOBILE_NFC_PREFIX = "/api/mobile/nfc"
+
+# API do app Android SGD Saúde NFC (prefixo exigido pelo app: origem + "/api/mobile/nfc").
+# Autentica por token Bearer próprio (rotas do celular) ou por sessão + CSRF próprio
+# (painel de controle). Por isso fica fora do CSRFProtect global; ver também
+# MOBILE_NFC_PREFIX no before_request (mais abaixo).
+app.register_blueprint(mobile_nfc_bp, url_prefix=MOBILE_NFC_PREFIX)
+csrf.exempt(mobile_nfc_bp)
 
 
 # Login: no máximo 5 tentativas FALHAS por minuto por IP. Só falhas contam
@@ -333,7 +345,14 @@ def setup_request_context():
     if ep.startswith("auth.") or ep in PUBLIC_ENDPOINTS or ep.endswith(".static"):
         return
 
+    # API do app NFC: nunca redireciona para o login (o app não segue HTML). Sem sessão,
+    # o próprio módulo responde (401 JSON / token Bearer). Com sessão (painel de controle
+    # no navegador), segue abaixo para montar o mesmo contexto das demais telas.
+    em_mobile_nfc = request.path == MOBILE_NFC_PREFIX or request.path.startswith(MOBILE_NFC_PREFIX + "/")
+
     if not _session_user_id():
+        if em_mobile_nfc:
+            return
         return redirect(url_for("auth.login", next=request.full_path or request.path))
 
     # Garante contexto mínimo de clínica.
