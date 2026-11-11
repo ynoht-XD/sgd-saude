@@ -25,6 +25,8 @@ from .financas import (
     _exigir_coluna_clinica,
     FiltroClinicaIndisponivel,
     _validar_profissional,
+    _contrato_ativo_do_titular,
+    MSG_CONTRATO_ATIVO,
 )
 
 from admin.modulos import require_permission
@@ -589,14 +591,32 @@ def api_editar_paciente_plano(plano_id: int):
         _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
 
         cur = _execute(conn, f"""
-            SELECT id
+            SELECT id, paciente_id, status
             FROM financeiro_paciente_planos
             WHERE {" AND ".join(where)}
             LIMIT 1
         """, params)
 
-        if not cur.fetchone():
+        atual = _fetchone_dict(cur)
+
+        if not atual:
             return _fail("Plano do paciente não encontrado para esta clínica.", 404)
+
+        # Reativação (contrato que NÃO está ativo passando a 'ativo') respeita a mesma trava da
+        # criação. Salvar um contrato que já é ativo, mesmo reenviando status='ativo', não é
+        # reativação e nunca é recusado (contratos antigos com duplicidade seguem editáveis).
+        ja_ativo = (atual.get("status") or "ativo") == "ativo"
+
+        if status == "ativo" and not ja_ativo and _to_int(atual.get("paciente_id"), 0) > 0:
+            outro = _contrato_ativo_do_titular(conn, _to_int(atual.get("paciente_id"), 0), ignorar_id=plano_id)
+
+            if outro:
+                conn.rollback()
+                return _fail(
+                    MSG_CONTRATO_ATIVO, 409,
+                    contrato_ativo_id=outro.get("id"),
+                    contrato_ativo_tipo=outro.get("tipo"),
+                )
 
         campos = []
         update_params = []

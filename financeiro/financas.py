@@ -1158,6 +1158,48 @@ def _validar_profissional(conn, profissional_id) -> bool:
     return cur.fetchone() is not None
 
 
+MSG_CONTRATO_ATIVO = (
+    "Paciente já possui um combo ou plano ativo. "
+    "Desvincule ou encerre o contrato atual antes de criar um novo."
+)
+
+
+def _contrato_ativo_do_titular(conn, paciente_id: int, ignorar_id: int | None = None):
+    """Devolve (sem comitar) um contrato ATIVO em que o paciente é o TITULAR
+    (financeiro_paciente_planos.paciente_id), na clínica da sessão; ou None.
+
+    "Ativo" = mesma regra dos leitores (atendimentos.buscar_combo_ativo_paciente, pacientes
+    sem vínculo): COALESCE(status, 'ativo') = 'ativo'. Beneficiário de plano familiar NÃO
+    entra: ele não tem contrato próprio (só linha em financeiro_plano_beneficiarios) e o
+    consumo de sessões também só olha o titular.
+
+    No Postgres, antes de consultar, pega um lock de transação (pg_advisory_xact_lock) por
+    (clínica, paciente): duas criações/reativações simultâneas do mesmo paciente passam uma de
+    cada vez e a segunda enxerga o contrato da primeira. O lock cai no commit/rollback.
+    """
+    if _is_postgres_conn(conn):
+        _execute(conn, "SELECT pg_advisory_xact_lock(CAST(? AS integer), CAST(? AS integer))", [int(_clinica_id_atual()), int(paciente_id)])
+
+    where = ["paciente_id = ?", "COALESCE(status, 'ativo') = 'ativo'"]
+    params = [int(paciente_id)]
+
+    if ignorar_id:
+        where.append("id <> ?")
+        params.append(int(ignorar_id))
+
+    _add_clinica_where(conn, "financeiro_paciente_planos", "financeiro_paciente_planos", where, params)
+
+    cur = _execute(conn, f"""
+        SELECT id, tipo
+        FROM financeiro_paciente_planos
+        WHERE {" AND ".join(where)}
+        ORDER BY id DESC
+        LIMIT 1
+    """, params)
+
+    return _fetchone_dict(cur)
+
+
 def _inserir_beneficiario_row(conn, contrato_id: int, paciente_id: int):
     cols = ["contrato_id", "paciente_id", "ativo", "criado_em"]
     vals = [contrato_id, paciente_id, 1, _now_iso()]
@@ -1302,6 +1344,19 @@ def api_criar_paciente_plano():
 
             if valor_total <= 0:
                 valor_total = snap["valor_mensalidade"] * snap["duracao_meses"]
+
+        # Um paciente (titular) não pode ter dois contratos ativos ao mesmo tempo, de nenhum tipo.
+        # Vale só para contrato NOVO e ATIVO; o que já existe no banco não é tocado.
+        if status == "ativo":
+            existente = _contrato_ativo_do_titular(conn, paciente_id)
+
+            if existente:
+                conn.rollback()
+                return _fail(
+                    MSG_CONTRATO_ATIVO, 409,
+                    contrato_ativo_id=existente.get("id"),
+                    contrato_ativo_tipo=existente.get("tipo"),
+                )
 
         cols = [
             "paciente_id",
