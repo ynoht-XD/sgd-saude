@@ -45,7 +45,17 @@ def schema(cur):
     cur.execute('ALTER TABLE public.frequencia_nfc ALTER COLUMN etiqueta_id DROP NOT NULL')
     cur.execute("ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS designacao_id BIGINT")
     cur.execute("ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS origem VARCHAR(16) NOT NULL DEFAULT 'NFC'")
-    cur.execute('DROP INDEX IF EXISTS public.uq_frequencia_nfc_dia')
+    # Trava de 1 frequência ativa por paciente/dia. O ON CONFLICT de confirmar() exige este índice
+    # parcial (sem ele o Postgres devolve 42P10). Antes havia só o DROP do índice antigo (não parcial)
+    # e nunca o CREATE. Consulta o catálogo primeiro para não pedir lock na tabela a cada requisição.
+    cur.execute("SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND indexname='uq_frequencia_nfc_dia'")
+    _idx = _one(cur)
+    if _idx and not ('UNIQUE' in _idx['indexdef'].upper() and 'CANCELADA_EM IS NULL' in _idx['indexdef'].upper()):
+        cur.execute('DROP INDEX public.uq_frequencia_nfc_dia')  # índice antigo com outra definição
+        _idx = None
+    if not _idx:
+        cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS uq_frequencia_nfc_dia ON public.frequencia_nfc
+                       (clinica_id, paciente_id, data_local) WHERE cancelada_em IS NULL''')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS cancelada_por INTEGER')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS excluida_em TIMESTAMPTZ')

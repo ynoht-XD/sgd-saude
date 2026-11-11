@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from io import BytesIO
 from zoneinfo import ZoneInfo
 from flask import jsonify, request, session, render_template, send_file, abort, g
+from psycopg.errors import UniqueViolation
 from db import conectar_db
 from . import mobile_nfc_bp
 from .frequencia_nfc import schema
@@ -492,6 +493,9 @@ def controle_validar_assinatura():
         return jsonify(ok=True,frequencia_id=result['id'],origem=origin)
     except ValueError as exc:
         conn.rollback();return jsonify(ok=False,erro=str(exc)),400
+    except UniqueViolation:
+        # uq_frequencia_nfc_dia: já existe frequência ativa do paciente nesta data (inclui corrida entre dois registros).
+        conn.rollback();return jsonify(ok=False,erro='Já existe frequência ativa deste paciente nessa data. Cancele a existente para registrar outra.'),409
     except Exception:
         conn.rollback();raise
     finally:conn.close()
