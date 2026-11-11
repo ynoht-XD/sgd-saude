@@ -178,6 +178,19 @@
               </a>
             </li>
             {% endif %}
+            {# Frequência NFC (mobile_nfc): ainda sem módulo de permissão próprio; segue a regra do grupo. #}
+            <li>
+              <a href="{{ url_for('mobile_nfc.pagina_recepcao') }}">
+                <span class="ico">✍️</span>
+                <span class="txt">Enviar para assinatura</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('mobile_nfc.controle_pagina') }}">
+                <span class="ico">📲</span>
+                <span class="txt">Controle de Frequência NFC</span>
+              </a>
+            </li>
           </ul>
         </li>
         {% endif %}
