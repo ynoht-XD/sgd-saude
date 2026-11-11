@@ -355,7 +355,12 @@ def mobile_live_event():
             if not found: return jsonify(ok=False,erro='Paciente ou estação não reconhecidos.'),404
             cur.execute('SELECT status FROM public.frequencia_nfc_live WHERE clinica_id=%s AND chave=%s FOR UPDATE',(cid,key))
             previous=one(cur)
-            if previous and previous['status'] in ('CONFIRMADA','CANCELADA'):
+            # Esta tabela é só a pré-visualização ao vivo; a proteção contra duplicidade está em
+            # frequencia_nfc (uq_frequencia_nfc_dia). Um NOVO TOQUE (IDENTIFICADO) sempre reinicia a
+            # linha, mesmo depois de CONFIRMADA/CANCELADA (antes ela ficava travada para sempre).
+            # Prévias tardias (ESCREVENDO/SALVA/CANCELADA) de uma sessão já encerrada continuam
+            # ignoradas, para o celular não "ressuscitar" no painel uma assinatura recém-cancelada.
+            if previous and previous['status'] in ('CONFIRMADA','CANCELADA') and status!='IDENTIFICADO':
                 return jsonify(ok=True,finalizado=True)
             if status=='CANCELADA' and key.startswith('D:'):
                 cur.execute("UPDATE public.frequencia_nfc_designacoes SET status='CANCELADA' WHERE id=%s AND clinica_id=%s AND status='PENDENTE'",(int(key[2:]),cid))

@@ -45,23 +45,34 @@ def schema(cur):
     cur.execute('ALTER TABLE public.frequencia_nfc ALTER COLUMN etiqueta_id DROP NOT NULL')
     cur.execute("ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS designacao_id BIGINT")
     cur.execute("ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS origem VARCHAR(16) NOT NULL DEFAULT 'NFC'")
-    # Trava de 1 frequência ativa por paciente/dia. O ON CONFLICT de confirmar() exige este índice
-    # parcial (sem ele o Postgres devolve 42P10). Antes havia só o DROP do índice antigo (não parcial)
-    # e nunca o CREATE. Consulta o catálogo primeiro para não pedir lock na tabela a cada requisição.
-    cur.execute("SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND indexname='uq_frequencia_nfc_dia'")
-    _idx = _one(cur)
-    if _idx and not ('UNIQUE' in _idx['indexdef'].upper() and 'CANCELADA_EM IS NULL' in _idx['indexdef'].upper()):
-        cur.execute('DROP INDEX public.uq_frequencia_nfc_dia')  # índice antigo com outra definição
-        _idx = None
-    if not _idx:
-        cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS uq_frequencia_nfc_dia ON public.frequencia_nfc
-                       (clinica_id, paciente_id, data_local) WHERE cancelada_em IS NULL''')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS cancelada_por INTEGER')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS excluida_em TIMESTAMPTZ')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS excluida_por INTEGER')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS exclusao_motivo TEXT')
     cur.execute('ALTER TABLE public.frequencia_nfc ADD COLUMN IF NOT EXISTS justificativa_retroativa TEXT')
+    # Trava de 1 frequência ATIVA (nem cancelada nem excluída) por paciente/dia. O ON CONFLICT de
+    # confirmar() exige este índice parcial com o MESMO predicado (sem ele o Postgres devolve 42P10).
+    # Fica depois dos ALTER acima porque o predicado usa excluida_em. Consulta o catálogo primeiro para
+    # não pedir lock na tabela a cada requisição; a troca de definição roda sob advisory lock (vários
+    # workers podem chegar juntos após o restart) e dentro da transação: se o CREATE falhar (duplicata),
+    # o DROP é desfeito e o índice anterior continua valendo.
+    def _idx_atual():
+        cur.execute("SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND indexname='uq_frequencia_nfc_dia'")
+        r = _one(cur)
+        return r['indexdef'].upper() if r else None
+    def _idx_correto(d):
+        return bool(d) and 'UNIQUE' in d and 'CANCELADA_EM IS NULL' in d and 'EXCLUIDA_EM IS NULL' in d
+    if not _idx_correto(_idx_atual()):
+        cur.execute("SELECT pg_advisory_xact_lock(hashtext('uq_frequencia_nfc_dia'))")
+        d = _idx_atual()
+        if d and not _idx_correto(d):
+            cur.execute('DROP INDEX IF EXISTS public.uq_frequencia_nfc_dia')  # definição antiga (sem excluida_em / não parcial)
+            d = None
+        if not d:
+            cur.execute('''CREATE UNIQUE INDEX IF NOT EXISTS uq_frequencia_nfc_dia ON public.frequencia_nfc
+                           (clinica_id, paciente_id, data_local)
+                           WHERE cancelada_em IS NULL AND excluida_em IS NULL''')
     cur.execute('''CREATE TABLE IF NOT EXISTS public.frequencia_nfc_estacoes (
         id BIGSERIAL PRIMARY KEY, clinica_id INTEGER NOT NULL REFERENCES public.clinicas(id),
         usuario_id INTEGER NOT NULL REFERENCES public.usuarios(id),
@@ -147,7 +158,7 @@ def confirmar():
                 (clinica_id,paciente_id,etiqueta_id,designacao_id,origem,registrado_por,data_local,
                  assinatura_png,assinatura_sha256,assinante_tipo,assinante_nome)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (clinica_id,paciente_id,data_local) WHERE cancelada_em IS NULL
+                ON CONFLICT (clinica_id,paciente_id,data_local) WHERE cancelada_em IS NULL AND excluida_em IS NULL
                 DO NOTHING RETURNING id''',
                 (cid,paciente['paciente_id'],etiqueta_id,ticket_id,origem,uid,hoje,
                  png,hashlib.sha256(png).hexdigest(),tipo,nome or None))
