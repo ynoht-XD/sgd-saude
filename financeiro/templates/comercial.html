@@ -731,6 +731,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('financeiro.static', filename='js/financeiro-componentes.js') }}"></script>
 <script src="{{ url_for('financeiro.static', filename='js/comercial.js') }}"></script>
 <script src="{{ url_for('financeiro.static', filename='js/catalogos.js') }}"></script>
 <script src="{{ url_for('financeiro.static', filename='js/beneficiarios.js') }}"></script>
