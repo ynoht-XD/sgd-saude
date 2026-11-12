@@ -4,35 +4,34 @@
 
 :root{
   --bg: #f5f7fb;
-  --card: #ffffff;
+  --card: var(--surface);
   --card-soft: #fbfcff;
 
-  --ink: #0f172a;
-  --ink-2: #334155;
-  --muted: #64748b;
+  --ink: var(--text);
+  --ink-2: var(--text-2);
 
   --line: #e5e7eb;
   --line-strong: #dbe3ef;
 
-  --primary: #2563eb;
-  --primary-2: #1d4ed8;
+  --primary: var(--brand);
+  --primary-2: var(--brand-2);
 
   --success: #10b981;
-  --warn: #f59e0b;
+  --warn: var(--warning);
   --danger: #ef4444;
 
   --primary-soft: rgba(37,99,235,.10);
 
-  --pill-bg: #f1f5f9;
-  --pill-ink: #0f172a;
+  --pill-bg: var(--surface-3);
+  --pill-ink: var(--text);
 
   --prio-green: #10b981;
-  --prio-yellow: #f59e0b;
+  --prio-yellow: var(--warning);
   --prio-red: #ef4444;
 
-  --menu-bg: #ffffff;
-  --menu-ink: #0f172a;
-  --menu-line: #e5e7eb;
+  --menu-bg: var(--surface);
+  --menu-ink: var(--text);
+  --menu-line: var(--line);
 
   --shadow-xs: 0 4px 12px rgba(15,23,42,.04);
   --shadow-sm: 0 10px 30px rgba(15,23,42,.08);
@@ -43,17 +42,17 @@
   --radius-md: 16px;
   --radius-sm: 12px;
 
-  --combo-ok-bg: #ecfdf5;
+  --combo-ok-bg: var(--success-soft);
   --combo-ok-ink: #047857;
-  --combo-ok-line: #a7f3d0;
+  --combo-ok-line: var(--success-line);
 
-  --combo-no-bg: #f8fafc;
+  --combo-no-bg: var(--surface-2);
   --combo-no-ink: #475569;
   --combo-no-line: #e2e8f0;
 
-  --combo-zero-bg: #fef2f2;
+  --combo-zero-bg: var(--danger-soft);
   --combo-zero-ink: #b91c1c;
-  --combo-zero-line: #fecaca;
+  --combo-zero-line: var(--danger-line);
 }
 
 /* =========================================================
@@ -182,13 +181,13 @@ body{
 
 .btn.primary{
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
-  color: #fff;
+  color: var(--on-brand);
   border-color: transparent;
 }
 
 .btn.danger{
   background: var(--danger);
-  color: #fff;
+  color: var(--on-brand);
   border-color: transparent;
 }
 
@@ -486,7 +485,7 @@ body{
   font-size: 12px;
   font-weight: 800;
 
-  color: #fff;
+  color: var(--on-brand);
 }
 
 .badge.prio.verde{
@@ -572,7 +571,7 @@ body{
   font-weight: 900;
   font-size: .95rem;
 
-  color: #fff;
+  color: var(--on-brand);
 
   background: linear-gradient(135deg, #16a34a, #22c55e);
 
@@ -619,14 +618,14 @@ body{
 
 .fila-card-actions .btn.atender{
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
-  color: #fff;
+  color: var(--on-brand);
 
   box-shadow: 0 8px 16px rgba(37,99,235,.20);
 }
 
 .fila-card-actions .btn.remover{
   background: var(--danger);
-  color: #fff;
+  color: var(--on-brand);
 
   box-shadow: 0 8px 16px rgba(239,68,68,.18);
 }
@@ -695,7 +694,7 @@ body{
 }
 
 .menu-pop .menu-item:hover{
-  background: #f1f5f9;
+  background: var(--surface-3);
 }
 
 .menu-pop .menu-item.danger{
