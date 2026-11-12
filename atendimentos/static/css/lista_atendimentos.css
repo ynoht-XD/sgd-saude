@@ -3,14 +3,12 @@
    ========================================================= */
 
 :root{
-  --bg: #f5f7fb;
   --card: var(--surface);
-  --card-soft: #fbfcff;
+  --card-soft: var(--surface-2);
 
   --ink: var(--text);
   --ink-2: var(--text-2);
 
-  --line: #e5e7eb;
   --line-strong: #dbe3ef;
 
   --primary: var(--brand);
@@ -48,7 +46,7 @@
 
   --combo-no-bg: var(--surface-2);
   --combo-no-ink: #475569;
-  --combo-no-line: #e2e8f0;
+  --combo-no-line: var(--line);
 
   --combo-zero-bg: var(--danger-soft);
   --combo-zero-ink: #b91c1c;
@@ -738,7 +736,7 @@ body{
   border: 1px dashed var(--line-strong);
   border-radius: 16px;
 
-  background: #f8fbff;
+  background: var(--surface-2);
 }
 
 /* =========================================================

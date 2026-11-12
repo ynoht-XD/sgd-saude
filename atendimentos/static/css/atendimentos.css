@@ -6,8 +6,7 @@
 
 :root{
   --panel:var(--surface);
-  --panel-soft:#fbfdff;
-  --line:#e5e7eb;
+  --panel-soft:var(--surface-2);
   --line-strong:#dbe3ef;
   --primary:#1e3c72;
   --primary-600:#274d99;
@@ -410,7 +409,7 @@ body{
   grid-template-columns:minmax(0,1fr) 110px auto;
   gap:12px;
   align-items:end;
-  background:#f9fafb;
+  background:var(--surface-2);
   border:1px dashed var(--line);
   border-radius:18px;
   padding:14px;
