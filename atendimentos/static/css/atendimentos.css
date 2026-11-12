@@ -8,8 +8,8 @@
   --panel:var(--surface);
   --panel-soft:var(--surface-2);
   --line-strong:#dbe3ef;
-  --primary:#1e3c72;
-  --primary-600:#274d99;
+  --primary:var(--brand);
+  --primary-600:var(--brand-2);
   --warn:var(--warning);
   --shadow-xs:0 6px 18px rgba(2,6,23,.05);
   --shadow:0 10px 30px rgba(2,6,23,.07);
@@ -59,7 +59,7 @@ body{
   position:relative;
   overflow:hidden;
   background:
-    radial-gradient(circle at top left, rgba(30,60,114,.07), transparent 30%),
+    radial-gradient(circle at top left, color-mix(in srgb, var(--brand) 7%, transparent), transparent 30%),
     linear-gradient(180deg, var(--panel), var(--panel-soft));
   border:1px solid var(--line);
   border-radius:var(--radius-xl);
@@ -155,7 +155,7 @@ body{
 }
 
 .atd-collapse-toggle:hover{
-  border-color:rgba(30,60,114,.35);
+  border-color:color-mix(in srgb, var(--brand) 35%, transparent);
   box-shadow:var(--shadow-xs);
   transform:translateY(-1px);
 }
@@ -370,8 +370,8 @@ body{
 .atd-field select:focus,
 .atd-field textarea:focus,
 .input:focus{
-  border-color:rgba(30,60,114,.55);
-  box-shadow:0 0 0 4px rgba(30,60,114,.12);
+  border-color:color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow:0 0 0 4px var(--brand-soft);
   outline:none;
 }
 
@@ -418,8 +418,8 @@ body{
 
 .atd-proc-row:hover{
   background:var(--surface);
-  border-color:rgba(30,60,114,.40);
-  box-shadow:0 10px 20px rgba(30,60,114,.08);
+  border-color:color-mix(in srgb, var(--brand) 40%, transparent);
+  box-shadow:0 10px 20px color-mix(in srgb, var(--brand) 8%, transparent);
 }
 
 .proc-input-inline{
@@ -442,8 +442,8 @@ body{
 /* HISTÓRICO DE PROCEDIMENTOS */
 .atd-procs-suggestions{
   margin:10px 0 14px;
-  border:1px solid rgba(30,60,114,.16);
-  background:linear-gradient(180deg,rgba(30,60,114,.06),rgba(255,255,255,.85));
+  border:1px solid color-mix(in srgb, var(--brand) 16%, transparent);
+  background:linear-gradient(180deg,color-mix(in srgb, var(--brand) 6%, transparent),rgba(255,255,255,.85));
   border-radius:18px;
   padding:14px;
 }
@@ -462,7 +462,7 @@ body{
 }
 
 .atd-chip{
-  border:1px solid rgba(30,60,114,.18);
+  border:1px solid color-mix(in srgb, var(--brand) 18%, transparent);
   background:var(--surface);
   border-radius:999px;
   padding:8px 11px;
@@ -497,7 +497,7 @@ body{
 .btn:hover,
 .btn--ghost:hover{
   transform:translateY(-1px);
-  border-color:rgba(30,60,114,.35);
+  border-color:color-mix(in srgb, var(--brand) 35%, transparent);
   box-shadow:var(--shadow-soft);
 }
 
@@ -537,7 +537,7 @@ body{
 }
 
 .btn-salvar:hover{
-  box-shadow:0 16px 34px rgba(30,60,114,.22);
+  box-shadow:0 16px 34px color-mix(in srgb, var(--brand) 22%, transparent);
   transform:translateY(-1px);
 }
 
@@ -692,7 +692,7 @@ body{
 }
 
 .atd-sugestao-proc:hover{
-  border-color:rgba(30,60,114,.36);
+  border-color:color-mix(in srgb, var(--brand) 36%, transparent);
   transform:translateY(-1px);
   box-shadow:var(--shadow-xs);
 }
@@ -844,7 +844,7 @@ body{
   display:grid;
   gap:7px;
   padding:8px;
-  border:1px solid rgba(30,60,114,.14);
+  border:1px solid color-mix(in srgb, var(--brand) 14%, transparent);
   border-radius:16px;
   background:var(--surface);
   box-shadow:0 18px 36px rgba(2,6,23,.10);
