@@ -4,14 +4,14 @@
 body {
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 16px;
-  background-color: #f4f6f8;
+  background-color: var(--bg);
   color: #2c3e50;
 }
 
 .cadastro-container {
   max-width: 1100px;
   margin: 30px auto;
-  background: #fff;
+  background: var(--surface);
   padding: 24px;
   border-radius: 12px;
   box-shadow: 0 0 18px rgba(0, 0, 0, 0.07);
@@ -36,12 +36,12 @@ form fieldset {
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
-  background-color: #f9fbfc;
+  background-color: var(--surface-2);
   transition: background-color 0.3s, border-color 0.2s, box-shadow 0.2s;
 }
 
 form fieldset:hover {
-  background-color: #f1f6fa;
+  background-color: var(--surface-3);
 }
 
 form legend {
@@ -88,7 +88,7 @@ form textarea {
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
-  background-color: #fdfdfd;
+  background-color: var(--surface);
   transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
   color: #2c3e50;
 }
@@ -105,7 +105,7 @@ form input[readonly],
 form input:disabled,
 form select:disabled,
 form textarea:disabled {
-  background-color: #eef2f5;
+  background-color: var(--line-soft);
   color: #667788;
   cursor: not-allowed;
   border-color: #d6dde4;
@@ -140,7 +140,7 @@ form button.btn-salvar:active {
   width: 100%;
   min-height: 41px;
   padding: 10px 12px;
-  background: #eaf4fb;
+  background: var(--brand-tint);
   color: #1f6390;
   border: 1px solid #b8d5e8;
   border-radius: 8px;
@@ -227,25 +227,25 @@ form button.btn-salvar:active {
 }
 
 .cep-status--neutro {
-  background: #eef4f8;
+  background: var(--surface-3);
   color: #4e6475;
   border-color: #d7e2ea;
 }
 
 .cep-status--carregando {
-  background: #fff8e8;
+  background: var(--warning-soft);
   color: #8a6116;
   border-color: #f0dbab;
 }
 
 .cep-status--sucesso {
-  background: #eaf8ef;
+  background: var(--success-soft);
   color: #1c6b3d;
   border-color: #bfe3ca;
 }
 
 .cep-status--erro {
-  background: #fdeeee;
+  background: var(--danger-soft);
   color: #9b2d2d;
   border-color: #efc0c0;
 }
@@ -275,7 +275,7 @@ form button.btn-salvar:active {
   min-height: 70px;
   padding: 10px;
   border: 1px dashed #c8d4de;
-  background: #fcfdfe;
+  background: var(--surface);
   border-radius: 8px;
   display: flex;
   flex-wrap: wrap;
@@ -292,7 +292,7 @@ form button.btn-salvar:active {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #eef6fb;
+  background: var(--brand-tint);
   border: 1px solid #c8dfef;
   border-radius: 999px;
   padding: 8px 10px 8px 12px;
@@ -354,7 +354,7 @@ form button.btn-salvar:active {
   left: 0;
   right: 0;
   z-index: 30;
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid #cfdae3;
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
@@ -378,7 +378,7 @@ form button.btn-salvar:active {
 }
 
 .autocomplete-item:hover {
-  background: #eef6fb;
+  background: var(--brand-tint);
 }
 
 .autocomplete-item strong {
@@ -414,7 +414,7 @@ form button.btn-salvar:active {
   font-weight: 900;
   font-size: 14px;
 
-  color: #0f172a;
+  color: var(--text);
   background: rgba(108,117,125,.12);
   border: 1px solid rgba(108,117,125,.22);
 
