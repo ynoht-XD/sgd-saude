@@ -106,7 +106,7 @@ form input:disabled,
 form select:disabled,
 form textarea:disabled {
   background-color: var(--line-soft);
-  color: #667788;
+  color: var(--muted);
   cursor: not-allowed;
   border-color: var(--line);
 }
@@ -284,7 +284,7 @@ form button.btn-salvar:active {
 
 .laudos-vazio {
   font-size: 13px;
-  color: #6d7f8c;
+  color: var(--muted);
   font-style: italic;
 }
 
@@ -313,7 +313,7 @@ form button.btn-salvar:active {
 
 .laudo-chip-texto span {
   font-size: 12px;
-  color: #567082;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -388,13 +388,13 @@ form button.btn-salvar:active {
 
 .autocomplete-item span {
   font-size: 12px;
-  color: #6a7d8c;
+  color: var(--muted);
 }
 
 .autocomplete-empty {
   padding: 10px 12px;
   font-size: 13px;
-  color: #6b7d8a;
+  color: var(--muted);
 }
 
 /* =========================================================
