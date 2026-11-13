@@ -37,7 +37,8 @@
 .four{ grid-template-columns:repeat(4,1fr); }
 
 .field{ display:flex; flex-direction:column; gap:6px; }
-.field label{ font-size:.9rem; color:#374151; }
+.field label{ font-size:.9rem; color:#374151;
+color:light-dark(#374151, var(--text-2)); }
 .field input, .field select, .field textarea{
   border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.95rem; background:var(--surface);
 }
@@ -50,13 +51,15 @@
   position:absolute; left:0; right:0; top:100%; margin-top:4px; background:var(--surface); border:1px solid var(--border);
   border-radius:8px; box-shadow:var(--shadow); max-height:220px; overflow:auto; z-index:20;
 }
-.sugg div{ padding:8px 10px; cursor:pointer; border-bottom:1px solid #f3f4f6; }
+.sugg div{ padding:8px 10px; cursor:pointer; border-bottom:1px solid #f3f4f6;
+border-bottom-color:light-dark(#f3f4f6, var(--line-soft)); }
 .sugg div:hover{ background:var(--surface-2); }
 
 /* Tabelas de frequências */
 .freq-table{ border:1px solid var(--border); border-radius:10px; overflow:hidden; }
 .freq-row{ display:grid; grid-template-columns:110px repeat(8, 1fr); }
-.freq-row .cell{ border-top:1px solid #f3f4f6; padding:6px; }
+.freq-row .cell{ border-top:1px solid #f3f4f6;
+border-top-color:light-dark(#f3f4f6, var(--line-soft)); padding:6px; }
 .freq-row.head{ background:var(--surface-2); font-weight:600; }
 .freq-row .label{ background:var(--surface-2); font-weight:600; }
 .freq-row input{ width:100%; text-align:center; }
