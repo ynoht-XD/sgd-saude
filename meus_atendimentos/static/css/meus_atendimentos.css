@@ -59,7 +59,14 @@
 
 .ma-card-evo-private{
   background:#f3f0ff;
+  background:light-dark(#f3f0ff, var(--violet-soft));
   border-color:#ddd6fe;
+  border-color:light-dark(#ddd6fe, var(--violet-line));
+}
+
+/* UX.3: o .btn-ghost do base usa --brand-2 como texto (2,2:1 no escuro). --info-ink = #1d4ed8 no claro (identico) e tom claro no escuro. */
+.btn.btn-ghost{
+  color:var(--info-ink);
 }
 
 .ma-evo-label{
