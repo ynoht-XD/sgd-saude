@@ -5,9 +5,9 @@
 
 :root {
   --mod-bg: var(--bg);
-  --mod-card: rgba(255, 255, 255, .88);
+  --mod-card: color-mix(in srgb, var(--surface) 88%, transparent);
   --mod-card-solid: var(--surface);
-  --mod-text: #172033;
+  --mod-text: color-mix(in srgb, var(--text-2) 22%, var(--text));   /* = #172033 no claro; acompanha o tema */
   --mod-muted: var(--muted);
   --mod-line: rgba(120, 135, 170, .24);
 
@@ -141,7 +141,7 @@
   margin-top: 12px;
   padding: 6px 10px;
   border-radius: 999px;
-  color: #166534;
+  color: var(--success-chip-ink);
   background: rgba(22, 163, 74, .12);
   font-weight: 900;
 }
@@ -160,24 +160,24 @@
   padding: 14px 16px;
   border-radius: 16px;
   border: 1px solid var(--mod-line);
-  background: #fff;
+  background: var(--surface);
   font-weight: 800;
   box-shadow: var(--mod-shadow-soft);
 }
 
 .mod-alert-success {
-  color: #166534;
+  color: var(--success-chip-ink);
   background: rgba(22, 163, 74, .10);
 }
 
 .mod-alert-error,
 .mod-alert-danger {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: rgba(220, 38, 38, .10);
 }
 
 .mod-alert-warning {
-  color: #92400e;
+  color: var(--warning-ink);
   background: rgba(245, 158, 11, .12);
 }
 
@@ -220,7 +220,7 @@
   border: 1px solid var(--mod-line);
   border-radius: 14px;
   color: var(--mod-text);
-  background: #fff;
+  background: var(--surface);
   font-weight: 800;
   outline: none;
 }
@@ -266,7 +266,7 @@
 
 .btn-soft {
   color: var(--mod-text);
-  background: rgba(15, 23, 42, .06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .btn-primary {
@@ -280,7 +280,7 @@
 }
 
 .btn.danger {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: rgba(220, 38, 38, .10);
 }
 
@@ -335,7 +335,7 @@
   align-items: center;
   padding: 14px 12px;
   border-radius: 16px;
-  background: rgba(15, 23, 42, .04);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 .stats strong {
@@ -363,7 +363,7 @@
   align-items: center;
   padding: 12px;
   border-radius: 16px;
-  background: rgba(15, 23, 42, .04);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   font-weight: 800;
 }
 
@@ -454,7 +454,7 @@
   width: 34px;
   height: 34px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, .06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--mod-text);
   font-size: 1.2rem;
   transition: transform .2s ease;
@@ -485,7 +485,7 @@
   padding: 18px;
   border: 1px solid var(--mod-line);
   border-radius: 22px;
-  background: rgba(255, 255, 255, .84);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, opacity .18s ease;
 }
 
@@ -499,7 +499,7 @@
   border-color: rgba(22, 163, 74, .42);
   background:
     linear-gradient(135deg, rgba(22, 163, 74, .08), transparent 42%),
-    rgba(255, 255, 255, .93);
+    color-mix(in srgb, var(--surface) 93%, transparent);
 }
 
 .mod-card.is-disabled {
@@ -560,8 +560,8 @@
   display: inline-flex;
   padding: 5px 8px;
   border-radius: 999px;
-  color: #334155;
-  background: rgba(15, 23, 42, .06);
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   font-size: .76rem;
   font-weight: 900;
 }
@@ -580,17 +580,17 @@
 }
 
 .pill.ok {
-  color: #166534;
+  color: var(--success-chip-ink);
   background: rgba(22, 163, 74, .12);
 }
 
 .pill.off {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: rgba(220, 38, 38, .10);
 }
 
 .pill.master {
-  color: #92400e;
+  color: var(--warning-ink);
   background: rgba(245, 158, 11, .16);
 }
 
@@ -612,7 +612,7 @@
   padding: 13px;
   border: 1px solid var(--mod-line);
   border-radius: 18px;
-  background: rgba(15, 23, 42, .035);
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
   cursor: pointer;
 }
 
@@ -675,7 +675,7 @@
   border: 1px solid var(--mod-line);
   border-radius: 20px;
   overflow: hidden;
-  background: rgba(248, 250, 252, .85);
+  background: color-mix(in srgb, var(--surface-2) 85%, transparent);
 }
 
 .access-tabs {
@@ -683,7 +683,7 @@
   gap: 8px;
   padding: 10px;
   border-bottom: 1px solid var(--mod-line);
-  background: rgba(15, 23, 42, .035);
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
 
 .access-tab {
@@ -727,7 +727,7 @@
 .access-group {
   border: 1px solid var(--mod-line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, .78);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
   overflow: hidden;
 }
 
@@ -769,7 +769,7 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, .06);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--mod-text);
   font-size: 1.1rem;
   transition: transform .2s ease;
@@ -827,14 +827,14 @@
   padding: 12px;
   border: 1px solid rgba(120, 135, 170, .16);
   border-radius: 16px;
-  background: rgba(248, 250, 252, .78);
+  background: color-mix(in srgb, var(--surface-2) 78%, transparent);
   transition: border-color .18s ease, background .18s ease, transform .18s ease;
 }
 
 .person-row:hover {
   transform: translateY(-1px);
   border-color: rgba(37, 99, 235, .26);
-  background: rgba(255, 255, 255, .92);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
 }
 
 .person-row strong {
@@ -860,7 +860,7 @@
    ========================================================= */
 
 .nivel-select option[value="0"] {
-  color: #991b1b;
+  color: var(--danger-ink);
 }
 
 .nivel-select option[value="1"] {
@@ -868,7 +868,7 @@
 }
 
 .nivel-select option[value="2"] {
-  color: #166534;
+  color: var(--success-chip-ink);
 }
 
 .nivel-select option[value="3"] {
@@ -877,7 +877,7 @@
 
 /* JS aplica essas classes */
 .nivel-select.nivel-0 {
-  color: #991b1b;
+  color: var(--danger-ink);
   background: rgba(220, 38, 38, .08);
   border-color: rgba(220, 38, 38, .22);
 }
@@ -889,13 +889,13 @@
 }
 
 .nivel-select.nivel-2 {
-  color: #166534;
+  color: var(--success-chip-ink);
   background: rgba(22, 163, 74, .08);
   border-color: rgba(22, 163, 74, .22);
 }
 
 .nivel-select.nivel-3 {
-  color: #92400e;
+  color: var(--warning-ink);
   background: rgba(245, 158, 11, .10);
   border-color: rgba(245, 158, 11, .26);
 }

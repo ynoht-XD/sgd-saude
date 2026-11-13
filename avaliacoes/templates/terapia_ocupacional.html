@@ -68,12 +68,12 @@
   summary.st{
     list-style:none;cursor:pointer;user-select:none;
     padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;
-    font-weight:950;background:linear-gradient(180deg,#fff,#f8fafc);
+    font-weight:950;background:linear-gradient(180deg,var(--surface),var(--surface-2));
   }
   summary.st::-webkit-details-marker{display:none}
   .chev{
-    width:34px;height:34px;border-radius:10px;background:#eef2ff;
-    display:grid;place-items:center;font-weight:950;color:#1e3a8a;
+    width:34px;height:34px;border-radius:10px;background:var(--violet-soft);
+    display:grid;place-items:center;font-weight:950;color:#1e3a8a;color:light-dark(#1e3a8a,var(--info-ink));
     transform:rotate(0deg);
   }
   details[open] summary .chev{transform:rotate(180deg)}

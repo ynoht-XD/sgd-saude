@@ -4,7 +4,7 @@
 
 /* Tokens do tema (somente para o admin) */
 .admin-shell {
-  --admin-bg: #f7f9fc;
+  --admin-bg: var(--bg);
   --surface: #ffffff;
   --surface-2: #f3f6fb;
   --surface-3: #eef4ff;
@@ -46,7 +46,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
-  background: linear-gradient(180deg, #ffffff, #fbfdff);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
@@ -71,21 +71,20 @@
 }
 
 .admin-nav a {
-  --bg: #f3f6fb;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: var(--bg);
-  color: #1f2937;
+  background: var(--surface-2);
+  color: color-mix(in srgb, var(--text-2) 45%, var(--text));
   text-decoration: none;
   border: 1px solid var(--border);
   transition: background .2s ease, border-color .2s ease, transform .06s ease, box-shadow .2s ease;
 }
 
 .admin-nav a:hover {
-  background: #eef2ff;
+  background: var(--violet-soft);
   border-color: #d9e0ff;
   box-shadow: 0 4px 16px rgba(37,99,235,.12);
 }
@@ -175,7 +174,7 @@
 
 /* Cartão */
 .card {
-  background: linear-gradient(180deg, var(--surface), #fdfefe);
+  background: linear-gradient(180deg, var(--surface), var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
@@ -192,7 +191,7 @@
   inset: -20% -10% auto auto;
   width: 140px;
   height: 140px;
-  background: radial-gradient(70px 70px at 70% 30%, rgba(37,99,235,.10), transparent 60%);
+  background: radial-gradient(70px 70px at 70% 30%, var(--brand-soft), transparent 60%);
   transform: rotate(12deg);
   pointer-events: none;
   z-index: -1;
@@ -249,8 +248,8 @@
   font-weight: 600;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: #f8fafc;
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--text);
   text-decoration: none;
   cursor: pointer;
   transition: background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .06s ease;
@@ -279,8 +278,8 @@
 }
 
 .btn-muted {
-  background: #f3f6fb;
-  color: #1f2937;
+  background: var(--surface-2);
+  color: color-mix(in srgb, var(--text-2) 45%, var(--text));
 }
 
 .btn-success {
@@ -450,7 +449,7 @@
 }
 
 .table-admin tbody tr:hover {
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 /* Cards-resumo e listagens mobile */
@@ -494,7 +493,7 @@
 }
 
 .stack-meta {
-  background: rgba(255,255,255,.65);
+  background: color-mix(in srgb, var(--surface) 65%, transparent);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 12px;

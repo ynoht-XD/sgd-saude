@@ -34,7 +34,7 @@
 .rh-flashes{ margin-bottom: 12px; display:grid; gap:8px; }
 .rh-flashes .flash{
   padding:10px 12px; border-radius:10px; border:1px solid var(--rh-line);
-  background: #fff; color: var(--rh-text);
+  background: var(--surface); color: var(--rh-text);
 }
 .rh-flashes .flash.success{ border-color: var(--rh-success); }
 .rh-flashes .flash.error{ border-color: var(--rh-danger); }
@@ -63,7 +63,7 @@
 .btn:active{ transform: translateY(0); }
 .btn.primary{ background: var(--rh-primary); color:#fff; border-color: var(--rh-primary); }
 .btn.primary:hover{ background: var(--rh-primary-600); border-color: var(--rh-primary-600); }
-.btn.ghost{ background:#f9fafb; }
+.btn.ghost{ background:var(--surface-2); }
 .btn.danger{ background: var(--rh-danger); color:#fff; border-color: var(--rh-danger); }
 .btn.xs{ padding:6px 9px; border-radius:9px; font-size:.85rem; }
 .icon-btn{
@@ -82,7 +82,7 @@
   padding:14px;
   box-shadow: var(--rh-shadow);
 }
-.kpi-label{ color:#374151; font-size:.9rem; }
+.kpi-label{ color:var(--text-2); font-size:.9rem; }
 .kpi-value{ font-size:1.6rem; font-weight:700; margin-top:2px; color:var(--rh-text); }
 .kpi-sub{ color:var(--rh-muted); font-size:.85rem; }
 
@@ -106,7 +106,7 @@
 }
 .filters input[type="text"], .filters select{
   height:40px; border:1px solid var(--rh-line); border-radius:10px; padding:0 10px;
-  background:#fff; color:var(--rh-text);
+  background:var(--surface); color:var(--rh-text);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 .filters input:focus, .filters select:focus{
@@ -116,16 +116,16 @@
 /* ===== Tabela ===== */
 .table-wrap{ position:relative; }
 .table{
-  width:100%; border-collapse: collapse; background:#fff; border:1px solid var(--rh-line);
+  width:100%; border-collapse: collapse; background:var(--surface); border:1px solid var(--rh-line);
   border-radius:12px; overflow:hidden;
 }
 .table th, .table td{
   padding:10px 12px; border-bottom:1px solid var(--rh-line-soft); text-align:left; vertical-align:middle; font-size:.95rem;
 }
 .table th{
-  background:#f9fafb; color:#374151; font-weight:600; letter-spacing:.2px;
+  background:var(--surface-2); color:var(--text-2); font-weight:600; letter-spacing:.2px;
 }
-.table tbody tr:hover{ background:#fafafa; }
+.table tbody tr:hover{ background:var(--surface-2); }
 .empty{ text-align:center; padding:26px 10px; color:var(--rh-muted); display:none; }
 
 /* ===== Alertas ===== */
@@ -133,11 +133,11 @@
 .alerts-list{ list-style:none; padding:0; margin:0; display:grid; gap:10px; }
 .alert-card{
   display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;
-  border:1px solid var(--rh-line); border-radius:12px; background:#fff; padding:12px; box-shadow: var(--rh-shadow);
+  border:1px solid var(--rh-line); border-radius:12px; background:var(--surface); padding:12px; box-shadow: var(--rh-shadow);
 }
 .alert-main{ font-size:.98rem; color:var(--rh-text); }
 .alert-meta{ color:var(--rh-muted); font-size:.85rem; display:flex; gap:12px; flex-wrap:wrap; }
-.alert-meta span{ color:#111827; }
+.alert-meta span{ color:var(--text); }
 .alert-actions{ display:flex; gap:8px; }
 
 /* ===== Tabs ===== */
@@ -157,14 +157,14 @@
 
 /* ===== Formulários (modal) ===== */
 .field{ display:flex; flex-direction:column; gap:6px; }
-.field label{ font-size:.9rem; color:#374151; }
+.field label{ font-size:.9rem; color:var(--text-2); }
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="date"],
 .field input[type="number"],
 .field select,
 .field textarea{
-  height:40px; border:1px solid var(--rh-line); border-radius:10px; padding:0 10px; background:#fff; color:var(--rh-text);
+  height:40px; border:1px solid var(--rh-line); border-radius:10px; padding:0 10px; background:var(--surface); color:var(--rh-text);
   transition:border-color .15s ease, box-shadow .15s ease;
 }
 .field textarea{ min-height:80px; height:80px; padding:8px 10px; resize:vertical; }
@@ -179,9 +179,9 @@
 .grid.four{ grid-template-columns: repeat(4, 1fr); }
 
 .fieldset{
-  border:1px dashed var(--rh-line); border-radius:12px; padding:12px; margin-top:10px; background:#fafafa;
+  border:1px dashed var(--rh-line); border-radius:12px; padding:12px; margin-top:10px; background:var(--surface-2);
 }
-.fieldset legend{ padding:0 6px; color:#374151; font-size:.9rem; }
+.fieldset legend{ padding:0 6px; color:var(--text-2); font-size:.9rem; }
 
 /* ===== Modal (dialog nativo) ===== */
 .modal{

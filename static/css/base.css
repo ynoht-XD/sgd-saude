@@ -164,14 +164,13 @@
    O seletor ":root:not([data-theme=light])" ja deixa pronto o toggle: quando existir, o
    script do <head> grava data-theme (light|dark) e este bloco passa a ser ":root[data-theme=dark]".
    Especificidade 0,2,0: vence qualquer ":root{--x:...}" local dos modulos, em qualquer ordem
-   de carregamento. NAO vence redefinicao por ELEMENTO (por isso ".admin-shell" esta na lista:
-   remover da lista quando o admin.css deixar de redefinir tokens). "screen": impressao fica clara.
+   de carregamento. NAO vence redefinicao por ELEMENTO (hoje so o ".admin-shell" do admin.css faz
+   isso, e nenhuma pagina carrega os dois: codigo morto). "screen": impressao fica clara.
    Contrastes (WCAG): --text 14,4:1 sobre --surface; --muted 7,0:1; -ink sobre -soft 9,0 a 11,0:1;
    texto branco sobre --brand 5,2:1, --success 5,0:1; --brand-fg 7,0:1 sobre --surface.
    ========================================================= */
 @media screen and (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]),
-  :root:not([data-theme="light"]) .admin-shell{
+  :root:not([data-theme="light"]){
     color-scheme: dark;
 
     --bg: #0b1220;
