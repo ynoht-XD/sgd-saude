@@ -359,7 +359,7 @@
     const html = `
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:100%;">
         ${botoes.join("")}
-        <span style="margin-left:auto;color:#64748b;font-size:.9rem;">
+        <span style="margin-left:auto;color:#64748b;color:light-dark(#64748b,var(--muted));font-size:.9rem;">
           ${total} registro(s) · ${totalPaginas} página(s)
         </span>
       </div>
@@ -515,7 +515,7 @@
         </div>
         ${
           existente
-            ? `<div class="com-patient-meta" style="color:#b45309;font-weight:700;">
+            ? `<div class="com-patient-meta" style="color:#b45309;color:light-dark(#b45309,var(--warning-ink));font-weight:700;">
                 Este paciente já possui vínculo cadastrado. Atualize/editando o registro existente.
               </div>`
             : ""
