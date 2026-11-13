@@ -141,8 +141,8 @@ form button.btn-salvar:active {
   min-height: 41px;
   padding: 10px 12px;
   background: var(--brand-tint);
-  color: #1f6390;
-  border: 1px solid #b8d5e8;
+  color: var(--brand-2);
+  border: 1px solid var(--info-line);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 700;
@@ -151,8 +151,8 @@ form button.btn-salvar:active {
 }
 
 .btn-secundario:hover {
-  background: #dceef9;
-  border-color: #98c4df;
+  background: var(--info-chip);
+  border-color: color-mix(in srgb, var(--brand) 14%, var(--info-line));
 }
 
 .btn-secundario:active {
@@ -293,7 +293,7 @@ form button.btn-salvar:active {
   align-items: center;
   gap: 10px;
   background: var(--brand-tint);
-  border: 1px solid #c8dfef;
+  border: 1px solid var(--info-chip);
   border-radius: 999px;
   padding: 8px 10px 8px 12px;
   max-width: 100%;
@@ -307,7 +307,7 @@ form button.btn-salvar:active {
 
 .laudo-chip-texto strong {
   font-size: 13px;
-  color: #174764;
+  color: var(--text-2);
   line-height: 1.1;
 }
 
@@ -325,8 +325,8 @@ form button.btn-salvar:active {
   height: 28px;
   border-radius: 999px;
   border: none;
-  background: #d8eaf5;
-  color: #19506f;
+  background: var(--info-chip);
+  color: var(--text-2);
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
@@ -338,7 +338,7 @@ form button.btn-salvar:active {
 }
 
 .laudo-chip-remove:hover {
-  background: #c6deee;
+  background: var(--info-line);
 }
 
 .laudo-chip-remove:active {
@@ -383,7 +383,7 @@ form button.btn-salvar:active {
 
 .autocomplete-item strong {
   font-size: 13px;
-  color: #1b4d68;
+  color: var(--text-2);
 }
 
 .autocomplete-item span {
