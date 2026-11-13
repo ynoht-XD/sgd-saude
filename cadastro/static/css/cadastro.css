@@ -47,7 +47,7 @@ form fieldset:hover {
 form legend {
   font-size: 17px;
   font-weight: bold;
-  color: #1a3e58;
+  color: var(--text-2);
   padding: 0 10px;
 }
 
@@ -68,7 +68,7 @@ form label {
   margin: 0 0 6px;
   text-align: left;
   display: block;
-  color: #29485d;
+  color: var(--text-2);
 }
 
 form input,
