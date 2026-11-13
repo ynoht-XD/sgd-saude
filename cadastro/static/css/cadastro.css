@@ -5,7 +5,7 @@ body {
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 16px;
   background-color: var(--bg);
-  color: #2c3e50;
+  color: var(--text-2);
 }
 
 .cadastro-container {
@@ -25,7 +25,7 @@ body {
   margin-bottom: 20px;
   font-size: 24px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--text-2);
 }
 
 /* =========================================================
@@ -90,7 +90,7 @@ form textarea {
   box-sizing: border-box;
   background-color: var(--surface);
   transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
-  color: #2c3e50;
+  color: var(--text-2);
 }
 
 form input:focus,
