@@ -7,6 +7,7 @@
   margin: 0 auto;
   padding: 24px 0 44px;
   color: #172033;
+  color: light-dark(#172033, var(--text));
 }
 
 .fin-hero {
@@ -19,6 +20,9 @@
   background:
     radial-gradient(circle at top left, rgba(37, 99, 235, .18), transparent 34%),
     linear-gradient(135deg, #ffffff, #f5f8ff);
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, .18), transparent 34%),
+    linear-gradient(135deg, var(--surface), light-dark(#f5f8ff, var(--surface-2)));
   border: 1px solid rgba(148, 163, 184, .25);
   box-shadow: 0 20px 60px rgba(15, 23, 42, .08);
   margin-bottom: 18px;
@@ -29,7 +33,7 @@
   padding: 7px 12px;
   border-radius: 999px;
   background: rgba(37, 99, 235, .1);
-  color: var(--brand-2);
+  color: var(--info-ink);
   font-size: .78rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -88,7 +92,7 @@
 
 .btn.secondary {
   background: var(--bg-soft);
-  color: var(--brand-2);
+  color: var(--info-ink);
 }
 
 .btn.ghost {
@@ -114,6 +118,7 @@
   font-size: .78rem;
   font-weight: 800;
   color: #475569;
+  color: light-dark(#475569, var(--text-2));
 }
 
 .fin-field input,
@@ -121,7 +126,7 @@
 .fin-field textarea {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--line-strong);
   border-radius: 15px;
   background: var(--surface);
   color: var(--text);
@@ -165,6 +170,7 @@
   border-radius: 24px;
   background: var(--surface);
   border: 1px solid rgba(226, 232, 240, .9);
+  border-color: color-mix(in srgb, var(--line) 90%, transparent);
   box-shadow: 0 16px 42px rgba(15, 23, 42, .06);
 }
 
@@ -216,7 +222,9 @@
 
 .fin-card {
   background: rgba(255, 255, 255, .92);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   border: 1px solid rgba(226, 232, 240, .9);
+  border-color: color-mix(in srgb, var(--line) 90%, transparent);
   border-radius: 26px;
   box-shadow: 0 18px 48px rgba(15, 23, 42, .07);
   padding: 20px;
@@ -329,8 +337,8 @@
   white-space: nowrap;
 }
 
-.fin-category-item.entrada .valor { color: var(--success); }
-.fin-category-item.saida .valor { color: var(--danger); }
+.fin-category-item.entrada .valor { color: var(--success-fg); }
+.fin-category-item.saida .valor { color: var(--danger-fg); }
 
 /* ============================================================
    TABS / FILTROS
@@ -356,7 +364,7 @@
 
 .fin-tabs button.active {
   background: var(--surface);
-  color: var(--brand-2);
+  color: var(--info-ink);
   box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
 }
 
@@ -412,12 +420,12 @@
 }
 
 .fin-table .valor-entrada {
-  color: var(--success);
+  color: var(--success-fg);
   font-weight: 900;
 }
 
 .fin-table .valor-saida {
-  color: var(--danger);
+  color: var(--danger-fg);
   font-weight: 900;
 }
 
@@ -433,12 +441,13 @@
 
 .badge.entrada {
   background: var(--success-chip);
-  color: #15803d;
+  color: var(--success-fg);
 }
 
 .badge.saida {
   background: var(--danger-chip);
   color: #b91c1c;
+  color: light-dark(#b91c1c, var(--danger-chip-ink));
 }
 
 .badge.pago {
@@ -458,7 +467,9 @@
 
 .badge.cancelado {
   background: #e5e7eb;
+  background: light-dark(#e5e7eb, var(--surface-3));
   color: #374151;
+  color: light-dark(#374151, var(--text-2));
 }
 
 .row-actions {
@@ -511,7 +522,7 @@
 
 .plano-progress {
   height: 9px;
-  background: #e2e8f0;
+  background: var(--line);
   border-radius: 999px;
   overflow: hidden;
   margin: 13px 0 8px;
@@ -556,6 +567,7 @@
   border-radius: 28px;
   padding: 22px;
   border: 1px solid rgba(226, 232, 240, .9);
+  border-color: color-mix(in srgb, var(--line) 90%, transparent);
   box-shadow: 0 30px 90px rgba(15, 23, 42, .28);
 }
 
