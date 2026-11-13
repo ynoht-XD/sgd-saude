@@ -20,6 +20,16 @@
     --fisio-orange:#fff7ed;
 }
 
+/* UX.3 (tema escuro): tokens locais definidos com literal claro. So casa com <html data-theme="dark">: o claro nao muda. */
+@media screen{
+  :root[data-theme="dark"]{
+    --fisio-border: var(--line-strong);
+    --fisio-text: var(--text);
+    --fisio-purple: var(--violet-soft);
+    --fisio-orange: var(--warning-soft);
+  }
+}
+
 .fisio-page{
     background:var(--fisio-bg);
     padding:16px;
@@ -63,6 +73,7 @@
 .fisio-card h2{
     font-size:16px;
     color:var(--fisio-primary-dark);
+    color:light-dark(var(--fisio-primary-dark), var(--accent-ink));
     margin:0 0 12px;
     font-weight:900;
 }
@@ -143,6 +154,7 @@
     margin:0 0 10px;
     font-size:14px;
     color:var(--fisio-primary-dark);
+    color:light-dark(var(--fisio-primary-dark), var(--accent-ink));
     font-weight:900;
 }
 
@@ -180,7 +192,9 @@
 
 .option-pill:hover{
     background:#ccfbf1;
+    background:light-dark(#ccfbf1, var(--accent-chip));
     border-color:#99f6e4;
+    border-color:light-dark(#99f6e4, var(--accent-line));
 }
 
 .option-pill:has(input:checked){
@@ -208,6 +222,7 @@
     justify-content:space-between;
     font-weight:900;
     color:var(--fisio-primary-dark);
+    color:light-dark(var(--fisio-primary-dark), var(--accent-ink));
     margin-bottom:6px;
 }
 
@@ -268,15 +283,18 @@ input[type="range"]{
 .btn-add{
     background:var(--fisio-soft);
     color:var(--fisio-primary-dark);
+    color:light-dark(var(--fisio-primary-dark), var(--accent-ink));
 }
 
 .btn-add:hover{
     background:#ccfbf1;
+    background:light-dark(#ccfbf1, var(--accent-chip));
 }
 
 .btn-remove{
     background:var(--danger-chip);
     color:var(--fisio-danger);
+    color:light-dark(var(--fisio-danger), var(--danger-chip-ink));
 }
 
 .btn-save{
