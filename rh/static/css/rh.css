@@ -247,30 +247,6 @@ textarea:focus-visible{
   .filters{ gap:6px; }
 }
 
-/* ===== Dark mode por preferência do SO ===== */
-@media (prefers-color-scheme: dark){
-  :root{
-    --rh-bg:#0f172a;
-    --rh-panel:#101827;
-    --rh-text:#e5e7eb;
-    --rh-muted:#9ca3af;
-    --rh-line:#1f2937;
-    --rh-line-soft:#111827;
-    --rh-shadow: 0 2px 8px rgba(0,0,0,.4);
-    --rh-shadow-lg: 0 10px 34px rgba(0,0,0,.6);
-  }
-  .rh-section, .rh-card, .table, .kpi-card{ background: var(--rh-panel); }
-  .table th{ background:#0b1220; color:#d1d5db; }
-  .table td, .table th{ border-bottom-color:#1f2937; }
-  .filters input, .filters select,
-  .field input, .field select, .field textarea{
-    background:#0b1220; color:#e5e7eb; border-color:#253048;
-  }
-  .btn{ background:#0b1220; color:#e5e7eb; border-color:#253048; }
-  .btn.ghost{ background:#0b1220; }
-  .alert-card{ background:#0b1220; border-color:#253048; }
-  .fieldset{ background:#0b1220; border-color:#253048; }
-}
 
 /* ===== Impressão (básico) ===== */
 @media print{
