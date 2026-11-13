@@ -228,26 +228,26 @@ form button.btn-salvar:active {
 
 .cep-status--neutro {
   background: var(--surface-3);
-  color: #4e6475;
-  border-color: #d7e2ea;
+  color: var(--muted);
+  border-color: var(--line);
 }
 
 .cep-status--carregando {
   background: var(--warning-soft);
-  color: #8a6116;
-  border-color: #f0dbab;
+  color: var(--warning-ink);
+  border-color: var(--warning-line);
 }
 
 .cep-status--sucesso {
   background: var(--success-soft);
-  color: #1c6b3d;
-  border-color: #bfe3ca;
+  color: var(--success-ink);
+  border-color: var(--success-line);
 }
 
 .cep-status--erro {
   background: var(--danger-soft);
-  color: #9b2d2d;
-  border-color: #efc0c0;
+  color: var(--danger-ink);
+  border-color: var(--danger-line);
 }
 
 /* =========================================================
