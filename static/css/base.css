@@ -6,8 +6,7 @@
 :root{
   /* Esquema de cores dos elementos NATIVOS (dialog, select, calendario, barra de rolagem).
      O app e claro por padrao (as telas usam fundos claros fixos), entao o padrao e "light".
-     Telas/dialogos que trocam as variaveis para escuro no modo escuro do sistema declaram
-     "color-scheme: dark" no proprio bloco escuro (ex.: usuarios.css). Nao usar "light dark"
+     O escuro (UX.3) declara "color-scheme: dark" no bloco central ":root[data-theme=dark]" (abaixo). Nao usar "light dark"
      aqui: viraria escuro os controles de todas as paginas que ainda tem fundo claro fixo. */
   color-scheme: light;
 
@@ -160,17 +159,18 @@
 /* =========================================================
    UX.3 · TEMA ESCURO CENTRAL (fonte unica dos valores escuros)
    ---------------------------------------------------------
-   Por enquanto responde ao tema do sistema operacional (como os blocos espalhados faziam).
-   O seletor ":root:not([data-theme=light])" ja deixa pronto o toggle: quando existir, o
-   script do <head> grava data-theme (light|dark) e este bloco passa a ser ":root[data-theme=dark]".
+   Responde SOMENTE ao atributo <html data-theme="dark">. NAO usa prefers-color-scheme: o tema do
+   sistema operacional nunca liga o escuro sozinho (quem decide e o script do <head>, que so roda
+   para MASTER; "Sistema" e resolvido por ele via matchMedia). Para todos os outros usuarios o
+   <html> sai do servidor com data-theme="light" e este bloco nunca casa.
    Especificidade 0,2,0: vence qualquer ":root{--x:...}" local dos modulos, em qualquer ordem
    de carregamento. NAO vence redefinicao por ELEMENTO (hoje so o ".admin-shell" do admin.css faz
    isso, e nenhuma pagina carrega os dois: codigo morto). "screen": impressao fica clara.
    Contrastes (WCAG): --text 14,4:1 sobre --surface; --muted 7,0:1; -ink sobre -soft 9,0 a 11,0:1;
    texto branco sobre --brand 5,2:1, --success 5,0:1; --brand-fg 7,0:1 sobre --surface.
    ========================================================= */
-@media screen and (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
+@media screen{
+  :root[data-theme="dark"]{
     color-scheme: dark;
 
     --bg: #0b1220;
@@ -527,6 +527,53 @@ textarea{
 .btn-logout:active{
   transform: translateY(1px);
 }
+
+/* UX.3 · botao de tema (so MASTER, ver layout.html): mesmo vidro do .btn-logout. Os 3 icones
+   (sol / lua / monitor) ficam no HTML; o CSS mostra o do modo atual (<html data-theme-mode>). */
+.btn-tema{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:38px;
+  height:38px;
+  padding:0;
+  border-radius:12px;
+  color:#e2e8f0;
+  background: rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.08);
+  cursor:pointer;
+  appearance:none;
+  -webkit-appearance:none;
+  transition:
+    transform 120ms ease,
+    background var(--ease),
+    border-color var(--ease);
+}
+
+.btn-tema:hover{
+  background: rgba(255,255,255,.12);
+  transform: translateY(-1px);
+}
+
+.btn-tema:active{
+  transform: translateY(1px);
+}
+
+.btn-tema:focus-visible{
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.btn-tema svg{
+  width:18px;
+  height:18px;
+  display:none;
+}
+
+:root:not([data-theme-mode="dark"]):not([data-theme-mode="system"]) .btn-tema .i-sol{ display:block; }
+:root[data-theme-mode="dark"] .btn-tema .i-lua{ display:block; }
+:root[data-theme-mode="system"] .btn-tema .i-sis{ display:block; }
 
 /* =========================================================
    SIDEBAR
@@ -1231,6 +1278,12 @@ td{
     min-height:34px;
     padding:0 10px;
     font-size:12px;
+    border-radius:10px;
+  }
+
+  .btn-tema{
+    width:34px;
+    height:34px;
     border-radius:10px;
   }
 

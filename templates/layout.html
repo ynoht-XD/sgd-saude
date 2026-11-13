@@ -1,5 +1,9 @@
+{#- UX.3: so MASTER recebe o toggle de tema. Mesma regra de is_master usada mais abaixo no corpo. -#}
+{%- set _tu = session.get('usuario') or session.get('user') or session.get('auth_user') or {} -%}
+{%- set _trole = (session.get('role') or _tu.get('role') or '')|upper -%}
+{%- set tema_liberado = (session.get('is_master') or _tu.get('is_master') or _trole in ['MASTER', 'ROOT', 'SUPERADMIN']) -%}
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light"{% if tema_liberado %} data-tema-liberado="1"{% endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +11,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script src="/static/js/csrf.js"></script>
 
+  {% include "_tema_head.html" %}
   <link rel="stylesheet" href="/static/css/base.css">
   {% block extra_css %}{% endblock %}
 </head>
@@ -75,6 +80,13 @@
             </span>
           </div>
         </div>
+        {% if is_master %}
+        <button type="button" class="btn-tema" id="btnTema" aria-label="Tema: Claro (clique para Escuro)" title="Tema: Claro (clique para Escuro)">
+          <svg class="i-sol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="i-lua" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg class="i-sis" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        </button>
+        {% endif %}
         <form method="post" action="{{ url_for('auth.logout') }}" class="logout-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn-logout">Sair</button></form>
       {% else %}
         <a class="btn-login" href="{{ url_for('auth.login') }}">Entrar</a>
@@ -348,6 +360,7 @@
     </main>
   </div>
 
+  {% if is_master %}<script src="/static/js/tema.js" defer></script>{% endif %}
   <script src="/static/js/layout.js"></script>
   {% block extra_js %}{% endblock %}
 </body>

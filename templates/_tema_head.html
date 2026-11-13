@@ -1,0 +1,17 @@
+{# UX.3 · tema. Incluir no <head> ANTES do <link> do CSS (roda antes da primeira pintura: sem flash).
+   So age quando o servidor liberou o toggle (<html data-tema-liberado="1">, hoje so MASTER).
+   Para qualquer outro caso o <html> ja sai do servidor com data-theme="light" e isto nao muda nada:
+   o CSS escuro responde apenas a data-theme="dark", nunca ao prefers-color-scheme do sistema.
+   data-theme = tema JA RESOLVIDO (light|dark); data-theme-mode = preferencia (light|dark|system). #}
+<script>
+(function () {
+  var d = document.documentElement;
+  if (d.getAttribute("data-tema-liberado") !== "1") return;
+  var m = "light";
+  try { m = localStorage.getItem("sgd-theme") || "light"; } catch (e) {}
+  if (m !== "light" && m !== "dark" && m !== "system") m = "light";
+  var escuro = m === "dark" || (m === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  d.setAttribute("data-theme", escuro ? "dark" : "light");
+  d.setAttribute("data-theme-mode", m);
+})();
+</script>
