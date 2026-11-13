@@ -141,7 +141,7 @@ form button.btn-salvar:active {
   min-height: 41px;
   padding: 10px 12px;
   background: var(--brand-tint);
-  color: var(--brand-2);
+  color: var(--info-ink);
   border: 1px solid var(--info-line);
   border-radius: 8px;
   font-size: 14px;
