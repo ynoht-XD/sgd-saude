@@ -21,38 +21,6 @@
   --warning: #f59e0b;
 }
 
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg: #0b1220;
-    --card: #0f1629;
-    --text: #e5e7eb;
-    --muted: #9ca3af;
-    --border: #1f2937;
-    --brand: #3b82f6;
-    --brand-600:#2563eb;
-    --brand-50: #0b1533;
-    --shadow: 0 10px 28px rgba(0,0,0,.35);
-    --shadow-sm: 0 2px 10px rgba(0,0,0,.25);
-    --danger: #f87171;
-    --success: #34d399;
-    --warning: #fbbf24;
-  }
-
-  /* Os dialogos desta tela ficam escuros (--card/--text acima): os controles nativos
-     (calendario do campo de data, lista do select, barra de rolagem) acompanham. */
-  dialog.modal{
-    color-scheme: dark;
-  }
-
-  /* Branco sobre o --brand escuro (#3b82f6) da so 3,7:1; no dialogo usa o tom 600 (5,2:1) */
-  dialog.modal .btn.primary{
-    background: var(--brand-600);
-    border-color: var(--brand-600);
-  }
-  dialog.modal .btn.primary:hover{
-    background: #1d4ed8;
-  }
-}
 
 /* ---------- Containers ---------- */
 .admin-container{
