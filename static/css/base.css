@@ -33,7 +33,7 @@
   --brand-3: #0f3aa8;
   --brand-soft: rgba(37, 99, 235, .12);
 
-  --success: #16a34a;
+  --success: #15803d;          /* UX.3 D4: era #16a34a (branco sobre ele 3,3:1); #15803d da 5,0:1 nos dois temas */
   --warning: #f59e0b;
   --danger: #dc2626;
 
@@ -67,8 +67,8 @@
 
   /* Status. Cada um: --x (solido, ja existente acima), --x-soft (fundo), --x-line (borda),
      --x-ink (texto sobre o fundo suave; contraste >= 6:1 sobre --x-soft).
-     Aviso: branco sobre --success (3,3:1) e --warning (2,1:1) NAO passa de 4,5:1; para texto
-     use --x-ink sobre --x-soft. Branco sobre --danger (4,8:1) e --info (5,2:1) passa. */
+     Aviso: branco sobre --warning (2,1:1) NAO passa de 4,5:1; para texto
+     use --x-ink sobre --x-soft. Branco sobre --success (5,0:1, desde o UX.3), --danger (4,8:1) e --info (5,2:1) passa. */
   --success-soft: #ecfdf5;
   --success-line: #a7f3d0;
   --success-ink: #065f46;
@@ -110,6 +110,38 @@
   --info-chip: #dbeafe;
   --info-chip-ink: #1d4ed8;
 
+  /* UX.3 · FUNDACAO · tokens novos (nenhuma regra os usa ainda; sem efeito visual no claro) */
+
+  /* "-fg": a cor do sinal COMO TEXTO/ICONE/LINK sobre superficie. No claro e o proprio solido;
+     no escuro vira o tom claro. O solido (--brand, --success...) continua sendo o PREENCHIMENTO
+     de botao/badge (texto --on-brand sobre ele). Um valor so nao serve aos dois papeis no escuro:
+     branco sobre fundo exige luminancia <= 0,18 e texto sobre --surface escuro exige >= 0,21. */
+  --brand-fg: #2563eb;
+  --success-fg: #15803d;
+  --warning-fg: #f59e0b;
+  --danger-fg: #dc2626;
+
+  /* Linha mais forte que --line (divisor que precisa aparecer: usado por atendimentos e lista). */
+  --line-strong: #dbe3ef;
+
+  /* Acento da clinica (teal): valores iguais aos hex hoje espalhados (#0f766e, #14b8a6, #f0fdfa,
+     #ccfbf1, #99f6e4, #115e59). Branco sobre --accent = 5,5:1. */
+  --accent: #0f766e;
+  --accent-2: #14b8a6;
+  --accent-soft: #f0fdfa;
+  --accent-chip: #ccfbf1;
+  --accent-line: #99f6e4;
+  --accent-ink: #115e59;
+  --accent-fg: #0f766e;
+
+  /* Violeta/indigo (categorias, badges): valores iguais aos hex hoje espalhados. */
+  --violet: #7c3aed;
+  --violet-soft: #eef2ff;
+  --violet-line: #c7d2fe;
+  --violet-ink: #3730a3;
+  --violet-chip: #ede9fe;
+  --violet-chip-ink: #5b21b6;
+
   /* Aliases DEPRECADOS: nomes antigos que os modulos usam, apontando para o canonico.
      Quem define o proprio valor no seu CSS continua valendo (o modulo carrega depois).
      Nao usar em codigo novo; serao removidos quando o ultimo uso migrar.
@@ -123,6 +155,93 @@
   --brand-600: var(--brand-2);
   --brand-50: var(--brand-tint);
   --warn: var(--warning);
+}
+
+/* =========================================================
+   UX.3 · TEMA ESCURO CENTRAL (fonte unica dos valores escuros)
+   ---------------------------------------------------------
+   Por enquanto responde ao tema do sistema operacional (como os blocos espalhados faziam).
+   O seletor ":root:not([data-theme=light])" ja deixa pronto o toggle: quando existir, o
+   script do <head> grava data-theme (light|dark) e este bloco passa a ser ":root[data-theme=dark]".
+   Especificidade 0,2,0: vence qualquer ":root{--x:...}" local dos modulos, em qualquer ordem
+   de carregamento. NAO vence redefinicao por ELEMENTO (por isso ".admin-shell" esta na lista:
+   remover da lista quando o admin.css deixar de redefinir tokens). "screen": impressao fica clara.
+   Contrastes (WCAG): --text 14,4:1 sobre --surface; --muted 7,0:1; -ink sobre -soft 9,0 a 11,0:1;
+   texto branco sobre --brand 5,2:1, --success 5,0:1; --brand-fg 7,0:1 sobre --surface.
+   ========================================================= */
+@media screen and (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]),
+  :root:not([data-theme="light"]) .admin-shell{
+    color-scheme: dark;
+
+    --bg: #0b1220;
+    --bg-soft: #0f1b33;
+    --surface: #0f172a;
+    --surface-2: #131d33;
+    --surface-3: #1a2540;
+
+    --text: #e5e7eb;
+    --text-2: #cbd5e1;
+    --muted: #9ca3af;
+    --muted-2: #8893a5;             /* UX.3 D8: >= 4,9:1 sobre qualquer superficie (no claro e 2,6:1) */
+
+    --line: #1f2937;
+    --line-soft: #172033;
+    --line-strong: #2c3b52;
+
+    --brand-soft: rgba(96, 165, 250, .16);
+    --brand-tint: #0f1d3a;
+    --brand-fg: #60a5fa;
+    --success-fg: #4ade80;
+    --warning-fg: #fbbf24;
+    --danger-fg: #f87171;
+
+    --success-soft: #0c2a21;
+    --success-line: #166534;
+    --success-ink: #86efac;
+    --warning-soft: #2a2110;
+    --warning-line: #92400e;
+    --warning-ink: #fcd34d;
+    --danger-soft: #2c1517;
+    --danger-line: #991b1b;
+    --danger-ink: #fca5a5;
+    --info-soft: #0f1d3a;
+    --info-line: #1e40af;
+    --info-ink: #93c5fd;
+
+    --success-chip: #123d2b;
+    --success-chip-ink: #bbf7d0;
+    --warning-chip: #3b2d0e;
+    --warning-chip-ink: #fde68a;
+    --danger-chip: #40191c;
+    --danger-chip-ink: #fecaca;
+    --info-chip: #14305c;
+    --info-chip-ink: #bfdbfe;
+
+    --accent-soft: #0c2a2a;
+    --accent-chip: #0f3a37;
+    --accent-line: #115e59;
+    --accent-ink: #5eead4;
+    --accent-fg: #2dd4bf;
+
+    --violet-soft: #17183a;
+    --violet-line: #3730a3;
+    --violet-ink: #c7d2fe;
+    --violet-chip: #2a1f4d;
+    --violet-chip-ink: #ddd6fe;
+
+    --shadow-sm: 0 8px 24px rgba(0, 0, 0, .35);
+    --shadow-md: 0 16px 38px rgba(0, 0, 0, .45);
+    --shadow-lg: 0 24px 64px rgba(0, 0, 0, .55);
+
+    /* Nomes antigos que os modulos sombreiam com literal CLARO em :root: re-declarados aqui
+       para que o escuro os vença. (--shadow nao e canonico: e o nome de usuarios/exames/apac/pacientes.) */
+    --card: var(--surface);
+    --panel: var(--surface);
+    --border: var(--line);
+    --brand-50: var(--brand-tint);
+    --shadow: 0 10px 28px rgba(0, 0, 0, .35);
+  }
 }
 
 /* =========================================================
