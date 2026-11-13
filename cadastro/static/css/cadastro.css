@@ -32,7 +32,7 @@ body {
    FIELDSETS
    ========================================================= */
 form fieldset {
-  border: 1px solid #d0d6dd;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
@@ -84,7 +84,7 @@ form textarea {
   display: inline-block;
   width: 100%;
   padding: 9px 10px;
-  border: 1px solid #c9d3dc;
+  border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 14px;
   box-sizing: border-box;
@@ -108,7 +108,7 @@ form textarea:disabled {
   background-color: var(--line-soft);
   color: #667788;
   cursor: not-allowed;
-  border-color: #d6dde4;
+  border-color: var(--line);
 }
 
 /* =========================================================
@@ -274,7 +274,7 @@ form button.btn-salvar:active {
 .laudos-lista {
   min-height: 70px;
   padding: 10px;
-  border: 1px dashed #c8d4de;
+  border: 1px dashed var(--line);
   background: var(--surface);
   border-radius: 8px;
   display: flex;
@@ -355,7 +355,7 @@ form button.btn-salvar:active {
   right: 0;
   z-index: 30;
   background: var(--surface);
-  border: 1px solid #cfdae3;
+  border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.10);
   max-height: 280px;
