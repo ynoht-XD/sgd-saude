@@ -43,6 +43,7 @@
 
     const el = document.createElement("div");
     el.textContent = msg;
+    el.className = "pts-toast pts-toast--" + type;
     el.style.cssText = `
       padding:12px 14px;
       border-radius:16px;
