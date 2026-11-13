@@ -786,49 +786,6 @@ body{
   }
 }
 
-/* DARK MODE */
-@media (prefers-color-scheme:dark){
-  :root{
-    --bg:#0b1220;
-    --panel:#0f172a;
-    --panel-soft:#111c31;
-    --text:#e5e7eb;
-    --muted:#94a3b8;
-    --line:#1f2937;
-    --line-strong:#2c3b52;
-  }
-
-  .atd-mini-card,
-  .atd-last-inline-item,
-  .atd-collapse-toggle,
-  .atd-field input,
-  .atd-field select,
-  .atd-field textarea,
-  .input,
-  .btn-outline,
-  .btn,
-  .btn--ghost,
-  .atd-chip,
-  .atd-sugestao-proc{
-    background:#0b1220;
-    color:var(--text);
-    border-color:var(--line);
-  }
-
-  .atd-proc-row,
-  .atd-combo-inline--empty,
-  .atd-empty{
-    background:#0b1220;
-  }
-
-  .atd-dialog-card{
-    background:linear-gradient(180deg,#0f172a,#111c31);
-  }
-
-  .atd-voice-btn{
-    background:#0b1220;
-  }
-}
 /* ===========================================================
    COMPLEMENTO · sugestões inline + evolução oculta
    =========================================================== */
@@ -968,16 +925,3 @@ body{
   display:none !important;
 }
 
-@media (prefers-color-scheme:dark){
-  .proc-inline-suggestions,
-  .proc-inline-item,
-  .atd-hidden-evolution,
-  .atd-radio-card{
-    background:#0b1220;
-    border-color:var(--line);
-  }
-
-  .proc-inline-item:hover{
-    background:#111c31;
-  }
-}
