@@ -415,15 +415,15 @@ form button.btn-salvar:active {
   font-size: 14px;
 
   color: var(--text);
-  background: rgba(108,117,125,.12);
-  border: 1px solid rgba(108,117,125,.22);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
 
   transition: transform .12s, background-color .2s, border-color .2s, box-shadow .2s;
 }
 
 .btn-voltar:hover {
-  background: rgba(108,117,125,.18);
-  border-color: rgba(108,117,125,.32);
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  border-color: color-mix(in srgb, var(--muted) 32%, transparent);
   box-shadow: 0 6px 16px rgba(2,6,23,.08);
 }
 
