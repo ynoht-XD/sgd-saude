@@ -167,7 +167,7 @@
   display:grid;
   grid-template-columns:1fr 220px auto auto;
   gap:12px;
-  background:white;
+  background:var(--surface);
   padding:14px;
   border-radius:22px;
   box-shadow:0 14px 34px rgba(15,23,42,.07);
@@ -182,7 +182,7 @@
   border-radius:14px;
   padding:12px 14px;
   outline:none;
-  background:white;
+  background:var(--surface);
 }
 
 .pm-filters button,
@@ -211,7 +211,7 @@
 }
 
 .pm-card{
-  background:white;
+  background:var(--surface);
   border-radius:26px;
   box-shadow:0 18px 45px rgba(15,23,42,.08);
   overflow:hidden;
@@ -232,6 +232,7 @@
   top:0;
   background:var(--surface-2);
   color:#475569;
+  color:light-dark(#475569, var(--text-2));
   font-size:.78rem;
   text-transform:uppercase;
   letter-spacing:.08em;
@@ -266,8 +267,9 @@
 }
 
 .badge.ok{
-  color:#065f46;
+  color:var(--success-ink);
   background:#d1fae5;
+  background:light-dark(#d1fae5, var(--success-chip));
 }
 
 .badge.warn{
