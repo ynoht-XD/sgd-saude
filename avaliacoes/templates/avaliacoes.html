@@ -26,6 +26,13 @@
     --av-radius-sm:14px;
   }
 
+  /* UX.3 (tema escuro): token local com literal claro. So casa com <html data-theme="dark">: o claro nao muda. */
+  @media screen{
+    :root[data-theme="dark"]{
+      --av-soft: var(--info-soft);
+    }
+  }
+
   .page-av{
     max-width:min(1380px, 96vw);
     margin:20px auto 42px;
@@ -48,6 +55,10 @@
       linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.84)),
       linear-gradient(135deg, rgba(29,78,216,.08), rgba(67,56,202,.08));
     border:1px solid rgba(255,255,255,.7);
+    border-color:light-dark(rgba(255,255,255,.7), color-mix(in srgb, var(--surface) 70%, transparent));
+    background:
+      linear-gradient(135deg, light-dark(rgba(255,255,255,.95), color-mix(in srgb, var(--surface) 95%, transparent)), light-dark(rgba(255,255,255,.84), color-mix(in srgb, var(--surface) 84%, transparent))),
+      linear-gradient(135deg, rgba(29,78,216,.08), rgba(67,56,202,.08));
     box-shadow:var(--av-shadow);
     isolation:isolate;
   }
@@ -74,6 +85,7 @@
     border-radius:999px;
     background:rgba(29,78,216,.10);
     color:var(--av-primary);
+    color:light-dark(var(--av-primary), var(--brand-fg));
     font-size:.82rem;
     font-weight:900;
     letter-spacing:.05em;
@@ -111,9 +123,11 @@
     padding:0 14px;
     border-radius:999px;
     background:rgba(255,255,255,.86);
+    background:light-dark(rgba(255,255,255,.86), color-mix(in srgb, var(--surface) 86%, transparent));
     border:1px solid rgba(148,163,184,.14);
     box-shadow:0 8px 18px rgba(15,23,42,.04);
     color:#1e293b;
+    color:light-dark(#1e293b, var(--text-2));
     font-size:.92rem;
     font-weight:700;
   }
@@ -127,6 +141,7 @@
     padding:18px;
     border-radius:22px;
     background:rgba(255,255,255,.80);
+    background:light-dark(rgba(255,255,255,.8), color-mix(in srgb, var(--surface) 80%, transparent));
     border:1px solid rgba(148,163,184,.14);
     box-shadow:var(--av-shadow-soft);
   }
@@ -217,6 +232,7 @@
   .btn-soft{
     background:var(--av-soft);
     color:#1e3a8a;
+    color:light-dark(#1e3a8a, var(--info-ink));
   }
 
   .pick-grid{
@@ -233,6 +249,8 @@
     padding:16px;
     background:
       linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,250,252,.94));
+    background:
+      linear-gradient(180deg, light-dark(rgba(255,255,255,.98), color-mix(in srgb, var(--surface) 98%, transparent)), light-dark(rgba(248,250,252,.94), color-mix(in srgb, var(--surface-2) 94%, transparent)));
     display:flex;
     gap:14px;
     text-decoration:none;
@@ -269,7 +287,9 @@
     place-items:center;
     font-size:1.15rem;
     background:linear-gradient(135deg, #eef2ff, #eff6ff);
+    background:linear-gradient(135deg, light-dark(#eef2ff, var(--info-soft)), light-dark(#eff6ff, var(--info-soft)));
     color:#1e3a8a;
+    color:light-dark(#1e3a8a, var(--info-ink));
     font-weight:900;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.65);
   }
@@ -352,6 +372,7 @@
     position:relative;
     overflow:hidden;
     background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(248,250,252,.96));
+    background:linear-gradient(180deg, light-dark(rgba(255,255,255,.99), color-mix(in srgb, var(--surface) 99%, transparent)), light-dark(rgba(248,250,252,.96), color-mix(in srgb, var(--surface-2) 96%, transparent)));
     border:1px solid var(--av-border);
     border-radius:22px;
     box-shadow:0 12px 24px rgba(15,23,42,.04);
@@ -398,6 +419,8 @@
     font-weight:900;
     background:#eef2ff;
     color:#1e3a8a;
+    background:light-dark(#eef2ff, var(--info-soft));
+    color:light-dark(#1e3a8a, var(--info-ink));
     line-height:1.2;
   }
 
@@ -463,6 +486,7 @@
     border:1px dashed var(--av-border-strong);
     border-radius:20px;
     background:linear-gradient(180deg, #fbfdff, #f8fbff);
+    background:linear-gradient(180deg, light-dark(#fbfdff, var(--surface)), light-dark(#f8fbff, var(--surface-2)));
   }
 
   .empty-state .ico{
