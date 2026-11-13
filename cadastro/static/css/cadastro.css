@@ -96,9 +96,9 @@ form textarea {
 form input:focus,
 form select:focus,
 form textarea:focus {
-  border-color: #2980b9;
+  border-color: var(--brand);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.12);
+  box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
 form input[readonly],
@@ -117,7 +117,7 @@ form textarea:disabled {
 form button.btn-salvar {
   width: 100%;
   padding: 12px;
-  background-color: #2980b9;
+  background-color: var(--brand);
   color: white;
   border: none;
   border-radius: 8px;
@@ -129,7 +129,7 @@ form button.btn-salvar {
 }
 
 form button.btn-salvar:hover {
-  background-color: #1f6390;
+  background-color: var(--brand-2);
 }
 
 form button.btn-salvar:active {
