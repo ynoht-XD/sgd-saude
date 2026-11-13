@@ -42,6 +42,37 @@
   --pts-focus: 0 0 0 4px rgba(37, 99, 235, .16);
 }
 
+/* UX.3 (tema escuro): tokens --pts-* definidos com literal claro. So casa com <html data-theme="dark">: o claro nao muda. */
+@media screen {
+  :root[data-theme="dark"] {
+    --pts-panel: color-mix(in srgb, var(--surface) 92%, transparent);
+    --pts-soft-text: var(--text-2);
+    --pts-line-strong: var(--line-strong);
+    --pts-success-soft: var(--success-chip);
+    --pts-info-soft: var(--info-soft);
+  }
+}
+
+/* UX.3: o toast do pts.js e criado com style inline literal (claro). O JS so acrescenta a classe .pts-toast--<tipo> (nenhum estilo novo no claro);
+   no escuro o !important vence o inline. */
+@media screen {
+  :root[data-theme="dark"] .pts-toast {
+    color: var(--text) !important;
+    background: var(--surface) !important;
+    border-color: var(--line-strong) !important;
+  }
+  :root[data-theme="dark"] .pts-toast--success {
+    color: var(--success-chip-ink) !important;
+    background: var(--success-chip) !important;
+    border-color: var(--success-line) !important;
+  }
+  :root[data-theme="dark"] .pts-toast--error {
+    color: var(--danger-chip-ink) !important;
+    background: var(--danger-chip) !important;
+    border-color: var(--danger-line) !important;
+  }
+}
+
 /* ===========================================================
    BASE
    =========================================================== */
@@ -108,7 +139,7 @@ body {
 
 .pts-flashes .flash.success {
   border-color: rgba(16, 185, 129, .35);
-  background: linear-gradient(135deg, #fff, var(--pts-success-soft));
+  background: linear-gradient(135deg, var(--surface), var(--pts-success-soft));
 }
 
 .pts-flashes .flash.success::before {
@@ -117,7 +148,7 @@ body {
 
 .pts-flashes .flash.error {
   border-color: rgba(239, 68, 68, .35);
-  background: linear-gradient(135deg, #fff, var(--pts-danger-soft));
+  background: linear-gradient(135deg, var(--surface), var(--pts-danger-soft));
 }
 
 .pts-flashes .flash.error::before {
@@ -126,7 +157,7 @@ body {
 
 .pts-flashes .flash.info {
   border-color: rgba(14, 165, 233, .35);
-  background: linear-gradient(135deg, #fff, var(--pts-info-soft));
+  background: linear-gradient(135deg, var(--surface), var(--pts-info-soft));
 }
 
 .pts-flashes .flash.info::before {
@@ -146,9 +177,13 @@ body {
   margin-bottom: 18px;
   padding: 22px;
   border: 1px solid rgba(226, 232, 240, .9);
+  border-color: light-dark(rgba(226,232,240,.9), color-mix(in srgb, var(--line) 90%, transparent));
   border-radius: var(--pts-radius-lg);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, .94), rgba(248, 250, 252, .84)),
+    var(--pts-panel-solid);
+  background:
+    linear-gradient(135deg, light-dark(rgba(255,255,255,.94), color-mix(in srgb, var(--surface) 94%, transparent)), light-dark(rgba(248,250,252,.84), color-mix(in srgb, var(--surface-2) 84%, transparent))),
     var(--pts-panel-solid);
   box-shadow: var(--pts-shadow);
   overflow: hidden;
@@ -206,6 +241,7 @@ body {
 
   border: 1px solid var(--pts-line);
   background: rgba(255, 255, 255, .94);
+  background: light-dark(rgba(255,255,255,.94), color-mix(in srgb, var(--surface) 94%, transparent));
   color: var(--pts-text);
 
   padding: 9px 15px;
@@ -248,16 +284,17 @@ body {
 
 .btn.ghost {
   background: rgba(248, 250, 252, .92);
+  background: light-dark(rgba(248,250,252,.92), color-mix(in srgb, var(--surface-2) 92%, transparent));
 }
 
 .btn.danger {
-  color: #991b1b;
+  color: var(--danger-ink);
   border-color: rgba(239, 68, 68, .22);
   background: var(--pts-danger-soft);
 }
 
 .btn.success {
-  color: #065f46;
+  color: var(--success-ink);
   border-color: rgba(16, 185, 129, .25);
   background: var(--pts-success-soft);
 }
@@ -272,6 +309,7 @@ body {
   margin-bottom: 16px;
 
   border: 1px solid rgba(226, 232, 240, .92);
+  border-color: light-dark(rgba(226,232,240,.92), color-mix(in srgb, var(--line) 92%, transparent));
   border-radius: var(--pts-radius);
   background: var(--pts-panel);
   box-shadow: var(--pts-shadow-sm);
@@ -336,6 +374,7 @@ body {
 
 .field label {
   color: #334155;
+  color: light-dark(#334155, var(--text-2));
   font-size: .88rem;
   font-weight: 750;
 }
@@ -357,6 +396,7 @@ body {
   border: 1px solid var(--pts-line);
   border-radius: 14px;
   background: rgba(255, 255, 255, .96);
+  background: light-dark(rgba(255,255,255,.96), color-mix(in srgb, var(--surface) 96%, transparent));
   color: var(--pts-text);
 
   padding: 0 12px;
@@ -379,7 +419,7 @@ body {
 
 .field input::placeholder,
 .field textarea::placeholder {
-  color: #94a3b8;
+  color: var(--muted-2);
 }
 
 .field input:hover,
@@ -393,7 +433,7 @@ body {
 .field textarea:focus {
   outline: none;
   border-color: var(--pts-primary);
-  background: #fff;
+  background: var(--surface);
   box-shadow: var(--pts-focus);
 }
 
@@ -401,7 +441,8 @@ body {
 .field textarea[readonly],
 .field select:disabled {
   color: #64748b;
-  background: #f8fafc;
+  color: light-dark(#64748b, var(--muted));
+  background: var(--surface-2);
   cursor: not-allowed;
 }
 
@@ -442,8 +483,10 @@ body {
   z-index: 80;
 
   border: 1px solid rgba(203, 213, 225, .95);
+  border-color: light-dark(rgba(203, 213, 225, .95), var(--line-strong));
   border-radius: 16px;
   background: rgba(255, 255, 255, .98);
+  background: light-dark(rgba(255,255,255,.98), color-mix(in srgb, var(--surface) 98%, transparent));
   box-shadow: var(--pts-shadow-lg);
   backdrop-filter: blur(12px);
 }
@@ -454,6 +497,7 @@ body {
 
 .sugg-box::-webkit-scrollbar-thumb {
   background: #cbd5e1;
+  background: light-dark(#cbd5e1, var(--line-strong));
   border-radius: 999px;
 }
 
@@ -463,7 +507,7 @@ body {
   gap: 10px;
 
   padding: 12px 13px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--surface-3);
 
   cursor: pointer;
   transition: background .15s ease;
@@ -474,11 +518,11 @@ body {
 }
 
 .sugg-item:hover {
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .sugg-item .title {
-  color: #0f172a;
+  color: var(--text);
   font-weight: 850;
   overflow: hidden;
   white-space: nowrap;
@@ -496,7 +540,7 @@ body {
   align-self: start;
   padding: 4px 8px;
   border-radius: 999px;
-  color: #1d4ed8;
+  color: var(--info-ink);
   background: var(--pts-primary-soft);
   font-size: .76rem;
   font-weight: 850;
@@ -519,8 +563,9 @@ body {
 
   padding: 12px;
   border: 1px solid #edf2f7;
+  border-color: light-dark(#edf2f7, var(--line));
   border-radius: 16px;
-  background: linear-gradient(135deg, #fff, #f8fafc);
+  background: linear-gradient(135deg, var(--surface), var(--surface-2));
 }
 
 .participant-row .btn {
@@ -546,7 +591,7 @@ body {
   border-radius: 999px;
 
   color: var(--pts-soft-text);
-  background: #f8fafc;
+  background: var(--surface-2);
 
   font-size: .78rem;
   font-weight: 800;
@@ -554,7 +599,7 @@ body {
 
 .badge.primary,
 .pill.primary {
-  color: #1d4ed8;
+  color: var(--info-ink);
   border-color: rgba(37, 99, 235, .18);
   background: var(--pts-primary-soft);
 }
@@ -562,13 +607,14 @@ body {
 .badge.success,
 .pill.success {
   color: #047857;
+  color: light-dark(#047857, var(--success-chip-ink));
   border-color: rgba(16, 185, 129, .18);
   background: var(--pts-success-soft);
 }
 
 .badge.warning,
 .pill.warning {
-  color: #92400e;
+  color: var(--warning-ink);
   border-color: rgba(245, 158, 11, .20);
   background: var(--pts-warning-soft);
 }
@@ -625,7 +671,7 @@ body {
   overflow: auto;
   border: 1px solid var(--pts-line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .pts-table {
@@ -637,7 +683,7 @@ body {
 .pts-table th,
 .pts-table td {
   padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--surface-3);
   text-align: left;
   vertical-align: top;
 }
@@ -647,14 +693,15 @@ body {
   top: 0;
   z-index: 2;
   color: #334155;
-  background: #f8fafc;
+  color: light-dark(#334155, var(--text-2));
+  background: var(--surface-2);
   font-size: .82rem;
   text-transform: uppercase;
   letter-spacing: .04em;
 }
 
 .pts-table tr:hover td {
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 /* ===========================================================
@@ -759,6 +806,7 @@ body {
   z-index: 9999 !important;
 
   background: rgba(255,255,255,.985) !important;
+  background: light-dark(rgba(255,255,255,.985), color-mix(in srgb, var(--surface) 98.5%, transparent)) !important;
   backdrop-filter: blur(14px);
 
   border: 1px solid rgba(203,213,225,.95);
