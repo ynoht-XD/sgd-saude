@@ -68,6 +68,19 @@
   --com-radius-sm: 12px;
 }
 
+/* UX.3 (tema escuro): tokens --com-* definidos com literal claro (--com-soft-text, --com-line-strong, --com-warn).
+   MESMO ESCOPO do bloco acima (.com-page E .com-dialog): os <dialog> ficam fora da section.com-page e, sem o
+   .com-dialog aqui, var(--com-*) voltaria ao valor claro dentro de #modalVinculo e #modalBeneficiarios.
+   Claro intacto: so casa com <html data-theme="dark">. */
+@media screen{
+  :root[data-theme="dark"] .com-page,
+  :root[data-theme="dark"] .com-dialog{
+    --com-soft-text: var(--text-2);
+    --com-line-strong: var(--line-strong);
+    --com-warn: var(--warning-fg);
+  }
+}
+
 /* =========================================================
    SHELL
    ========================================================= */
@@ -106,7 +119,7 @@
   background:
     radial-gradient(circle at top left, rgba(37,99,235,.10), transparent 36%),
     radial-gradient(circle at bottom right, rgba(22,163,74,.08), transparent 34%),
-    #fff;
+    var(--surface);
 }
 
 .com-kicker,
@@ -118,7 +131,7 @@
   font-weight: 800;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--com-primary);
+  color: var(--brand-fg);
 }
 
 .com-hero h1{
@@ -147,6 +160,7 @@
 
 .com-stat{
   background: linear-gradient(180deg, #ffffff, #fbfdff);
+  background: linear-gradient(180deg, var(--surface), light-dark(#fbfdff, var(--surface-2)));
   border: 1px solid var(--com-line);
   border-radius: 20px;
   padding: 16px 18px;
@@ -162,6 +176,9 @@
   background:
     radial-gradient(circle at top right, rgba(217,119,6,.10), transparent 45%),
     linear-gradient(180deg, #ffffff, #fffaf2);
+  background:
+    radial-gradient(circle at top right, rgba(217,119,6,.10), transparent 45%),
+    linear-gradient(180deg, var(--surface), light-dark(#fffaf2, var(--warning-soft)));
 }
 
 .com-stat-label{
@@ -197,12 +214,12 @@
 
 .com-chip--blue{
   background: var(--com-primary-soft);
-  color: var(--com-primary-600);
+  color: var(--info-ink);
 }
 
 .com-chip--green{
   background: var(--com-success-soft);
-  color: var(--com-success);
+  color: var(--success-fg);
 }
 
 .com-chip--gold{
@@ -213,6 +230,7 @@
 .com-chip--soft{
   background: var(--surface-3);
   color: #475569;
+  color: light-dark(#475569, var(--text-2));
   border-color: var(--line);
 }
 
@@ -396,7 +414,7 @@
 .com-btn--ghost{
   color: var(--text-2);
   background: var(--surface-3);
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--line-strong);
 }
 
 .com-btn--danger{
@@ -516,6 +534,7 @@
   border: 1px solid var(--com-line);
   border-radius: 20px;
   background: linear-gradient(180deg, #ffffff, #fbfcff);
+  background: linear-gradient(180deg, var(--surface), light-dark(#fbfcff, var(--surface-2)));
   box-shadow: var(--com-shadow-sm);
   overflow: hidden;
 }
@@ -586,32 +605,34 @@
 
 .com-badge--sessions{
   background: rgba(37,99,235,.10);
-  color: var(--brand-2);
+  color: var(--info-ink);
 }
 
 .com-badge--price{
   background: rgba(22,163,74,.10);
-  color: #15803d;
+  color: var(--success-fg);
 }
 
 .com-badge--active{
   background: rgba(22,163,74,.12);
-  color: #15803d;
+  color: var(--success-fg);
 }
 
 .com-badge--inactive{
   background: rgba(148,163,184,.12);
   color: #475569;
+  color: light-dark(#475569, var(--text-2));
 }
 
 .com-badge--combo{
   background: rgba(37,99,235,.10);
-  color: var(--brand-2);
+  color: var(--info-ink);
 }
 
 .com-badge--plan{
   background: rgba(217,119,6,.10);
   color: #b45309;
+  color: light-dark(#b45309, var(--warning-ink));
 }
 
 .com-badge--status{
@@ -632,16 +653,18 @@
 .com-badge--warn{
   background: rgba(217,119,6,.12);
   color: #b45309;
+  color: light-dark(#b45309, var(--warning-ink));
 }
 
 .com-badge--danger{
   background: rgba(220,38,38,.10);
   color: #b91c1c;
+  color: light-dark(#b91c1c, var(--danger-ink));
 }
 
 .com-badge--success{
   background: rgba(22,163,74,.12);
-  color: #15803d;
+  color: var(--success-fg);
 }
 
 /* =========================================================
@@ -759,6 +782,7 @@
   height: 28px;
   border-radius: 999px;
   background: #dbe4ef;
+  background: light-dark(#dbe4ef, var(--line-strong));
   position: relative;
   flex: 0 0 auto;
   transition: background .18s ease;
@@ -814,6 +838,8 @@
   border-radius: 22px;
   background:
     linear-gradient(180deg, #ffffff, #fbfdff);
+  background:
+    linear-gradient(180deg, var(--surface), light-dark(#fbfdff, var(--surface-2)));
   box-shadow: var(--com-shadow-sm);
   overflow: hidden;
 }
@@ -832,6 +858,9 @@
   background:
     radial-gradient(circle at top right, rgba(217,119,6,.08), transparent 42%),
     linear-gradient(180deg, #ffffff, #fffaf2);
+  background:
+    radial-gradient(circle at top right, rgba(217,119,6,.08), transparent 42%),
+    linear-gradient(180deg, var(--surface), light-dark(#fffaf2, var(--warning-soft)));
 }
 
 .com-vinculo-card.is-warning::before{
@@ -844,6 +873,9 @@
   background:
     radial-gradient(circle at top right, rgba(220,38,38,.08), transparent 42%),
     linear-gradient(180deg, #ffffff, #fff5f5);
+  background:
+    radial-gradient(circle at top right, rgba(220,38,38,.08), transparent 42%),
+    linear-gradient(180deg, var(--surface), light-dark(#fff5f5, var(--danger-soft)));
 }
 
 .com-vinculo-card.is-expired::before,
@@ -921,6 +953,7 @@
 
 .com-mini--warn{
   background: #fffaf2;
+  background: light-dark(#fffaf2, var(--warning-soft));
   border-color: rgba(217,119,6,.20);
 }
 
@@ -1029,6 +1062,7 @@
   border: 1px dashed var(--com-line-strong);
   border-radius: 20px;
   background: linear-gradient(180deg, #ffffff, #fafcff);
+  background: linear-gradient(180deg, var(--surface), light-dark(#fafcff, var(--surface-2)));
   box-shadow: var(--com-shadow-xs);
 }
 
@@ -1135,6 +1169,7 @@
 .com-money{
   font-weight: 800;
   color: #14532d;
+  color: light-dark(#14532d, var(--success-ink));
   white-space: nowrap;
 }
 
@@ -1210,7 +1245,7 @@
   border-bottom: 1px solid var(--com-line);
   background:
     radial-gradient(circle at top left, rgba(37,99,235,.06), transparent 38%),
-    #fff;
+    var(--surface);
 }
 
 .com-dialog-head h3{
@@ -1582,6 +1617,6 @@
 .com-benef-aviso{
   min-height: 1.2em;
   margin-top: 10px;
-  color: #15803d;
+  color: var(--success-fg);
   font-size: .9rem;
 }
