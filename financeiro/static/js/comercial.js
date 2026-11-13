@@ -505,7 +505,7 @@
             ? `Plano familiar: até <b>${maxBenef}</b> beneficiários, contando o titular. O paciente selecionado entra como titular; os demais beneficiários são adicionados depois que o contrato existir.`
             : `Plano individual (1 beneficiário: o paciente selecionado).`}
         </div>
-        <div class="com-patient-meta" style="color:#b45309;">
+        <div class="com-patient-meta" style="color:#b45309;color:light-dark(#b45309,var(--warning-ink));">
           Estes valores são copiados do catálogo agora (snapshot): alterar o plano no catálogo depois não muda este contrato.
         </div>
       </div>
