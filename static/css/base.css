@@ -998,7 +998,7 @@ button.btn{
 }
 
 .btn-ghost{
-  color:var(--brand-2);
+  color:var(--info-ink);        /* UX.3: era --brand-2 (#1d4ed8 = --info-ink no claro; no escuro --brand-2 dava 2,2:1) */
   background: var(--brand-soft);
 }
 
