@@ -117,7 +117,7 @@ body{
   border-radius: 999px;
 
   background: var(--primary-soft);
-  color: var(--primary);
+  color: var(--brand-fg);
 
   font-size: 12px;
   font-weight: 800;
@@ -696,6 +696,7 @@ body{
 
 .menu-pop .menu-item.danger{
   color: #b91c1c;
+  color: light-dark(#b91c1c, var(--danger-fg));
 }
 
 /* =========================================================

@@ -51,7 +51,7 @@
 /* ===== Botões (escopo leve) ===== */
 .btn{
   border:1px solid var(--rh-line);
-  background:#fff;
+  background:var(--surface);
   color:var(--rh-text);
   padding:9px 14px;
   border-radius:12px;
@@ -67,7 +67,7 @@
 .btn.danger{ background: var(--rh-danger); color:#fff; border-color: var(--rh-danger); }
 .btn.xs{ padding:6px 9px; border-radius:9px; font-size:.85rem; }
 .icon-btn{
-  border:1px solid var(--rh-line); background:#fff; width:36px; height:36px; border-radius:10px;
+  border:1px solid var(--rh-line); background:var(--surface); width:36px; height:36px; border-radius:10px;
   display:grid; place-items:center; font-size:1.1rem; cursor:pointer;
 }
 
@@ -143,7 +143,7 @@
 /* ===== Tabs ===== */
 .tabs{ display:flex; gap:6px; align-items:center; }
 .tab{
-  border:1px solid var(--rh-line); background:#fff; color:var(--rh-text);
+  border:1px solid var(--rh-line); background:var(--surface); color:var(--rh-text);
   padding:8px 12px; border-radius:999px; cursor:pointer; font-size:.9rem;
 }
 .tab.active{ border-color: var(--rh-primary); box-shadow: 0 2px 8px rgba(37,99,235,.2); }
@@ -208,11 +208,11 @@
 .modal-header .icon-btn:hover{ background:#111827; }
 
 .modal-body{
-  background:#fff; color:var(--rh-text);
+  background:var(--surface); color:var(--rh-text);
   padding:16px;
 }
 .modal-footer{
-  display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; background:#fff; border-top:1px solid var(--rh-line);
+  display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; background:var(--surface); border-top:1px solid var(--rh-line);
 }
 
 /* ===== Badges / status ===== */

@@ -227,6 +227,7 @@ body{
   font-size:14px;
   font-weight:950;
   color:#0f5132;
+  color:light-dark(#0f5132, var(--success-ink));
 }
 
 .atd-combo-badges,
@@ -442,7 +443,7 @@ body{
 .atd-procs-suggestions{
   margin:10px 0 14px;
   border:1px solid color-mix(in srgb, var(--brand) 16%, transparent);
-  background:linear-gradient(180deg,color-mix(in srgb, var(--brand) 6%, transparent),rgba(255,255,255,.85));
+  background:linear-gradient(180deg,color-mix(in srgb, var(--brand) 6%, transparent),color-mix(in srgb, var(--surface) 85%, transparent));
   border-radius:18px;
   padding:14px;
 }
@@ -508,7 +509,7 @@ body{
 }
 
 .btnRemoveProc{
-  color:var(--danger);
+  color:var(--danger-fg);
 }
 
 .btnRemoveProc:hover{
@@ -559,7 +560,7 @@ body{
   border-radius:999px;
   border:1px solid rgba(22,163,74,.30);
   background:linear-gradient(180deg,var(--surface),var(--success-soft));
-  color:#15803d;
+  color:var(--success-fg);
   font-size:12px;
   font-weight:950;
   cursor:pointer;
@@ -576,6 +577,7 @@ body{
   border-color:rgba(220,38,38,.35);
   background:linear-gradient(180deg,var(--surface),var(--danger-soft));
   color:#b91c1c;
+  color:light-dark(#b91c1c, var(--danger-fg));
   animation:voiceGlow 1.2s ease infinite;
 }
 
