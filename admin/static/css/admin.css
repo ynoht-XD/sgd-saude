@@ -588,55 +588,6 @@
   box-shadow: 0 0 0 3px var(--ring);
 }
 
-/* =========================
-   Dark mode
-   ========================= */
-@media (prefers-color-scheme: dark) {
-  .admin-shell {
-    --admin-bg: #0b1220;
-    --surface: #0f172a;
-    --surface-2: #0b1220;
-    --surface-3: #111827;
-    --text: #e5e7eb;
-    --muted: #9ca3af;
-    --border: #1f2937;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,.45);
-    --shadow-md: 0 14px 34px rgba(0,0,0,.45);
-    --shadow-lg: 0 18px 40px rgba(0,0,0,.50);
-  }
-
-  .card::after {
-    background: radial-gradient(70px 70px at 70% 30%, rgba(37,99,235,.18), transparent 60%);
-  }
-
-  .admin-nav a {
-    --bg: #111827;
-    color: #e5e7eb;
-    border-color: #1f2937;
-  }
-
-  .btn {
-    background: #0b1220;
-    color: #e5e7eb;
-    border-color: #1f2937;
-  }
-
-  .btn-muted {
-    background: #0b1220;
-  }
-
-  .table-admin tbody tr:hover {
-    background: #0b1220;
-  }
-
-  .form-grid {
-    background: #0f172a;
-  }
-
-  .stack-meta {
-    background: rgba(17,24,39,.75);
-  }
-}
 
 /* =========================
    Responsividade
