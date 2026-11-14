@@ -24,6 +24,18 @@
   --ring: rgba(37, 99, 235, .18);
 }
 
+/* UX.3 lote 6: valor ESCURO dos tokens locais que tem literal claro (so o escuro os enxerga; "screen": impressao clara).
+   --text/--line-strong/--accent-soft/--warning-soft tem o mesmo nome de um token canonico: o bloco central do base.css ja os trata. */
+@media screen {
+  :root[data-theme="dark"] {
+    --page-bg: var(--bg);
+    --page-bg-2: var(--bg-soft);
+    --card-soft: var(--surface-2);
+    --text-strong: var(--text);
+    --accent-2-soft: var(--info-soft);
+  }
+}
+
 /* =========================================================
    BASE
 ========================================================= */
@@ -55,12 +67,17 @@
   position: relative;
   overflow: hidden;
   background: rgba(255, 255, 255, .88);
+  background: light-dark(rgba(255, 255, 255, .88), color-mix(in srgb, var(--surface) 88%, transparent));
   border: 1px solid rgba(199, 213, 230, .86);
+  border-color: light-dark(rgba(199, 213, 230, .86), var(--line-strong));
   border-radius: 24px;
   padding: 24px;
   box-shadow:
     0 18px 45px rgba(15, 23, 42, .08),
     0 1px 0 rgba(255,255,255,.9) inset;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, .08),
+    0 1px 0 light-dark(rgba(255,255,255,.9), rgba(255,255,255,.05)) inset;
   backdrop-filter: blur(10px);
 }
 
@@ -208,18 +225,23 @@
 
 .export-page .ok-chip {
   color: #166534;
+  color: light-dark(#166534, var(--success-chip-ink));
   border-color: #bbf7d0;
+  border-color: light-dark(#bbf7d0, var(--success-line));
   background: var(--accent-soft);
+  background: light-dark(var(--accent-soft), var(--success-chip));
 }
 
 .export-page .warn-chip {
   color: var(--warning-ink);
   border-color: #fed7aa;
+  border-color: light-dark(#fed7aa, var(--warning-line));
   background: var(--warning-soft);
 }
 
 .export-page .badge-erro {
   color: #b91c1c;
+  color: light-dark(#b91c1c, var(--danger-ink));
   border: 1px solid var(--danger-line);
   background: var(--danger-soft);
 }
@@ -289,6 +311,7 @@
 
 .export-page .danger-soft-btn {
   color: #b91c1c;
+  color: light-dark(#b91c1c, var(--danger-ink));
   border-color: var(--danger-line);
   background: var(--danger-soft);
 }
@@ -314,8 +337,11 @@
 
 .export-page .ok {
   color: #166534;
+  color: light-dark(#166534, var(--success-ink));
   background: var(--accent-soft);
+  background: light-dark(var(--accent-soft), var(--success-soft));
   border: 1px solid #bbf7d0;
+  border-color: light-dark(#bbf7d0, var(--success-line));
   margin-top: 10px;
   display: none;
 }
@@ -343,6 +369,7 @@
   padding: 9px 12px;
   border-radius: 11px;
   color: var(--brand-2);
+  color: light-dark(var(--brand-2), var(--brand-fg));
   background: var(--accent-2-soft);
   cursor: pointer;
   font-weight: 800;
@@ -407,9 +434,13 @@
   padding: 16px;
   border-radius: 18px;
   border: 1px solid #dbeafe;
+  border-color: light-dark(#dbeafe, var(--info-line));
   background:
     radial-gradient(180px 80px at 20% 0%, rgba(37, 99, 235, .10), transparent 65%),
     linear-gradient(180deg, #ffffff, #f8fbff);
+  background:
+    radial-gradient(180px 80px at 20% 0%, rgba(37, 99, 235, .10), transparent 65%),
+    linear-gradient(180deg, light-dark(#ffffff, var(--surface)), light-dark(#f8fbff, var(--surface-2)));
   box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
 }
 
@@ -464,10 +495,13 @@
   list-style: none;
   padding: 15px 16px;
   color: #1e3a8a;
+  color: light-dark(#1e3a8a, var(--info-ink));
   font-weight: 900;
   border-bottom: 1px solid var(--line);
   background:
     linear-gradient(90deg, var(--accent-2-soft), #ffffff 72%);
+  background:
+    linear-gradient(90deg, var(--accent-2-soft), light-dark(#ffffff, var(--surface)) 72%);
 }
 
 .export-page .audit-details summary::-webkit-details-marker {
@@ -496,8 +530,10 @@
   padding: 14px;
   border-radius: 14px;
   color: #064e3b;
+  color: light-dark(#064e3b, var(--success-ink));
   background: var(--success-soft);
   border: 1px solid #bbf7d0;
+  border-color: light-dark(#bbf7d0, var(--success-line));
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -554,6 +590,7 @@
 .export-page .audit-table td {
   padding: 12px 13px;
   border-bottom: 1px solid #edf2f7;
+  border-bottom-color: light-dark(#edf2f7, var(--line-soft));
   text-align: left;
   vertical-align: top;
   font-size: 13px;
@@ -564,6 +601,7 @@
   top: 0;
   z-index: 1;
   color: #1e3a8a;
+  color: light-dark(#1e3a8a, var(--info-ink));
   background: var(--brand-tint);
   font-size: 12px;
   text-transform: uppercase;
