@@ -1,4 +1,7 @@
 <style>
+  :root { --apac-blue-fg: #1f4e85; }   /* UX.3 lote 6 (D6): o azul da APAC como TEXTO; no claro e o proprio azul */
+  @media screen { :root[data-theme="dark"] { --apac-blue-fg: #89b5e6; } }   /* mesmo matiz, mais claro para ter contraste no escuro */
+
   #modal-edicao-apac {
     position: fixed;
     inset: 0;
@@ -33,12 +36,14 @@
   .modal-head h3 {
     margin: 0;
     color: #0f172a;
+    color: light-dark(#0f172a, var(--text));
     font-size: 1.15rem;
   }
 
   .icon-btn {
     border: none;
     background: #e5e7eb;
+    background: light-dark(#e5e7eb, var(--line-strong));
     width: 34px;
     height: 34px;
     border-radius: 10px;
@@ -60,6 +65,7 @@
 
   .tab-btn {
     border: 1px solid #cbd5e1;
+    border-color: light-dark(#cbd5e1, var(--line-strong));
     background: var(--surface-2);
     color: var(--text-2);
     padding: 8px 12px;
@@ -89,6 +95,7 @@
   .section-title {
     font-weight: 900;
     color: #1f4e85;
+    color: var(--apac-blue-fg);
     margin: 0 0 12px;
     font-size: 1rem;
   }
@@ -112,6 +119,7 @@
   .field label {
     font-size: .78rem;
     color: #475569;
+    color: light-dark(#475569, var(--text-2));
     font-weight: 800;
     text-transform: uppercase;
   }
@@ -120,6 +128,7 @@
   .field select,
   .field textarea {
     border: 1px solid #cbd5e1;
+    border-color: light-dark(#cbd5e1, var(--line-strong));
     border-radius: 10px;
     padding: 9px 10px;
     font-size: .95rem;
@@ -131,7 +140,9 @@
   .field select:focus,
   .field textarea:focus {
     border-color: #1f4e85;
+    border-color: var(--apac-blue-fg);
     box-shadow: 0 0 0 3px rgba(31, 78, 133, .12);
+    box-shadow: 0 0 0 3px light-dark(rgba(31, 78, 133, .12), rgba(137, 181, 230, .22));
   }
 
   .field textarea {
