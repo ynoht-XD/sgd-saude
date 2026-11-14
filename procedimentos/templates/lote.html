@@ -414,6 +414,13 @@ C910
   --l-neutral-text:var(--text-2);
 }
 
+/* UX.3 lote 6: valor ESCURO dos tokens locais que tem literal claro (so o escuro os enxerga; "screen": impressao clara) */
+@media screen{
+  :root[data-theme="dark"]{
+    --l-neutral-bg: var(--line-strong);
+  }
+}
+
 .lote-page{
   max-width:1520px;
   margin:0 auto;
@@ -427,6 +434,7 @@ C910
   gap:18px;
   margin-bottom:20px;
   background:linear-gradient(135deg, #eff6ff 0%, #ffffff 50%, #f8fafc 100%);
+  background:linear-gradient(135deg, light-dark(#eff6ff, var(--brand-tint)) 0%, light-dark(#ffffff, var(--surface)) 50%, light-dark(#f8fafc, var(--surface-2)) 100%);
   border:1px solid var(--l-line);
   border-radius:var(--l-radius-lg);
   box-shadow:var(--l-shadow);
@@ -576,11 +584,13 @@ C910
 
 .btn-secondary{
   background:#0f172a;
+  background:light-dark(#0f172a,var(--surface-3));
   color:var(--on-brand);
 }
 
 .btn-secondary:hover{
   background:#1e293b;
+  background:light-dark(#1e293b,var(--line-strong));
 }
 
 .btn-ghost{
@@ -600,6 +610,7 @@ C910
   flex-wrap:wrap;
   background:var(--l-soft);
   border:1px dashed #cbd5e1;
+  border-color:light-dark(#cbd5e1,var(--line-strong));
   border-radius:18px;
   padding:14px;
 }
@@ -623,6 +634,7 @@ C910
 
 .filebox__button:hover{
   background:#cfe2ff;
+  background:light-dark(#cfe2ff,var(--info-line));
 }
 
 .filebox__name{
@@ -780,7 +792,9 @@ C910
 
 .badge-rubrica{
   background:#ede9fe;
+  background:light-dark(#ede9fe,var(--violet-chip));
   color:#6d28d9;
+  color:light-dark(#6d28d9,var(--violet-chip-ink));
 }
 
 .chips{
@@ -802,8 +816,11 @@ C910
 
 .chip-cid{
   background:#fff1f2;
+  background:light-dark(#fff1f2,var(--danger-soft));
   color:#9f1239;
+  color:light-dark(#9f1239,var(--danger-ink));
   border-color:#fecdd3;
+  border-color:light-dark(#fecdd3,var(--danger-line));
 }
 
 .chip-cbo{
@@ -814,8 +831,11 @@ C910
 
 .chip-serv{
   background:#f5f3ff;
+  background:light-dark(#f5f3ff,var(--violet-soft));
   color:#6d28d9;
+  color:light-dark(#6d28d9,var(--violet-ink));
   border-color:#ddd6fe;
+  border-color:light-dark(#ddd6fe,var(--violet-line));
 }
 
 .chip-more{
