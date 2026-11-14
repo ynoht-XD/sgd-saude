@@ -7,6 +7,20 @@
     --apac-blue-dark: #163d69;
     --apac-line: #1f4e85;
     --apac-text: #18324f;
+    --apac-blue-fg: #1f4e85;         /* UX.3 lote 6 (D6): o azul da APAC usado como TEXTO (no claro = o proprio azul) */
+    --apac-blue-dark-fg: #163d69;
+  }
+
+  /* UX.3 lote 6 (D6): a ficha imita a ficha oficial do SUS: o azul #1f4e85 continua sendo o azul da APAC (barras, botao, moldura de 4px).
+     No escuro so mudam as versoes que servem de TEXTO e de LINHA fina: mesmo matiz (212 graus), luminosidade maior para ter contraste
+     sobre a superficie escura (texto >= 7:1, linhas >= 3:1). So o escuro as ve ("screen": impressao clara). */
+  @media screen {
+    :root[data-theme="dark"] {
+      --apac-blue-fg: #89b5e6;
+      --apac-blue-dark-fg: #a8caf0;
+      --apac-line: #366cab;
+      --apac-text: #d9e4f2;
+    }
   }
 
   .apac-page { max-width: 1120px; margin: 0 auto; padding: 22px; }
@@ -17,11 +31,12 @@
   }
 
   .apac-actions-top h1 {
-    margin: 0; color: var(--apac-blue-dark); font-size: 1.45rem;
+    margin: 0; color: var(--apac-blue-dark-fg); font-size: 1.45rem;
   }
 
   .btn {
     border: 1px solid #d1d5db; background: var(--surface); color: #111827;
+    border-color: light-dark(#d1d5db, var(--line-strong)); color: light-dark(#111827, var(--text));
     border-radius: 10px; padding: 9px 13px; font-weight: 800;
     text-decoration: none; cursor: pointer; display: inline-flex;
     align-items: center; gap: 7px;
@@ -45,12 +60,12 @@
   .apac-logo {
     border-right: 1.8px solid var(--apac-line); display: flex;
     align-items: center; justify-content: center; font-weight: 900;
-    color: var(--apac-blue); font-size: 1.15rem; text-align: center; line-height: 1.1;
+    color: var(--apac-blue-fg); font-size: 1.15rem; text-align: center; line-height: 1.1;
   }
 
   .apac-title {
     display: flex; flex-direction: column; justify-content: center;
-    padding: 8px 14px; color: var(--apac-blue);
+    padding: 8px 14px; color: var(--apac-blue-fg);
   }
 
   .apac-title strong { font-size: 2rem; letter-spacing: .5px; line-height: 1; }
@@ -58,7 +73,7 @@
 
   .apac-page-num {
     display: flex; align-items: end; justify-content: center;
-    padding-bottom: 8px; font-size: .8rem; color: var(--apac-blue);
+    padding-bottom: 8px; font-size: .8rem; color: var(--apac-blue-fg);
   }
 
   .bar {
@@ -84,17 +99,18 @@
 
   .field label {
     position: absolute; top: -8px; left: 10px; background: var(--surface);
-    padding: 0 4px; color: var(--apac-blue-dark); font-size: .69rem;
+    padding: 0 4px; color: var(--apac-blue-dark-fg); font-size: .69rem;
     text-transform: uppercase; white-space: nowrap;
   }
 
   .field input, .field select, .field textarea {
     width: 100%; height: 100%; border: none; outline: none;
     padding: 13px 9px 6px; color: #111827; font-size: .92rem;
+    color: light-dark(#111827, var(--text));
     background: transparent;
   }
 
-  .field input[readonly] { background: var(--surface-2); color: #374151; }
+  .field input[readonly] { background: var(--surface-2); color: #374151; color: light-dark(#374151, var(--text-2)); }
   .field textarea { min-height: 86px; resize: vertical; }
   .field.big { min-height: 86px; }
   .field.tall { min-height: 120px; }
@@ -116,12 +132,12 @@
   }
 
   .suggestion-item:hover { background: var(--brand-tint); }
-  .suggestion-item strong { display: block; color: #111827; }
-  .suggestion-item span { display: block; color: #6b7280; font-size: .8rem; margin-top: 2px; }
+  .suggestion-item strong { display: block; color: #111827; color: light-dark(#111827, var(--text)); }
+  .suggestion-item span { display: block; color: #6b7280; color: light-dark(#6b7280, var(--muted)); font-size: .8rem; margin-top: 2px; }
 
   .submit-bar {
     display: flex; justify-content: flex-end; gap: 10px;
-    margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--apac-blue);
+    margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--apac-line);
   }
 
   @media (max-width: 900px) {
