@@ -227,6 +227,7 @@
       font-weight: 1000;
       letter-spacing: -.07em;
       text-wrap: balance;
+      overflow-wrap: anywhere;
       text-shadow: 0 18px 44px rgba(15,23,42,.12);
       animation: nameIn .7s cubic-bezier(.2,.8,.2,1);
     }
@@ -384,6 +385,34 @@
       animation: cardFlash 1s ease;
     }
 
+    /* indicador de conexao REAL: verde = ok, ambar = reconectando, vermelho = sessao expirada */
+    .status[data-estado="reconectando"] { color: #b45309; }
+    .status[data-estado="reconectando"] .status-dot { background: #d97706; animation: none; }
+    .status[data-estado="sessao"] { color: #b91c1c; }
+    .status[data-estado="sessao"] .status-dot { background: #dc2626; animation: none; }
+
+    /* a politica de autoplay dos navegadores exige uma interacao: o aviso some no 1o clique/toque/tecla */
+    .som-aviso {
+      position: fixed;
+      bottom: 10px;           /* rodape central: nao cobre o nome da chamada nem a barra superior */
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      white-space: nowrap;
+      padding: 8px 18px;
+      border: 1px solid rgba(180, 83, 9, .35);
+      border-radius: 999px;
+      background: #fffbeb;
+      color: #92400e;
+      font: inherit;
+      font-weight: 900;
+      font-size: clamp(.9rem, 1.3vw, 1.15rem);
+      box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+      cursor: pointer;
+    }
+
+    .som-aviso[hidden] { display: none; }
+
     @keyframes spin { to { transform: rotate(360deg); } }
 
     @keyframes float {
@@ -424,6 +453,24 @@
       0% { box-shadow: 0 30px 90px rgba(15,23,42,.14); }
       45% { box-shadow: 0 0 0 10px rgba(37,99,235,.16), 0 0 90px rgba(37,99,235,.32); }
       100% { box-shadow: 0 30px 90px rgba(15,23,42,.14); }
+    }
+
+    /* telas baixas (notebook/TV 1366x768): compacta o entorno para o cartao da chamada ganhar altura */
+    @media (max-height: 820px) {
+      .tv-shell { padding: 14px 18px; gap: 10px; }
+      .tv-topbar { padding: 8px 18px; border-radius: 22px; }
+      .brand-icon { width: 42px; height: 42px; font-size: 1.3rem; border-radius: 14px; }
+      .history-panel { padding: 10px 14px; min-height: 0; border-radius: 22px; }
+      .history-title { margin-bottom: 8px; }
+      .history-item { min-height: 0; padding: 8px 12px; border-radius: 16px; }
+      .history-item small { margin-bottom: 3px; }
+      .history-item span { margin-top: 3px; font-size: .8rem; }
+      .eyebrow { margin-bottom: 10px; padding: 6px 12px; }
+      .info-grid { margin-top: 14px; gap: 12px; }
+      .info-pill { padding: 9px 18px; border-radius: 20px; }
+      .info-pill span { margin-bottom: 2px; font-size: .78rem; }
+      .called-now { margin-top: 10px; }
+      .call-card { padding: clamp(14px, 2vw, 28px); }
     }
 
     @media (max-width: 1050px) {
@@ -468,6 +515,8 @@
 </head>
 
 <body>
+  <button type="button" class="som-aviso" id="somAviso">🔇 Clique para ativar o som e a voz</button>
+
   <div class="tv-shell">
     <header class="tv-topbar">
       <div class="brand">
@@ -504,7 +553,7 @@
           <span>Histórico</span>
           <strong>Últimos 4 chamados</strong>
         </div>
-        <span>Atualização em tempo real</span>
+        <span id="atualizaInfo">Atualiza a cada 5 segundos</span>
       </div>
 
       <div class="history-list" id="historyList">
@@ -513,198 +562,139 @@
     </section>
 
     <footer class="tv-footer">
-      <span class="status">
+      <span class="status" id="statusConexao" data-estado="ok" role="status" aria-live="polite">
         <span class="status-dot"></span>
-        Sistema de chamada ativo
+        <span id="statusTexto">Sistema de chamada ativo</span>
       </span>
       <span>Por favor, acompanhe a tela</span>
     </footer>
   </div>
 
 <script>
-  let ultimaChamadaId = 0;
-  let filaChamadas = [];
-  let processandoFila = false;
-  let historicoChamadas = [];
+(() => {
+  "use strict";
 
+  const API_ULTIMA = "/atendimentos/chama-na-tela/api/ultima";
   const API_FILA = "/atendimentos/chama-na-tela/api/fila";
   const API_RECENTES = "/atendimentos/chama-na-tela/api/recentes";
 
+  const POLL_MS = 5000;          // intervalo do polling
+  const TIMEOUT_MS = 8000;       // uma requisicao parada nao trava o polling para sempre
+  const EXIBICAO_MIN_MS = 4500;  // tempo minimo de cada chamada na tela
+  const FALA_MAX_MS = 12000;     // limite de espera pela voz (alguns aparelhos nao disparam onend)
+  const EXPIRA_S = 120;          // depois disso a TV volta para "Aguardando chamada"
+  const AGUARDANDO_HTML = document.getElementById("tvConteudo").innerHTML;
+
+  let cursor = null;             // id da ultima chamada JA conhecida; o polling so comeca depois que isto e definido
+  let filaChamadas = [];
+  let processandoFila = false;
+  let buscando = false;          // trava anti-sobreposicao do polling
+  const idsVistos = new Set();   // deduplicacao por id (som/voz nunca repetem a mesma chamada)
+  let historico = [];            // {id, paciente_nome, profissional_nome, local, criado_em, idade0, t0}
+  let atual = null;              // {id, idade0, t0}: chamada mostrada agora
+  let somAtivo = false;
+  let audioCtx = null;
+
+  class SessaoExpirada extends Error {}
+
+  const $ = (id) => document.getElementById(id);
+  const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function escapeHtml(texto) {
+    return String(texto || "")
+      .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+  }
+
+  // ------------------------------------------------------------------ relogio
   function atualizarRelogio() {
     const agora = new Date();
-
-    document.getElementById("horaAtual").textContent = agora.toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    const data = agora.toLocaleDateString("pt-BR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric"
-    });
-
-    document.getElementById("dataAtual").textContent =
-      data.charAt(0).toUpperCase() + data.slice(1);
+    $("horaAtual").textContent = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const data = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+    $("dataAtual").textContent = data.charAt(0).toUpperCase() + data.slice(1);
   }
 
-  async function carregarHistoricoInicial() {
+  // ------------------------------------------------------------------ conexao
+  const TEXTO_STATUS = {
+    ok: "Sistema de chamada ativo",
+    reconectando: "Reconectando…",
+    sessao: "Sessão expirada. Entre novamente neste aparelho."
+  };
+
+  function setStatus(estado) {
+    const el = $("statusConexao");
+    if (el.dataset.estado === estado) return;
+    el.dataset.estado = estado;
+    $("statusTexto").textContent = TEXTO_STATUS[estado];
+  }
+
+  function statusDeErro(err) {
+    setStatus(err instanceof SessaoExpirada ? "sessao" : "reconectando");
+  }
+
+  async function getJson(url) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     try {
-      const resp = await fetch(API_RECENTES, { cache: "no-store" });
+      const resp = await fetch(url, { cache: "no-store", credentials: "same-origin", signal: ctl.signal });
+      const tipo = (resp.headers.get("content-type") || "").toLowerCase();
+      // sessao vencida: o servidor responde 401/403 ou redireciona para a tela de login (HTML)
+      if (resp.status === 401 || resp.status === 403 || resp.redirected || tipo.includes("text/html")) throw new SessaoExpirada();
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
+      if (data && data.ok === false) throw new Error(data.erro || "Resposta com erro");
+      return data;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
-      if (!data.ok || !Array.isArray(data.chamadas)) return;
+  // ------------------------------------------------------------------ horarios (o servidor manda ISO 8601; idade_s vem calculada no servidor)
+  function formatarHora(valor) {
+    if (!valor) return "--:--";
+    const data = new Date(String(valor).replace(" ", "T"));   // o replace so cobre servidor antigo
+    if (Number.isNaN(data.getTime())) return "--:--";
+    const hora = data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const hoje = new Date();
+    if (data.toDateString() === hoje.toDateString()) return hora;
+    return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + hora;
+  }
 
-      historicoChamadas = data.chamadas.map(item => ({
-        id: item.id,
-        paciente_nome: item.paciente_nome || "",
-        profissional_nome: item.profissional_nome || "",
-        cbo: item.cbo || "",
-        horario: formatarHora(item.criado_em)
-      }));
+  const idadeDe = (ref) => ref.idade0 + (performance.now() - ref.t0) / 1000;
 
-      if (historicoChamadas.length) {
-        ultimaChamadaId = Number(historicoChamadas[0].id || 0);
+  function rotuloChamada(idade) {
+    if (idade < 60) return "Chamado agora";
+    return "Chamado há " + Math.floor(idade / 60) + " min";
+  }
 
-        renderizarHistorico();
-
-        const ultima = data.chamadas[0];
-        renderizarChamada(ultima, false);
+  // ------------------------------------------------------------------ som e voz (so depois de uma interacao do usuario: politica de autoplay)
+  function ativarSom() {
+    if (somAtivo) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        audioCtx = new AC();
+        if (audioCtx.resume) audioCtx.resume();
       }
+      if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));   // destrava a voz dentro do gesto
+      somAtivo = true;
+      $("somAviso").hidden = true;
+      tocarSom();   // confirma que o som funciona
     } catch (err) {
-      console.warn("Erro ao carregar histórico:", err);
+      console.warn("Nao foi possivel ativar o som:", err);
+      $("somAviso").textContent = "🔇 Som indisponível neste aparelho";
     }
   }
 
-  async function buscarNovasChamadas() {
+  ["click", "keydown", "touchstart"].forEach((ev) => document.addEventListener(ev, ativarSom, { passive: true }));
+
+  function tocarSom() {
+    if (!somAtivo || !audioCtx) return;
     try {
-      const resp = await fetch(`${API_FILA}?after_id=${encodeURIComponent(ultimaChamadaId)}`, {
-        cache: "no-store"
-      });
-
-      const data = await resp.json();
-
-      if (!data.ok || !Array.isArray(data.chamadas) || !data.chamadas.length) return;
-
-      filaChamadas.push(...data.chamadas);
-      ultimaChamadaId = Math.max(
-        ultimaChamadaId,
-        ...data.chamadas.map(c => Number(c.id || 0))
-      );
-
-      processarFila();
-    } catch (err) {
-      console.warn("Erro ao buscar fila:", err);
-    }
-  }
-
-  async function processarFila() {
-    if (processandoFila) return;
-    processandoFila = true;
-
-    while (filaChamadas.length) {
-      const chamada = filaChamadas.shift();
-
-      adicionarAoHistorico(chamada);
-      renderizarChamada(chamada, true);
-      tocarSomPremium();
-
-      await esperar(4500);
-    }
-
-    processandoFila = false;
-  }
-
-  function adicionarAoHistorico(chamada) {
-    historicoChamadas = [
-      {
-        id: chamada.id,
-        paciente_nome: chamada.paciente_nome || "",
-        profissional_nome: chamada.profissional_nome || "",
-        cbo: chamada.cbo || "",
-        horario: formatarHora(chamada.criado_em)
-      },
-      ...historicoChamadas.filter(item => Number(item.id) !== Number(chamada.id))
-    ].slice(0, 4);
-
-    renderizarHistorico();
-  }
-
-  function renderizarHistorico() {
-    const list = document.getElementById("historyList");
-
-    if (!historicoChamadas.length) {
-      list.innerHTML = `<div class="history-empty">Nenhum paciente chamado ainda.</div>`;
-      return;
-    }
-
-    list.innerHTML = historicoChamadas.map((item, index) => `
-      <article class="history-item">
-        <small>${index === 0 ? "Chamado agora" : escapeHtml(item.horario)}</small>
-        <strong>${escapeHtml(item.paciente_nome || "Paciente")}</strong>
-        <span>
-          ${item.profissional_nome ? `Profissional: ${escapeHtml(item.profissional_nome)}` : "Profissional não informado"}
-          ${item.cbo ? `<br>CBO: ${escapeHtml(item.cbo)}` : ""}
-        </span>
-      </article>
-    `).join("");
-  }
-
-  function renderizarChamada(chamada, comVoz = true) {
-    const box = document.getElementById("tvBox");
-    const conteudo = document.getElementById("tvConteudo");
-
-    const profissional = chamada.profissional_nome
-      ? `
-        <div class="info-pill">
-          <span>Profissional</span>
-          <strong>${escapeHtml(chamada.profissional_nome)}</strong>
-        </div>
-      `
-      : "";
-
-    const cbo = chamada.cbo
-      ? `
-        <div class="info-pill">
-          <span>CBO do profissional</span>
-          <strong>${escapeHtml(chamada.cbo)}</strong>
-        </div>
-      `
-      : "";
-
-    conteudo.innerHTML = `
-      <div class="eyebrow">
-        <span class="pulse-dot"></span>
-        Paciente chamado
-      </div>
-
-      <h1 class="patient-name">${escapeHtml(chamada.paciente_nome || "Paciente")}</h1>
-
-      <div class="info-grid">
-        ${profissional}
-        ${cbo}
-      </div>
-
-      <div class="called-now">Chamado agora</div>
-    `;
-
-    box.classList.remove("flash");
-    void box.offsetWidth;
-    box.classList.add("flash");
-
-    if (comVoz) falarChamada(chamada);
-  }
-
-  function tocarSomPremium() {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioContext();
-
+      if (audioCtx.state === "suspended") audioCtx.resume();
       const gain = audioCtx.createGain();
       gain.gain.value = 0.075;
       gain.connect(audioCtx.destination);
-
       [659, 784, 988].forEach((freq, index) => {
         const osc = audioCtx.createOscillator();
         osc.type = "sine";
@@ -713,65 +703,268 @@
         osc.start(audioCtx.currentTime + index * 0.16);
         osc.stop(audioCtx.currentTime + index * 0.16 + 0.14);
       });
-
-      setTimeout(() => audioCtx.close(), 850);
-    } catch (e) {}
-  }
-
-  function falarChamada(chamada) {
-    if (!("speechSynthesis" in window)) return;
-
-    const nome = chamada.paciente_nome || "";
-    const profissional = chamada.profissional_nome || "";
-
-    let texto = nome;
-
-    if (profissional) {
-      texto += `. Atendimento com ${profissional}.`;
+    } catch (err) {
+      console.warn("Falha ao tocar o som:", err);
+      $("somAviso").hidden = false;
+      $("somAviso").textContent = "🔇 Som indisponível neste aparelho";
     }
-
-    const fala = new SpeechSynthesisUtterance(texto);
-    fala.lang = "pt-BR";
-    fala.rate = 0.82;
-    fala.pitch = 1;
-
-    speechSynthesis.cancel();
-
-    setTimeout(() => {
-      speechSynthesis.speak(fala);
-    }, 450);
   }
 
-  function formatarHora(valor) {
-    if (!valor) return "--:--";
+  // devolve uma Promise que resolve quando a fala termina (ou no limite); sem som, resolve na hora
+  function falarChamada(chamada) {
+    return new Promise((resolve) => {
+      if (!somAtivo || !("speechSynthesis" in window)) return resolve();
 
-    const data = new Date(valor);
-    if (Number.isNaN(data.getTime())) return "--:--";
+      let texto = chamada.paciente_nome || "";
+      if (chamada.profissional_nome) texto += `. Atendimento com ${chamada.profissional_nome}.`;
 
-    return data.toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit"
+      const fala = new SpeechSynthesisUtterance(texto);
+      fala.lang = "pt-BR";
+      fala.rate = 0.85;
+
+      let acabou = false;
+      const concluir = () => { if (!acabou) { acabou = true; resolve(); } };
+      fala.onend = concluir;
+      fala.onerror = (ev) => { console.warn("Erro na voz:", ev.error); concluir(); };
+      setTimeout(concluir, FALA_MAX_MS);
+
+      setTimeout(() => {
+        try { speechSynthesis.speak(fala); } catch (err) { console.warn("Falha na voz:", err); concluir(); }
+      }, 450);
     });
   }
 
-  function esperar(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  // ------------------------------------------------------------------ historico
+  function paraItemHistorico(c) {
+    return {
+      id: Number(c.id),
+      paciente_nome: c.paciente_nome || "",
+      profissional_nome: c.profissional_nome || "",
+      local: c.setor || c.cbo || "",
+      criado_em: c.criado_em,
+      idade0: Number(c.idade_s) || 0,
+      t0: performance.now()
+    };
   }
 
-  function escapeHtml(texto) {
-    return String(texto || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  function adicionarAoHistorico(chamada) {
+    historico = [paraItemHistorico(chamada), ...historico.filter((item) => item.id !== Number(chamada.id))].slice(0, 4);
+    renderizarHistorico();
   }
+
+  function renderizarHistorico() {
+    const list = $("historyList");
+
+    if (!historico.length) {
+      list.innerHTML = `<div class="history-empty">Nenhum paciente chamado ainda.</div>`;
+      return;
+    }
+
+    list.innerHTML = historico.map((item) => `
+      <article class="history-item">
+        <small data-hid="${item.id}"></small>
+        <strong>${escapeHtml(item.paciente_nome || "Paciente")}</strong>
+        <span>
+          ${item.profissional_nome ? `Profissional: ${escapeHtml(item.profissional_nome)}` : "Profissional não informado"}
+          ${item.local ? `<br>Local: ${escapeHtml(item.local)}` : ""}
+        </span>
+      </article>
+    `).join("");
+
+    atualizarRotulosHistorico();
+  }
+
+  function atualizarRotulosHistorico() {
+    historico.forEach((item, index) => {
+      const el = document.querySelector(`[data-hid="${item.id}"]`);
+      if (!el) return;
+      const texto = index === 0 && idadeDe(item) < 60 ? "Chamado agora" : formatarHora(item.criado_em);
+      if (el.textContent !== texto) el.textContent = texto;
+    });
+  }
+
+  async function carregarHistorico(tentativa = 1) {
+    try {
+      const data = await getJson(API_RECENTES);
+      if (!Array.isArray(data.chamadas)) throw new Error("recentes");
+      historico = data.chamadas.map(paraItemHistorico);
+      renderizarHistorico();
+    } catch (err) {
+      // o historico e secundario: falhar aqui NAO mexe no cursor do polling (isso causava o replay de chamadas antigas)
+      console.warn("Historico indisponivel:", err);
+      if (tentativa < 4) setTimeout(() => carregarHistorico(tentativa + 1), 5000);
+    }
+  }
+
+  // ------------------------------------------------------------------ chamada na tela
+  function mostrarAguardando() {
+    $("tvConteudo").innerHTML = AGUARDANDO_HTML;
+    $("tvConteudo").style.transform = "";
+  }
+
+  function ajustarConteudo() {
+    const box = $("tvBox");
+    const cont = $("tvConteudo");
+    const nome = cont.querySelector(".patient-name");
+
+    cont.style.transform = "";
+    if (!nome) return;
+    nome.style.fontSize = "";
+
+    const cs = getComputedStyle(box);
+    const altura = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const largura = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+
+    // 1) reduz so a fonte do nome ate caber (o campo Profissional/Local continua inteiro na tela)
+    let fs = parseFloat(getComputedStyle(nome).fontSize);
+    const minimo = 40;
+    while ((cont.scrollHeight > altura || cont.scrollWidth > largura) && fs > minimo) {
+      fs = Math.max(minimo, fs * 0.92);
+      nome.style.fontSize = fs + "px";
+    }
+
+    // 2) ultimo recurso (tela muito baixa): reduz o conjunto
+    if (cont.scrollHeight > altura) {
+      const escala = Math.max(0.45, altura / cont.scrollHeight);
+      cont.style.transformOrigin = "center center";
+      cont.style.transform = `scale(${escala})`;
+    }
+  }
+
+  function atualizarRotuloAtual() {
+    const el = $("chamadoLabel");
+    if (el && atual) el.textContent = rotuloChamada(idadeDe(atual));
+  }
+
+  function renderizarChamada(chamada, comEfeito = true) {
+    const box = $("tvBox");
+    const local = chamada.setor || chamada.cbo || "";
+
+    const profissional = chamada.profissional_nome
+      ? `<div class="info-pill"><span>Profissional</span><strong>${escapeHtml(chamada.profissional_nome)}</strong></div>`
+      : "";
+
+    const localHtml = local
+      ? `<div class="info-pill"><span>Local</span><strong>${escapeHtml(local)}</strong></div>`
+      : "";
+
+    $("tvConteudo").innerHTML = `
+      <div class="eyebrow"><span class="pulse-dot"></span>Paciente chamado</div>
+      <h1 class="patient-name">${escapeHtml(chamada.paciente_nome || "Paciente")}</h1>
+      <div class="info-grid">${profissional}${localHtml}</div>
+      <div class="called-now" id="chamadoLabel"></div>
+    `;
+
+    atual = { id: Number(chamada.id), idade0: Number(chamada.idade_s) || 0, t0: performance.now() };
+    atualizarRotuloAtual();
+    ajustarConteudo();
+
+    if (comEfeito) {
+      box.classList.remove("flash");
+      void box.offsetWidth;
+      box.classList.add("flash");
+    }
+  }
+
+  async function processarFila() {
+    if (processandoFila) return;
+    processandoFila = true;
+
+    try {
+      while (filaChamadas.length) {
+        const chamada = filaChamadas.shift();
+
+        adicionarAoHistorico(chamada);
+
+        // chamada que ja chegou "velha" (TV parada/sem rede por minutos): fica so no historico, sem som nem voz
+        if ((Number(chamada.idade_s) || 0) >= EXPIRA_S) continue;
+
+        renderizarChamada(chamada, true);
+        tocarSom();
+        await Promise.all([esperar(EXIBICAO_MIN_MS), falarChamada(chamada)]);
+      }
+    } finally {
+      processandoFila = false;
+    }
+  }
+
+  async function buscarNovasChamadas() {
+    if (buscando || cursor === null) return;   // sem sobreposicao e so depois do cursor inicial
+    buscando = true;
+
+    try {
+      const data = await getJson(`${API_FILA}?after_id=${encodeURIComponent(cursor)}`);
+      if (!Array.isArray(data.chamadas)) throw new Error("fila");
+      setStatus("ok");
+
+      for (const chamada of data.chamadas) {
+        const id = Number(chamada.id || 0);
+        if (!id) continue;
+        cursor = Math.max(cursor, id);
+        if (idsVistos.has(id)) continue;
+        idsVistos.add(id);
+        filaChamadas.push(chamada);
+      }
+
+      if (filaChamadas.length) processarFila();
+    } catch (err) {
+      console.warn("Erro ao buscar fila:", err);
+      statusDeErro(err);
+    } finally {
+      buscando = false;
+    }
+  }
+
+  function tick() {
+    atualizarRelogio();
+    if (atual) {
+      if (idadeDe(atual) >= EXPIRA_S && !processandoFila) {
+        atual = null;
+        mostrarAguardando();
+      } else {
+        atualizarRotuloAtual();
+      }
+    }
+    atualizarRotulosHistorico();
+  }
+
+  // O cursor vem de /api/ultima (rota leve e dedicada) ANTES de qualquer polling: se falhar, tenta de novo; nunca comeca em 0 por falha.
+  async function inicializar() {
+    for (;;) {
+      try {
+        const data = await getJson(API_ULTIMA);
+        const ultima = data.chamada || null;
+        cursor = ultima ? Number(ultima.id) || 0 : 0;   // 0 so quando o servidor confirma que nao existe nenhuma chamada
+        if (ultima) {
+          idsVistos.add(Number(ultima.id));
+          if ((Number(ultima.idade_s) || 0) < EXPIRA_S) renderizarChamada(ultima, false);
+        }
+        setStatus("ok");
+        break;
+      } catch (err) {
+        console.warn("Aguardando o servidor para iniciar:", err);
+        statusDeErro(err);
+        await esperar(3000);
+      }
+    }
+
+    carregarHistorico();
+    setInterval(buscarNovasChamadas, POLL_MS);
+  }
+
+  // refaz o ajuste sempre que o cartao mudar de tamanho (janela redimensionada, historico que carrega depois, etc.)
+  let quadroAjuste = null;
+  const refazerAjuste = () => {
+    if (quadroAjuste) cancelAnimationFrame(quadroAjuste);
+    quadroAjuste = requestAnimationFrame(() => { quadroAjuste = null; ajustarConteudo(); });
+  };
+  if ("ResizeObserver" in window) new ResizeObserver(refazerAjuste).observe($("tvBox"));
+  else window.addEventListener("resize", refazerAjuste);
 
   atualizarRelogio();
-  carregarHistoricoInicial();
-
-  setInterval(atualizarRelogio, 1000);
-  setInterval(buscarNovasChamadas, 5000);
+  setInterval(tick, 1000);
+  inicializar();
+})();
 </script>
 </body>
 </html>
