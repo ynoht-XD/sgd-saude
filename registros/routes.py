@@ -448,7 +448,7 @@ def _montar_query_atendimentos(
     data_col_raw = _first_existing(cols, ["data_atendimento", "data", "data_iso", "created_at"])
     status_col_raw = _first_existing(cols, ["status", "situacao", "comparecimento"])
     sexo_col_raw = _first_existing(cols, ["sexo", "sex"])
-    cid_col_raw = _first_existing(cols, ["cid", "cid_principal", "cid10"])
+    cid_col_raw = _first_existing(cols, ["cid_codigo", "cid", "cid_principal", "cid10"])   # cid_codigo = CID do atendimento
     cidade_col_raw = _first_existing(cols, ["cidade", "municipio", "cidade_paciente", "municipio_paciente"])
 
     nome_cols = [f"a.{c}" for c in nome_cols_raw]
@@ -1021,7 +1021,7 @@ def _normalize_keys_for_xlsx(rows: list[dict]) -> list[str]:
         "profissional_nome", "nome_profissional", "profissional",
         "profissional_cbo", "cbo_profissional", "cbo",
         "status", "situacao", "comparecimento",
-        "cid", "cid_principal", "cid10", "pac__cid",
+        "cid_codigo", "cid", "cid_principal", "cid10", "pac__cid",
         "cidade", "municipio", "pac__municipio",
         "procedimento", "ap_procedimento",
         "codigo_sigtap", "ap_codigo_sigtap",
@@ -1983,7 +1983,7 @@ def exportar_evolucoes_restritas_pdf():
                 params.append(filtros["sexo"])
 
         if filtros["cid"]:
-            col_cid = _pick_att_col(a_cols, "cid", "cid_principal", "cid10")
+            col_cid = _pick_att_col(a_cols, "cid_codigo", "cid", "cid_principal", "cid10")
             if col_cid:
                 where.append(f"a.{col_cid} ILIKE %s")
                 params.append(f"%{filtros['cid']}%")
@@ -2227,7 +2227,8 @@ def _rows_bpai(conn, filtros: dict) -> list[dict]:
         dt_nasc = _fmt_date_bpai_ddmmyyyy(str(nasc_raw))
 
         sexo_p = _safe_str(pac.get("sexo") or a.get("sexo") or "")
-        cid_p = _safe_str(pac.get("cid") or a.get("cid") or "")
+        cid_atend = _safe_str(a.get("cid_codigo") or "").upper().replace(".", "").replace(" ", "")[:4]
+        cid_p = cid_atend or _safe_str(pac.get("cid") or a.get("cid") or "")
         idade = _safe_str(pac.get("idade") or "") or _calc_idade_no_dia(str(nasc_raw), str(dt_at_raw))
 
         cnspac = _only_digits(pac.get("cns") or "")

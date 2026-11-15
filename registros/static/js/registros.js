@@ -57,6 +57,7 @@
   const mrProcedimento = $("#mr_procedimento");
   const mrSigtap = $("#mr_sigtap");
   const mrCid = $("#mr_cid");
+  const mrCidAtendimento = $("#mr_cid_atendimento");
   const mrData = $("#mr_data");
   const mrStatus = $("#mr_status");
   const mrStatusJust = $("#mr_status_just");
@@ -408,6 +409,7 @@
       { el: mrProcedimento, keys: ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"] },
       { el: mrSigtap, keys: ["codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap"] },
       { el: mrCid, keys: ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"] },
+      { el: mrCidAtendimento, keys: ["cid_codigo"] },
       { el: mrData, keys: ["data_atendimento", "data", "data_iso", "created_at"], fmt: (v) => (v === "—" ? "—" : fmtDataBR(v)) },
       { el: mrStatus, keys: ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], fmt: (v) => normalizeStatusLabel(v) },
       { el: mrStatusJust, keys: ["status_justificativa", "justificativa", "motivo"] },
@@ -472,6 +474,7 @@
       const prof = profNameFrom(r);
       const status = normalizeStatusLabel(pick(r, ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], ""));
       const cid = pick(r, ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"], "");
+      const cidAtend = pick(r, ["cid_codigo"], "");
       const proc = pick(r, ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"], "");
 
       const info = evoOcultaInfo(r);
@@ -497,7 +500,8 @@
           <div class="registro-meta">
             <span>📅 ${escapeHtml(dt)}</span>
             <span>👤 ${escapeHtml(prof)}</span>
-            ${cid ? `<span>🏷️ CID ${escapeHtml(cid)}</span>` : ""}
+            ${cidAtend ? `<span title="CID do atendimento">🏷️ CID atend. ${escapeHtml(cidAtend)}</span>` : ""}
+            ${cid ? `<span title="CID do cadastro do paciente">🏷️ CID ${escapeHtml(cid)}</span>` : ""}
             ${proc ? `<span class="registro-proc">🧾 ${escapeHtml(proc)}</span>` : ""}
           </div>
 

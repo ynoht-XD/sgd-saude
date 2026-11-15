@@ -419,7 +419,7 @@ def _query_meus_atendimentos_paginado(
     col_data = _first_existing(a_cols, ["data_atendimento", "data", "dt_atendimento", "criado_em", "created_at"])
     col_evol = _first_existing(a_cols, ["evolucao", "evolução", "evolucao_texto", "evolucao_md", "evolucao_html"])
     col_a_cidade = _first_existing(a_cols, ["cidade", "municipio", "município", "cidade_nome"])
-    col_a_cid = _first_existing(a_cols, ["cid", "cid_codigo", "cid_principal", "cid10", "cid_primario"])
+    col_a_cid = _first_existing(a_cols, ["cid_codigo", "cid", "cid_principal", "cid10", "cid_primario"])   # cid_codigo = CID do atendimento
 
     if not col_prof:
         raise RuntimeError("Tabela atendimentos sem coluna profissional_id/usuario_id/user_id.")
@@ -538,6 +538,10 @@ def _query_meus_atendimentos_paginado(
         per_page = max(1, min(200, int(per_page or 20)))
         offset = (page - 1) * per_page
 
+        # CID do atendimento na listagem (so quando a coluna esta na propria tabela de atendimentos)
+        cid_sel_expr = f"COALESCE(a.{col_a_cid}::text, '')" if col_a_cid else "''"
+        cid_group_expr = f",\n                a.{col_a_cid}" if col_a_cid else ""
+
         list_sql = f"""
             SELECT
                 a.id AS id,
@@ -546,7 +550,8 @@ def _query_meus_atendimentos_paginado(
                 COALESCE({data_expr}::text, '') AS data,
                 {evol_expr} AS evolucao,
                 SUBSTRING({evol_expr} FROM 1 FOR 260) AS evolucao_preview,
-                {idade_expr} AS idade
+                {idade_expr} AS idade,
+                {cid_sel_expr} AS cid
             FROM atendimentos a
             {join_sql}
             WHERE {where_sql}
@@ -555,7 +560,7 @@ def _query_meus_atendimentos_paginado(
                 {paciente_expr},
                 {data_expr},
                 {evol_expr},
-                {idade_expr}
+                {idade_expr}{cid_group_expr}
             ORDER BY {data_expr} DESC NULLS LAST, a.id DESC
             LIMIT %s OFFSET %s
         """
@@ -787,6 +792,7 @@ def api_list():
                 "idade": r.get("idade"),
                 "evolucao_preview": r.get("evolucao_preview") or "",
                 "evolucao": r.get("evolucao") or "",
+                "cid": (r.get("cid") or "").strip(),
             }
             for r in rows
         ]

@@ -106,17 +106,23 @@ function renderHistorico(items) {
     return;
   }
 
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+
   items.forEach(it => {
+    // a API devolve atendimento_id e profissional (antes o JS lia id e profissional_nome: "Ver" saia com id indefinido)
+    const aid = it.atendimento_id ?? it.id;
+    const prof = it.profissional_nome || it.profissional || '—';
     const row = document.createElement('div');
     row.className = 'hist-row';
     row.innerHTML = `
-      <div class="hist-cell" data-label="Data">${toBR(it.data_atendimento)}</div>
-      <div class="hist-cell" data-label="Procedimento" title="${(it.procedimento||'').trim()}">${(it.procedimento||'').trim()}</div>
-      <div class="hist-cell" data-label="Profissional" title="${it.profissional_nome||'—'}">${it.profissional_nome||'—'}</div>
-      <div class="hist-cell" data-label="Status">${it.status||''}</div>
+      <div class="hist-cell" data-label="Data">${esc(toBR(it.data_atendimento))}</div>
+      <div class="hist-cell" data-label="Procedimento" title="${esc((it.procedimento||'').trim())}">${esc((it.procedimento||'').trim())}</div>
+      <div class="hist-cell" data-label="CID" title="CID do atendimento">${esc(it.cid_codigo || '—')}</div>
+      <div class="hist-cell" data-label="Profissional" title="${esc(prof)}">${esc(prof)}</div>
+      <div class="hist-cell" data-label="Status">${esc(it.status||'')}</div>
       <div class="hist-cell action">
-        <button class="hist-btn" data-aid="${it.id}">Ver</button>
-        <a class="hist-btn" style="text-decoration:none;display:inline-block;margin-left:6px" href="/atendimentos/${it.id}/documentos">Documentos</a>
+        <button class="hist-btn" data-aid="${esc(aid)}">Ver</button>
+        <a class="hist-btn" href="/atendimentos/${encodeURIComponent(aid)}/documentos">Documentos</a>
       </div>
     `;
     // click em "Ver" → abre modal
@@ -146,8 +152,9 @@ function renderHistorico(items) {
 function filtrarHistorico(q) {
   const arr = !q ? HIST_CACHE : HIST_CACHE.filter(it => {
     const p = (it.procedimento || '').toLowerCase();
-    const pr = (it.profissional_nome || '').toLowerCase();
-    return p.includes(q) || pr.includes(q);
+    const pr = (it.profissional_nome || it.profissional || '').toLowerCase();
+    const cid = (it.cid_codigo || '').toLowerCase();
+    return p.includes(q) || pr.includes(q) || cid.includes(q);
   });
   renderHistorico(arr);
 }
