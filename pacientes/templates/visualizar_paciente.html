@@ -2,6 +2,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{{ url_for('cadastro.static', filename='css/cadastro.css') }}">
+  <link rel="stylesheet" href="{{ url_for('pacientes.static', filename='css/cids_ativos.css') }}">
   <style>
     .fab-toolbar{
       position:fixed; top:72px; right:16px; z-index:1100; display:flex; gap:10px; align-items:center;
@@ -58,6 +59,10 @@
     <form class="form-grid">
       {% include 'formulario_visualizacao.html' %}
     </form>
+
+    {# Condicoes ativas (CID): so leitura aqui; adicionar/encerrar fica na edicao do paciente #}
+    {% set modo_leitura = true %}
+    {% include '_cids_ativos.html' %}
 
     {# ==================== Seção: Agendamentos ==================== #}
     <section class="section-card" aria-labelledby="agds-title">

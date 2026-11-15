@@ -1,0 +1,38 @@
+{# Secao "Condicoes ativas (CID)" do paciente. Contexto: paciente, cids_ativos (lista), pode_gerir_cids (atendimentos:editar), modo_leitura (opcional). #}
+{% set pode = pode_gerir_cids and not modo_leitura %}
+<section class="cids-ativos" id="cidsAtivos" aria-labelledby="cidsAtivosTitulo"
+         data-paciente-id="{{ paciente.id }}"
+         data-pode-gerir="{{ 1 if pode else 0 }}"
+         data-url-adicionar="{{ url_for('atendimentos.api_cids_ativos_adicionar', paciente_id=paciente.id) }}"
+         data-url-resolver="{{ url_for('atendimentos.api_cids_ativos_resolver', cid_ativo_id=0) }}"
+         data-url-cid="{{ url_for('documentos.buscar_cid10') }}">
+  <h3 id="cidsAtivosTitulo">Condições ativas (CID)</h3>
+  <p class="cids-ativos__dica">Condições que continuam de um atendimento para o outro (ex.: autismo, diabetes). Entram na regra de sugestão de procedimentos. O CID de um atendimento isolado fica no próprio atendimento.</p>
+
+  <ul class="cids-ativos__lista" id="cidsAtivosLista">
+    {% for c in cids_ativos or [] %}
+      <li class="cids-ativos__item" data-id="{{ c.id }}">
+        <span class="cids-ativos__cid">{{ c.cid_codigo }}</span>
+        <span class="cids-ativos__desc">{{ c.descricao }}</span>
+        <span class="cids-ativos__desde">desde {{ c.data_inicio[8:10] }}/{{ c.data_inicio[5:7] }}/{{ c.data_inicio[0:4] }}</span>
+        {% if pode %}<button type="button" class="cids-ativos__btn" data-acao="encerrar">Encerrar</button>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  <p class="cids-ativos__vazio" id="cidsAtivosVazio" {% if cids_ativos %}hidden{% endif %}>Nenhuma condição ativa registrada.</p>
+
+  {% if pode %}
+    <div class="cids-ativos__novo">
+      <label for="cidsAtivosBusca">Adicionar condição</label>
+      <div class="cids-ativos__campo">
+        <input type="text" id="cidsAtivosBusca" autocomplete="off" placeholder="Código ou nome (ex.: F84 ou autismo)">
+        <input type="hidden" id="cidsAtivosCodigo" value="">
+        <div class="cids-ativos__sug" id="cidsAtivosSug" hidden></div>
+      </div>
+      <button type="button" class="cids-ativos__btn cids-ativos__btn--primario" id="cidsAtivosAdd">Adicionar</button>
+    </div>
+  {% elif not modo_leitura %}
+    <p class="cids-ativos__aviso">Adicionar ou encerrar condições é feito por quem tem permissão de atendimento (profissional clínico).</p>
+  {% endif %}
+  <p class="cids-ativos__msg" id="cidsAtivosMsg" role="status"></p>
+</section>

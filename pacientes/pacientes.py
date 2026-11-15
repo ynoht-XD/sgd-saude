@@ -96,6 +96,23 @@ def _buscar_paciente_clinica(conn, paciente_id: int):
     return fetchone_dict(cur)
 
 
+def _contexto_cids_ativos(conn, paciente_id: int, clinica_id: int) -> dict:
+    """Dados da secao 'Condicoes ativas (CID)'. Falha aqui NUNCA derruba a tela do paciente (a secao vem vazia)."""
+    try:
+        from atendimentos.cids_ativos import pode_gerir_cids_ativos
+        from atendimentos.helpers import CID_STATUS_ATIVO, ensure_paciente_cids_ativos_schema, listar_cids_ativos
+
+        ensure_paciente_cids_ativos_schema(conn)
+        return {
+            "cids_ativos": listar_cids_ativos(conn, clinica_id, paciente_id, CID_STATUS_ATIVO),
+            "pode_gerir_cids": pode_gerir_cids_ativos(),
+        }
+    except Exception as e:  # pragma: no cover
+        log_erro("pacientes", e, entidade="paciente_cids_ativos", descricao="Erro ao carregar condicoes ativas.", detalhes={"paciente_id": paciente_id})
+        return {"cids_ativos": [], "pode_gerir_cids": False}
+
+
+
 def _redirect_lista():
     return redirect(url_for("pacientes.listar_pacientes"), code=302)
 
@@ -199,6 +216,7 @@ def visualizar_paciente(id: int):
     try:
         with get_conn() as conn:
             paciente = _buscar_paciente_clinica(conn, id)
+            ctx_cids = _contexto_cids_ativos(conn, id, clinica_id) if paciente else {}
 
         if not paciente:
             return "Paciente não encontrado nesta clínica.", 404
@@ -234,6 +252,7 @@ def visualizar_paciente(id: int):
             series_resumo=agds["series_resumo"],
             total_agds=agds["total_agds"],
             total_upcoming=agds["total_upcoming"],
+            **ctx_cids,
         )
 
     except Exception as e:
@@ -256,6 +275,7 @@ def editar_paciente(id: int):
     try:
         with get_conn() as conn:
             paciente = _buscar_paciente_clinica(conn, id)
+            ctx_cids = _contexto_cids_ativos(conn, id, clinica_id) if paciente else {}
 
         if not paciente:
             return "Paciente não encontrado nesta clínica.", 404
@@ -278,6 +298,7 @@ def editar_paciente(id: int):
             paciente=paciente,
             clinica_id=clinica_id,
             clinica_nome=session.get("clinica_nome"),
+            **ctx_cids,
         )
 
     except Exception as e:

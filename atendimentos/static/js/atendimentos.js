@@ -6,6 +6,7 @@ let procSeq = 1;   // ids unicos para ligar <label for> as linhas de procediment
 
 let sugestoesCache = [];
 let ultimoAtendimentoCache = null;
+let cidsAtivos = [];   // condicoes ativas/cronicas do paciente (paciente_cids_ativos)
 
 document.addEventListener("DOMContentLoaded", () => {
   console.log("📦 [atendimentos.js] carregado!");
@@ -21,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initHistoricoProcedimentos();
   initVozEvolucao();
   initCidAtendimento();
+  initCidAtivo();
   initSalvar();
 });
 
@@ -198,7 +200,8 @@ async function fetchCombo(id) {
 
 async function fetchSugestoesProcedimentos(id) {
   if (!id) return { ok: true, items: [] };
-  return fetchJSON(`/atendimentos/api/procedimentos_sugeridos?paciente_id=${encodeURIComponent(id)}`);
+  const cid = cidAtendimentoAtual();   // CID pontual deste atendimento (junto com o cadastro e as condicoes ativas, define o que e compativel)
+  return fetchJSON(`/atendimentos/api/procedimentos_sugeridos?paciente_id=${encodeURIComponent(id)}${cid ? `&cid=${encodeURIComponent(cid)}` : ""}`);
 }
 
 /* ==========================================================
@@ -257,6 +260,7 @@ async function carregarPacienteCompleto(id) {
     const combo = await fetchCombo(id);
     preencherCombo(combo);
 
+    await carregarCidsAtivos(id);
     await carregarSugestoesProcedimentos(false);
 
     document.dispatchEvent(new CustomEvent("paciente:selecionado", {
@@ -1095,14 +1099,16 @@ function initCidAtendimento() {
     busca.value = `${item.codigo} — ${item.descricao}`;
     caixa.hidden = true;
     mostrarMsg("");
+    aoMudarCidAtendimento();
   };
 
   busca.addEventListener("input", () => {
     oculto.value = "";               // editou o texto: a escolha anterior deixa de valer
     mostrarMsg("");
+    aoMudarCidAtendimento();
     clearTimeout(timer);
     const q = busca.value.trim();
-    if (q.length < 2) { caixa.hidden = true; return; }
+    if (q.length < 2) { caixa.hidden = true; atualizarCidAtivoBox(); return; }
 
     timer = setTimeout(async () => {
       try {
@@ -1114,14 +1120,134 @@ function initCidAtendimento() {
           ? itens.map((it, i) => `<button type="button" data-i="${i}">${escapeHtmlCid(it.label)}</button>`).join("")
           : `<small>Nenhum CID encontrado (a base pode não estar importada). O CID é opcional: se souber o código, digite-o.</small>`;
         caixa.hidden = false;
+        atualizarCidAtivoBox();
         qsa("button", caixa).forEach((b) => b.addEventListener("click", () => escolher(itens[Number(b.dataset.i)])));
       } catch (e) {
         caixa.hidden = true;
+        atualizarCidAtivoBox();
       }
     }, 250);
   });
 
-  busca.addEventListener("blur", () => setTimeout(() => { caixa.hidden = true; }, 180));
+  busca.addEventListener("blur", () => setTimeout(() => { caixa.hidden = true; atualizarCidAtivoBox(); }, 180));
+}
+
+/* ==========================================================
+   CID ATIVO/CRONICO DO PACIENTE
+   O campo CID acima e PONTUAL (so deste atendimento). Aqui: ver as condicoes ativas do paciente, marcar o CID digitado como
+   ativo (gravado junto com o atendimento) ou, se ele ja e ativo, marcar como resolvido na hora. O servidor decide tudo.
+========================================================== */
+
+const cidNorm = (c) => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/* CID atual do campo: o escolhido da lista ou um codigo digitado (ex.: F84.0). "" se nao ha. */
+function cidAtendimentoAtual() {
+  const oculto = qs("#cidAtendimento");
+  const busca = qs("#cidAtendimentoBusca");
+  if (oculto?.value) return oculto.value;
+  const texto = (busca?.value || "").trim();
+  return RE_CID_ATENDIMENTO.test(texto) ? texto.toUpperCase() : "";
+}
+
+async function carregarCidsAtivos(pacienteId) {
+  cidsAtivos = [];
+  try {
+    if (pacienteId) {
+      const j = await fetchJSON(`/atendimentos/api/pacientes/${encodeURIComponent(pacienteId)}/cids_ativos`);
+      cidsAtivos = Array.isArray(j?.items) ? j.items : [];
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  desenharCidsAtivos();
+}
+
+function desenharCidsAtivos() {
+  const chip = qs("#chipCidsAtivos");
+  if (chip) {
+    chip.hidden = !cidsAtivos.length;
+    setText("info-cids-ativos", cidsAtivos.map((c) => c.cid_codigo).join(" · ") || "—");
+  }
+  atualizarCidAtivoBox();
+}
+
+function atualizarCidAtivoBox() {
+  const box = qs("#cidAtivoBox");
+  if (!box) return;
+
+  const lblMarcar = qs("#cidAtivoMarcarLbl");
+  const chk = qs("#cidMarcarAtivo");
+  const ja = qs("#cidAtivoJa");
+  const cid = cidAtendimentoAtual();
+  const listaAberta = !!qs("#cidAtendimentoSug") && !qs("#cidAtendimentoSug").hidden;   // a lista de sugestoes fica POR CIMA: espera fechar
+
+  if (!cid || !getPacienteId() || listaAberta) {
+    box.hidden = true; lblMarcar.hidden = true; ja.hidden = true;
+    if (chk) chk.checked = false;
+    return;
+  }
+
+  const ativa = cidsAtivos.find((c) => cidNorm(c.cid_codigo) === cidNorm(cid));
+  box.hidden = false;
+
+  if (ativa) {
+    // ja e condicao ativa: nao oferece marcar de novo (sem duplicar); oferece encerrar aqui mesmo
+    if (chk) chk.checked = false;
+    lblMarcar.hidden = true;
+    ja.hidden = false;
+    qs("#cidAtivoJaTexto").textContent = `${ativa.cid_codigo} já é uma condição ativa deste paciente (desde ${fmtISOToBR(ativa.data_inicio)}).`;
+    qs("#btnCidResolver").dataset.id = ativa.id;
+  } else {
+    ja.hidden = true;
+    lblMarcar.hidden = false;
+  }
+}
+
+let timerCidMudou = null;
+function aoMudarCidAtendimento() {
+  atualizarCidAtivoBox();
+  // a regra de sugestao de procedimento combina o CID pontual com o cadastro e as condicoes ativas: recarrega a lista
+  clearTimeout(timerCidMudou);
+  timerCidMudou = setTimeout(() => { if (getPacienteId()) carregarSugestoesProcedimentos(false); }, 350);
+}
+
+function initCidAtivo() {
+  const btn = qs("#btnCidResolver");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    const id = btn.dataset.id;
+    const ativa = cidsAtivos.find((c) => String(c.id) === String(id));
+    if (!ativa) return;
+
+    const ok = await perguntar(
+      `${ativa.cid_codigo} deixa de ser uma condição ativa deste paciente (o histórico fica guardado). Confirmar?`,
+      { titulo: "Marcar como resolvido?", sim: "Marcar como resolvido", nao: "Voltar" }
+    );
+    if (!ok) return;
+
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/atendimentos/api/cids_ativos/${encodeURIComponent(id)}/resolver`, {
+        method: "POST",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      const data = await resp.json().catch(() => null);
+
+      if (resp.status === 403) { toast("Você não tem permissão para encerrar condições do paciente.", "error"); return; }
+      if (Array.isArray(data?.items)) cidsAtivos = data.items;
+      if (!resp.ok || !data?.ok) { toast(data?.error || "Não foi possível encerrar a condição agora.", "error"); desenharCidsAtivos(); return; }
+
+      toast(`Condição ${ativa.cid_codigo} marcada como resolvida.`, "ok");
+      desenharCidsAtivos();
+      aoMudarCidAtendimento();
+    } catch (e) {
+      console.error(e);
+      toast("Não foi possível encerrar a condição agora.", "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 function escapeHtmlCid(v) {

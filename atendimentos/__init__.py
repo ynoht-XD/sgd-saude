@@ -13,5 +13,6 @@ atendimentos_bp = Blueprint(
 from . import routes  # noqa: E402,F401
 from . import lista_atendimentos  # noqa: E402,F401
 from . import historico  # noqa: E402,F401
+from . import cids_ativos  # noqa: E402,F401
 
 from . import routes

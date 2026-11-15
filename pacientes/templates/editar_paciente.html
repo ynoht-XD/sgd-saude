@@ -2,11 +2,15 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{{ url_for('cadastro.static', filename='css/cadastro.css') }}">
+  <link rel="stylesheet" href="{{ url_for('pacientes.static', filename='css/cids_ativos.css') }}">
 {% endblock %}
 
 {% block content %}
   <div class="cadastro-container">
     <h2>Editar Paciente</h2>
+
+    {# Condicoes ativas (CID): fora do <form> de proposito (nao vai junto com "Salvar Alteracoes") #}
+    {% include '_cids_ativos.html' %}
 
     <form
       method="POST"
@@ -320,4 +324,9 @@
 
     <a href="{{ url_for('pacientes.visualizar_paciente', id=paciente.id) }}" class="btn-voltar">🔙 Cancelar</a>
   </div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('pacientes.static', filename='js/cids_ativos.js') }}" defer></script>
 {% endblock %}

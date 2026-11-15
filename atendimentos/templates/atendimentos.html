@@ -26,6 +26,7 @@
       <span class="atd-pchip"><i>Nascimento</i><b id="info-nascimento">—</b></span>
       <span class="atd-pchip"><i>Idade</i><b id="info-idade">—</b></span>
       <span class="atd-pchip" title="CID registrado no cadastro do paciente (não é o CID deste atendimento)"><i>CID do cadastro</i><b id="info-cid">—</b></span>
+      <span class="atd-pchip atd-pchip--ativo" id="chipCidsAtivos" hidden title="Condições ativas/crônicas do paciente (valem entre os atendimentos)"><i>Condições ativas</i><b id="info-cids-ativos">—</b></span>
     </div>
 
     <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm atd-strip-last" id="btnVerUltimo"
@@ -142,6 +143,17 @@
             <div class="atd-cid-sug" id="cidAtendimentoSug" hidden></div>
           </div>
           <small class="atd-cid-msg" id="cidAtendimentoMsg" role="status"></small>
+          <!-- CID ATIVO/CRONICO: o CID acima e PONTUAL (so deste atendimento); marcar abaixo o torna condicao do paciente -->
+          <div class="atd-cid-ativo" id="cidAtivoBox" hidden>
+            <label class="atd-cid-check" id="cidAtivoMarcarLbl" hidden>
+              <input type="checkbox" name="cid_marcar_ativo" id="cidMarcarAtivo" value="1">
+              <span>Marcar como condição ativa/crônica do paciente</span>
+            </label>
+            <div class="atd-cid-ja" id="cidAtivoJa" hidden>
+              <span id="cidAtivoJaTexto"></span>
+              <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" id="btnCidResolver">Marcar como resolvido</button>
+            </div>
+          </div>
         </div>
 
         <!-- EVOLUÇÃO -->
