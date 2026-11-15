@@ -1,0 +1,28 @@
+/* Secao "Condicoes ativas (CID)" (Cadastro do paciente). So tokens do base.css; claro/escuro pelos tokens. */
+.cids-ativos{ margin:18px 0; padding:16px; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--text); }
+.cids-ativos h3{ margin:0 0 4px; font-size:var(--fs-lg); }
+.cids-ativos__dica, .cids-ativos__vazio, .cids-ativos__aviso{ margin:4px 0 10px; font-size:var(--fs-sm); color:var(--muted); }
+.cids-ativos__lista{ list-style:none; margin:8px 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.cids-ativos__item{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); }
+.cids-ativos__cid{ font-weight:800; font-size:var(--fs-md); }
+.cids-ativos__desc{ flex:1 1 200px; font-size:var(--fs-sm); }
+.cids-ativos__desde{ font-size:var(--fs-xs); color:var(--muted); }
+.cids-ativos__btn{ font:inherit; font-size:var(--fs-sm); font-weight:600; padding:7px 12px; border-radius:10px; cursor:pointer; border:1px solid var(--line-strong, var(--line)); background:var(--surface); color:var(--text); }
+.cids-ativos__btn:hover{ background:var(--brand-tint); }
+.cids-ativos__btn--primario{ background:var(--brand); border-color:var(--brand); color:#fff; }
+.cids-ativos__btn--primario:hover{ background:var(--brand-2); }
+.cids-ativos__btn[disabled]{ opacity:.6; cursor:progress; }
+.cids-ativos__novo{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 10px; margin-top:12px; }
+.cids-ativos__novo label{ flex:1 0 100%; font-size:var(--fs-sm); font-weight:700; color:var(--muted); }
+.cids-ativos__campo{ position:relative; flex:1 1 280px; }
+.cids-ativos__campo input[type=text]{ width:100%; box-sizing:border-box; padding:9px 12px; font:inherit; font-size:var(--fs-md); border:1px solid var(--line-strong, var(--line)); border-radius:10px; background:var(--surface); color:var(--text); }
+.cids-ativos__sug{ position:absolute; z-index:20; left:0; right:0; top:calc(100% + 4px); max-height:240px; overflow:auto; background:var(--surface); border:1px solid var(--line-strong, var(--line)); border-radius:10px; box-shadow:var(--shadow-md, 0 8px 24px rgba(0,0,0,.12)); }
+.cids-ativos__sug[hidden]{ display:none; }
+.cids-ativos__sug button{ display:block; width:100%; text-align:left; font:inherit; font-size:var(--fs-sm); padding:8px 12px; background:transparent; border:0; color:var(--text); cursor:pointer; }
+.cids-ativos__sug button:hover, .cids-ativos__sug button:focus{ background:var(--brand-tint); }
+.cids-ativos__sug small{ display:block; padding:8px 12px; color:var(--muted); }
+.cids-ativos__msg{ min-height:1.2em; margin:8px 0 0; font-size:var(--fs-sm); color:var(--muted); }
+.cids-ativos__msg.is-erro{ color:var(--danger-ink); font-weight:700; }
+.cids-ativos__msg.is-ok{ color:var(--success-ink, var(--muted)); font-weight:700; }
+.cids-ativos__confirma{ display:inline-flex; gap:8px; flex-wrap:wrap; }
+.cids-ativos__btn--perigo{ background:var(--danger-soft, var(--surface)); border-color:var(--danger-line, var(--line-strong, var(--line))); color:var(--danger-ink); }
