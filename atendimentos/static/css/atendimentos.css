@@ -366,6 +366,13 @@ body{
 .atd-cid-sug small{ display:block; padding:9px 12px; color:var(--muted); }
 .atd-cid-msg{ min-height:1em; color:var(--muted); }
 .atd-cid-msg.is-erro{ color:var(--danger-ink); font-weight:700; }
+.atd-cid-ativo{ display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+.atd-cid-ativo[hidden], .atd-cid-check[hidden], .atd-cid-ja[hidden]{ display:none; }
+/* (mais especifico que ".atd-field label/input", que deixariam o checkbox com 100% de largura e rotulo pequeno/cinza) */
+.atd-field .atd-cid-check{ display:flex; flex-direction:row; align-items:flex-start; gap:8px; font-size:var(--fs-sm); font-weight:600; color:var(--text); cursor:pointer; }
+.atd-field .atd-cid-check input{ flex:0 0 auto; width:18px; height:18px; padding:0; margin:1px 0 0; border:0; border-radius:4px; box-shadow:none; accent-color:var(--brand); }
+.atd-cid-ja{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); font-size:var(--fs-sm); }
+.atd-pchip--ativo b{ color:var(--brand); }
 .atd-field--full{ grid-column:1 / -1; }
 
 .atd-field label{
