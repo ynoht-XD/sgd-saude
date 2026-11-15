@@ -16,6 +16,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from agenda import agenda_bp
 from cadastro import cadastro_bp
 from atendimentos import atendimentos_bp
+from documentos import documentos_bp
 from pacientes import pacientes_bp
 from export import export_bp
 from admin import admin_bp
@@ -92,6 +93,7 @@ limiter = Limiter(
 app.register_blueprint(agenda_bp, url_prefix="/agenda")
 app.register_blueprint(cadastro_bp)
 app.register_blueprint(atendimentos_bp)
+app.register_blueprint(documentos_bp)   # documentos medicos do atendimento (rotas /atendimentos/<id>/documentos e /api/cid10, /api/procedimentos)
 app.register_blueprint(pacientes_bp)
 app.register_blueprint(export_bp, url_prefix="/export")
 app.register_blueprint(admin_bp, url_prefix="/admin")

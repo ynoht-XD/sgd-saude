@@ -1,0 +1,90 @@
+{% extends 'layout.html' %}
+
+{% block title %}Documentos do atendimento{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('documentos.static', filename='css/documentos.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="doc-page"
+     id="docPage"
+     data-atendimento-id="{{ atendimento.id }}"
+     data-data-atendimento="{{ data_atendimento }}"
+     data-url-lista="{{ url_for('documentos.listar_documentos', atendimento_id=atendimento.id) }}"
+     data-url-criar="{{ url_for('documentos.criar_documento', atendimento_id=atendimento.id) }}"
+     data-url-base="{{ url_for('documentos.pagina_documentos', atendimento_id=atendimento.id) }}"
+     data-url-cid="{{ url_for('documentos.buscar_cid10') }}"
+     data-url-proc="{{ url_for('documentos.buscar_procedimentos') }}">
+
+  <header class="doc-head">
+    <div>
+      <span class="doc-kicker">SGD · Atendimento</span>
+      <h2>Documentos do atendimento</h2>
+      <p class="doc-resumo">
+        <strong>{{ paciente.nome or atendimento.nome }}</strong>
+        <span>· Atendimento nº {{ atendimento.id }}</span>
+        {% if data_atendimento %}<span>· {{ data_atendimento[8:10] }}/{{ data_atendimento[5:7] }}/{{ data_atendimento[0:4] }}</span>{% endif %}
+        {% if atendimento.nome_profissional %}<span>· {{ atendimento.nome_profissional }}</span>{% endif %}
+      </p>
+    </div>
+    <a class="doc-btn-link" href="{{ url_for('atendimentos.lista_atendimentos') }}">Voltar à lista</a>
+  </header>
+
+  <section class="doc-card" aria-labelledby="docTitEmitir">
+    <h3 id="docTitEmitir">Emitir documento</h3>
+    <div class="doc-tipos" role="group" aria-label="Tipos de documento">
+      {% for t in tipos %}
+        <button type="button" class="doc-tipo" data-tipo="{{ t.valor }}">
+          <span class="doc-tipo-ico" aria-hidden="true">{{ loop.index }}</span>
+          {{ t.rotulo }}
+        </button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="doc-card" aria-labelledby="docTitLista">
+    <h3 id="docTitLista">Documentos emitidos</h3>
+    <div id="docLista" class="doc-lista" aria-live="polite"><p class="doc-vazio">Carregando…</p></div>
+  </section>
+
+  <dialog id="docDialog" class="doc-dialog">
+    <form id="docForm" class="doc-form" novalidate>
+      <header class="doc-dialog-head">
+        <h3 id="docDialogTitulo">Novo documento</h3>
+        <button type="button" class="doc-fechar" id="docFechar" aria-label="Fechar">×</button>
+      </header>
+      <div class="doc-dialog-corpo" id="docCampos"></div>
+      <div class="doc-erros" id="docErros" role="alert" hidden></div>
+      <footer class="doc-dialog-rodape">
+        <button type="button" class="doc-btn sec" id="docCancelarForm">Cancelar</button>
+        <button type="submit" class="doc-btn pri" id="docEmitir">Emitir documento</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="docCancelDialog" class="doc-dialog doc-dialog--sm">
+    <form id="docCancelForm" class="doc-form" method="dialog">
+      <header class="doc-dialog-head"><h3>Cancelar documento</h3></header>
+      <div class="doc-dialog-corpo">
+        <p class="doc-aviso">O documento <strong id="docCancelRotulo"></strong> será marcado como <strong>cancelado</strong>. Ele continua guardado e aparece como cancelado se for aberto de novo.</p>
+        <label class="doc-campo">
+          <span>Motivo (opcional)</span>
+          <textarea id="docCancelMotivo" rows="3" maxlength="500"></textarea>
+        </label>
+        <div class="doc-erros" id="docCancelErro" role="alert" hidden></div>
+      </div>
+      <footer class="doc-dialog-rodape">
+        <button type="button" class="doc-btn sec" id="docCancelVoltar">Voltar</button>
+        <button type="submit" class="doc-btn perigo" id="docCancelConfirmar">Cancelar documento</button>
+      </footer>
+    </form>
+  </dialog>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ super() }}
+  <script src="{{ url_for('documentos.static', filename='js/documentos.js') }}" defer></script>
+{% endblock %}

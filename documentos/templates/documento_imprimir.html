@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ d.titulo or d.rotulo }} nº {{ d.id }} · {{ d.paciente.nome }}</title>
+  <style>
+    /* Pagina de impressao: sempre clara (papel), independente do tema do sistema. Sem timbre nesta rodada. */
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: #e5e7eb; color: #111827; font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+
+    .barra { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 18px; background: #0f172a; color: #fff; }
+    .barra span { font-weight: 700; }
+    .barra button, .barra a { appearance: none; border: 0; border-radius: 10px; padding: 9px 16px; font: inherit; font-weight: 800; cursor: pointer; text-decoration: none; color: #fff; background: #2563eb; }
+    .barra a.sec { background: #334155; }
+
+    .folha { position: relative; width: 210mm; min-height: 297mm; margin: 18px auto; padding: 20mm 20mm 18mm; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+
+    .cab { text-align: center; border-bottom: 2px solid #111827; padding-bottom: 10px; margin-bottom: 18px; }
+    .cab .clinica { font-size: 15px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: #374151; }
+    .cab h1 { margin: 6px 0 0; font-size: 24px; letter-spacing: .04em; text-transform: uppercase; }
+
+    .paciente { margin: 0 0 18px; padding: 10px 12px; border: 1px solid #9ca3af; border-radius: 6px; font-size: 14px; line-height: 1.55; }
+    .paciente b { font-weight: 700; }
+
+    .corpo { font-size: 15.5px; line-height: 1.7; }
+    .corpo p { margin: 0 0 12px; text-align: justify; }
+    .corpo .texto { white-space: pre-wrap; }
+    .rotulo { display: block; margin: 14px 0 3px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #4b5563; }
+
+    ol.itens { margin: 0 0 12px; padding-left: 22px; }
+    ol.itens li { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px dotted #9ca3af; break-inside: avoid; }
+    ol.itens li:last-child { border-bottom: 0; }
+    .item-nome { font-size: 16.5px; font-weight: 700; }
+    .item-meta { font-size: 14px; color: #374151; }
+    .urgencia { display: inline-block; padding: 1px 10px; border: 1px solid #111827; border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+    .urgencia.urgente { background: #111827; color: #fff; }
+    .cid { margin: 10px 0 0; font-size: 14px; }
+
+    .assinatura { margin-top: 56px; text-align: center; break-inside: avoid; }
+    .assinatura .linha { width: 270px; margin: 0 auto 6px; border-top: 1px solid #111827; }
+    .assinatura .nome { font-weight: 700; }
+    .assinatura .reg { font-size: 13.5px; color: #374151; }
+
+    .rodape { position: absolute; left: 20mm; right: 20mm; bottom: 10mm; display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid #d1d5db; font-size: 11.5px; color: #6b7280; }
+
+    .cancelado-faixa { margin: 0 0 14px; padding: 8px 12px; border: 2px solid #b91c1c; border-radius: 6px; color: #b91c1c; font-weight: 800; text-align: center; }
+    .marca-dagua { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
+    .marca-dagua span { font-size: 78px; font-weight: 900; letter-spacing: .06em; color: rgba(185, 28, 28, .16); transform: rotate(-28deg); border: 8px solid rgba(185, 28, 28, .16); padding: 0 24px; white-space: nowrap; }
+
+    @page { size: A4; margin: 0; }
+    @media print {
+      html, body { background: #fff; }
+      .barra { display: none !important; }
+      .folha { width: auto; min-height: 297mm; margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="barra">
+    <span>{{ d.rotulo }} nº {{ d.id }}{% if d.status == 'cancelado' %} · CANCELADO{% endif %}</span>
+    <span>
+      <a class="sec" href="{{ url_for('documentos.pagina_documentos', atendimento_id=d.atendimento_id) }}">Voltar aos documentos</a>
+      <button type="button" id="btnImprimir">Imprimir</button>
+    </span>
+  </div>
+
+  <main class="folha">
+    {% if d.status == 'cancelado' %}<div class="marca-dagua" aria-hidden="true"><span>CANCELADO</span></div>{% endif %}
+
+    <header class="cab">
+      {% if clinica_nome %}<div class="clinica">{{ clinica_nome }}</div>{% endif %}
+      <h1>{{ d.titulo or d.rotulo }}</h1>
+    </header>
+
+    {% if d.status == 'cancelado' %}
+      <div class="cancelado-faixa">DOCUMENTO CANCELADO{% if cancelado_fmt %} em {{ cancelado_fmt }}{% endif %}{% if d.cancelado_motivo %} · Motivo: {{ d.cancelado_motivo }}{% endif %}</div>
+    {% endif %}
+
+    <section class="paciente">
+      <div><b>Paciente:</b> {{ d.paciente.nome }}</div>
+      <div>
+        {% if d.paciente.nascimento %}<b>Nascimento:</b> {{ fmt_data(d.paciente.nascimento) }}{% endif %}
+        {% if d.paciente.cpf %}&nbsp;&nbsp;<b>CPF:</b> {{ d.paciente.cpf }}{% endif %}
+        {% if d.paciente.prontuario %}&nbsp;&nbsp;<b>Prontuário:</b> {{ d.paciente.prontuario }}{% endif %}
+      </div>
+    </section>
+
+    {% set c = d.conteudo %}
+    <section class="corpo">
+      {% if d.tipo == 'receita' %}
+        <ol class="itens">
+          {% for it in c.itens %}
+            <li>
+              <div class="item-nome">{{ it.medicamento }}{% if it.dose %} — {{ it.dose }}{% endif %}</div>
+              <div class="item-meta">{% if it.via %}Via: {{ it.via }}. {% endif %}{% if it.quantidade %}Quantidade: {{ it.quantidade }}. {% endif %}{% if it.duracao %}Duração: {{ it.duracao }}.{% endif %}</div>
+              <div class="texto">{{ it.posologia }}</div>
+              {% if it.observacao %}<div class="item-meta">Obs.: {{ it.observacao }}</div>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+        {% if c.orientacoes_gerais %}<span class="rotulo">Orientações</span><p class="texto">{{ c.orientacoes_gerais }}</p>{% endif %}
+
+      {% elif d.tipo == 'atestado' %}
+        {% if c.modalidade == 'afastamento' %}
+          <p>Atesto, para os devidos fins, que o(a) paciente acima identificado(a) esteve sob meus cuidados e necessita de afastamento de suas atividades por <b>{{ c.dias }} ({{ c.dias }}) dia{{ '' if c.dias == 1 else 's' }}</b>{% if c.data_inicio %}, a partir de <b>{{ fmt_data(c.data_inicio) }}</b>{% endif %}.</p>
+        {% else %}
+          <p>Atesto, para os devidos fins, que o(a) paciente acima identificado(a) compareceu a este serviço de saúde em <b>{{ fmt_data(c.data) }}</b>{% if c.hora_inicio and c.hora_fim %}, no horário das <b>{{ c.hora_inicio }}</b> às <b>{{ c.hora_fim }}</b>{% elif c.hora_inicio %}, a partir das <b>{{ c.hora_inicio }}</b>{% endif %}, para atendimento.</p>
+        {% endif %}
+        {% if c.incluir_cid and d.cid_codigo %}<p class="cid"><b>CID-10:</b> {{ d.cid_codigo }}{% if d.cid_descricao %} — {{ d.cid_descricao }}{% endif %}</p>{% endif %}
+        {% if c.observacao %}<p class="texto">{{ c.observacao }}</p>{% endif %}
+
+      {% elif d.tipo == 'declaracao' %}
+        {% if c.finalidade %}<span class="rotulo">Finalidade</span><p>{{ c.finalidade }}</p>{% endif %}
+        <p class="texto">{{ c.texto }}</p>
+
+      {% elif d.tipo == 'encaminhamento' %}
+        <p>Encaminho o(a) paciente acima identificado(a) para <b>{{ c.especialidade_destino }}</b>{% if c.profissional_destino %}, aos cuidados de <b>{{ c.profissional_destino }}</b>{% endif %}. <span class="urgencia {{ c.urgencia }}">{{ {'eletivo': 'Eletivo', 'prioritario': 'Prioritário', 'urgente': 'Urgente'}[c.urgencia] }}</span></p>
+        <span class="rotulo">Motivo</span><p class="texto">{{ c.motivo }}</p>
+        {% if c.resumo_clinico %}<span class="rotulo">Resumo clínico</span><p class="texto">{{ c.resumo_clinico }}</p>{% endif %}
+
+      {% elif d.tipo == 'solicitacao_exame' %}
+        <p>Solicito a realização dos seguintes exames. <span class="urgencia {{ c.urgencia }}">{{ {'eletivo': 'Eletivo', 'prioritario': 'Prioritário', 'urgente': 'Urgente'}[c.urgencia] }}</span></p>
+        <ol class="itens">
+          {% for e in c.exames %}
+            <li>
+              <div class="item-nome">{{ e.descricao }}</div>
+              {% if e.procedimento_codigo %}<div class="item-meta">Código SIGTAP: {{ e.procedimento_codigo }}</div>{% endif %}
+              {% if e.observacao %}<div class="item-meta">Obs.: {{ e.observacao }}</div>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+        {% if c.justificativa %}<span class="rotulo">Justificativa / indicação clínica</span><p class="texto">{{ c.justificativa }}</p>{% endif %}
+      {% endif %}
+
+      {% if d.cid_codigo and d.tipo != 'atestado' %}<p class="cid"><b>CID-10:</b> {{ d.cid_codigo }}{% if d.cid_descricao %} — {{ d.cid_descricao }}{% endif %}</p>{% endif %}
+    </section>
+
+    <section class="assinatura">
+      <div class="linha"></div>
+      <div class="nome">{{ d.profissional.nome }}</div>
+      <div class="reg">
+        {% if d.profissional.conselho or d.profissional.registro %}{{ d.profissional.conselho }}{% if d.profissional.registro %} {{ d.profissional.registro }}{% endif %}{% if d.profissional.uf %}/{{ d.profissional.uf }}{% endif %}{% endif %}
+        {% if d.profissional.cbo_descricao or d.profissional.cbo %}<br>{{ d.profissional.cbo_descricao or ('CBO ' ~ d.profissional.cbo) }}{% endif %}
+      </div>
+    </section>
+
+    <footer class="rodape">
+      <span>{{ d.rotulo }} nº {{ d.id }} · Atendimento nº {{ d.atendimento_id }}</span>
+      <span>Emitido em {{ emitido_fmt }}</span>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("btnImprimir").addEventListener("click", function () { window.print(); });
+    {% if auto_imprimir %}window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 300); });{% endif %}
+  </script>
+</body>
+</html>
