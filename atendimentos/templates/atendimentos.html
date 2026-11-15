@@ -155,6 +155,21 @@
           </select>
         </div>
 
+        <!-- CID DO ATENDIMENTO (opcional; independe de qualquer documento) -->
+        <div class="atd-field" id="blocoCidAtendimento">
+          <label for="cidAtendimentoBusca">CID do atendimento <span class="atd-opcional">(opcional)</span></label>
+          <input type="hidden" name="cid_codigo" id="cidAtendimento" value="">
+          <div class="atd-cid-wrap">
+            <input type="text"
+                   id="cidAtendimentoBusca"
+                   autocomplete="off"
+                   placeholder="Código ou nome (ex.: F84 ou autismo)"
+                   data-url-cid="{{ url_for('documentos.buscar_cid10') }}">
+            <div class="atd-cid-sug" id="cidAtendimentoSug" hidden></div>
+          </div>
+          <small class="atd-cid-msg" id="cidAtendimentoMsg" role="status"></small>
+        </div>
+
         <!-- EVOLUÇÃO -->
         <div class="atd-field atd-field--full">
           <div class="atd-section-head">
