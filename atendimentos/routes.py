@@ -218,7 +218,37 @@ def ensure_atendimentos_multi_schema(conn):
         conn.commit()
 
 
+_CHAMADAS_SCHEMA_PRONTO = False   # o ensure abaixo roda UMA vez por processo (antes rodava a cada requisicao, inclusive no polling da TV)
+
+
+def _chamadas_schema_invalidar():
+    """Chamado nos `except` das rotas da chamada: se a tabela sumiu (restore de backup), a proxima requisicao recria."""
+    global _CHAMADAS_SCHEMA_PRONTO
+    _CHAMADAS_SCHEMA_PRONTO = False
+
+
+def _iso_ms(valor):
+    """Horario em ISO 8601 (YYYY-MM-DDTHH:MM:SS.mmm): o `str(datetime)` com espaco quebra em Safari/navegador de Smart TV."""
+    if valor is None:
+        return ""
+    try:
+        return valor.isoformat(timespec="milliseconds")
+    except Exception:
+        return str(valor).replace(" ", "T", 1)
+
+
+def _idade_segundos(valor):
+    try:
+        return max(0, int(valor))
+    except (TypeError, ValueError):
+        return 0
+
+
 def ensure_chamadas_pacientes_schema(conn):
+    global _CHAMADAS_SCHEMA_PRONTO
+    if _CHAMADAS_SCHEMA_PRONTO:
+        return
+
     cur = conn.cursor()
 
     cur.execute("""
@@ -255,6 +285,7 @@ def ensure_chamadas_pacientes_schema(conn):
     """)
 
     conn.commit()
+    _CHAMADAS_SCHEMA_PRONTO = True
 
 
 # =============================================================================
@@ -1111,7 +1142,7 @@ def chamar_paciente_na_tela():
                     criado_em
                 )
                 VALUES (%s, %s, %s, %s, %s, 'chamando', CURRENT_TIMESTAMP)
-                RETURNING id
+                RETURNING id, criado_em
             """, (
                 clinica_id,
                 paciente_id,
@@ -1120,7 +1151,9 @@ def chamar_paciente_na_tela():
                 setor,
             ))
 
-            chamada_id = _row_get(cur.fetchone(), "id", 0)
+            row_nova = cur.fetchone()
+            chamada_id = _row_get(row_nova, "id", 0)
+            chamada_criado_em = _iso_ms(_row_get(row_nova, "criado_em", 1))
             conn.commit()
 
         registrar_log(
@@ -1141,10 +1174,12 @@ def chamar_paciente_na_tela():
         return jsonify(
             ok=True,
             chamada_id=chamada_id,
+            criado_em=chamada_criado_em,
             mensagem=f"{paciente_nome} chamado na tela."
         )
 
     except Exception as e:
+        _chamadas_schema_invalidar()
         log_erro(
             "atendimentos_chama_tela",
             e,
@@ -1173,7 +1208,8 @@ def ultima_chamada_na_tela():
                     profissional_nome,
                     setor,
                     status,
-                    criado_em
+                    criado_em,
+                    GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - criado_em)))::int AS idade_s
                 FROM chamadas_pacientes
                 WHERE clinica_id = %s
                 ORDER BY id DESC
@@ -1192,12 +1228,14 @@ def ultima_chamada_na_tela():
             "profissional_nome": _row_get(row, "profissional_nome", 3, ""),
             "setor": _row_get(row, "setor", 4, ""),
             "status": _row_get(row, "status", 5, ""),
-            "criado_em": str(_row_get(row, "criado_em", 6, "")),
+            "criado_em": _iso_ms(_row_get(row, "criado_em", 6)),
+            "idade_s": _idade_segundos(_row_get(row, "idade_s", 7, 0)),
         }
 
         return jsonify(ok=True, chamada=chamada)
 
     except Exception as e:
+        _chamadas_schema_invalidar()
         log_erro(
             "atendimentos_chama_tela",
             e,
@@ -1226,7 +1264,8 @@ def chamadas_recentes_na_tela():
                     profissional_nome,
                     setor,
                     status,
-                    criado_em
+                    criado_em,
+                    GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - criado_em)))::int AS idade_s
                 FROM chamadas_pacientes
                 WHERE clinica_id = %s
                 ORDER BY id DESC
@@ -1244,12 +1283,14 @@ def chamadas_recentes_na_tela():
                 "profissional_nome": _row_get(r, "profissional_nome", 3, ""),
                 "cbo": _row_get(r, "setor", 4, ""),
                 "status": _row_get(r, "status", 5, ""),
-                "criado_em": str(_row_get(r, "criado_em", 6, "")),
+                "criado_em": _iso_ms(_row_get(r, "criado_em", 6)),
+                "idade_s": _idade_segundos(_row_get(r, "idade_s", 7, 0)),
             })
 
         return jsonify(ok=True, chamadas=chamadas)
 
     except Exception as e:
+        _chamadas_schema_invalidar()
         log_erro(
             "atendimentos_chama_tela",
             e,
@@ -1284,7 +1325,8 @@ def fila_chamadas_na_tela():
                     profissional_nome,
                     setor,
                     status,
-                    criado_em
+                    criado_em,
+                    GREATEST(0, EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - criado_em)))::int AS idade_s
                 FROM chamadas_pacientes
                 WHERE clinica_id = %s
                   AND id > %s
@@ -1304,12 +1346,14 @@ def fila_chamadas_na_tela():
                 "cbo": _row_get(r, "setor", 4, ""),
                 "setor": _row_get(r, "setor", 4, ""),
                 "status": _row_get(r, "status", 5, ""),
-                "criado_em": str(_row_get(r, "criado_em", 6, "")),
+                "criado_em": _iso_ms(_row_get(r, "criado_em", 6)),
+                "idade_s": _idade_segundos(_row_get(r, "idade_s", 7, 0)),
             })
 
         return jsonify(ok=True, chamadas=chamadas)
 
     except Exception as e:
+        _chamadas_schema_invalidar()
         log_erro(
             "atendimentos_chama_tela",
             e,
