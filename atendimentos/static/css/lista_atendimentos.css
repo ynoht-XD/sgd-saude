@@ -540,96 +540,178 @@ body{
 
 /* =========================================================
    AÇÕES DOS CARDS
+   Hierarquia: ATENDER = primário (azul da marca) | CHAMAR NA TV = secundário (verde suave)
+   | REMOVER = ícone discreto no cabeçalho. Só tokens do base.css.
    ========================================================= */
 
 .fila-card-actions{
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
 
   padding-top: 12px;
 
   border-top: 1px solid color-mix(in oklab, var(--line) 78%, transparent);
 }
 
-/* =========================================================
-   CHAMAR TV
-   ========================================================= */
-
-.btn.chamar-tv{
-  width: 100%;
+.fila-card-actions .btn{
+  min-width: 140px;
+  height: 46px;
   min-height: 46px;
 
-  padding: 12px 14px;
+  padding: 0 14px;
 
   border-radius: 16px;
-  border: none;
 
   font-weight: 900;
   font-size: .95rem;
+  white-space: nowrap;
+}
+
+.fila-card-actions .btn:disabled{
+  opacity: .7;
+  cursor: progress;
+  transform: none;
+}
+
+.fila-card-actions .btn:focus-visible,
+.fila-card-head .btn.remover:focus-visible{
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* PRIMÁRIO */
+.fila-card-actions .btn.atender{
+  flex: 1 1 calc(52% - 5px);   /* 52% + 48% menos o espaco de 10px: ficam lado a lado e so quebram em cartao muito estreito */
+
+  border: none;
 
   color: var(--on-brand);
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
 
-  background: linear-gradient(135deg, #16a34a, #22c55e);
-
-  box-shadow: 0 12px 28px rgba(34,197,94,.28);
+  box-shadow: 0 10px 22px rgba(37,99,235,.24);
 }
 
-.btn.chamar-tv:hover{
-  transform: translateY(-2px);
-}
+/* SECUNDÁRIO */
+.fila-card-actions .btn.chamar-tv{
+  flex: 1 1 calc(48% - 5px);
 
-/* =========================================================
-   LINHA DOS BOTÕES
-   ========================================================= */
+  border: 1px solid var(--success-line);
 
-.acoes-secundarias{
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-/* =========================================================
-   BOTÕES SECUNDÁRIOS
-   ========================================================= */
-
-.fila-card-actions .btn.atender,
-.fila-card-actions .btn.remover{
-  width: 90px;
-  min-width: 90px;
-
-  height: 40px;
-  min-height: 40px;
-
-  border-radius: 12px;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--success-ink);
+  background: var(--success-soft);
 
   font-weight: 800;
 
-  border: none;
+  box-shadow: none;
 }
 
-.fila-card-actions .btn.atender{
-  background: linear-gradient(135deg, var(--primary), var(--primary-2));
-  color: var(--on-brand);
-
-  box-shadow: 0 8px 16px rgba(37,99,235,.20);
+.fila-card-actions .btn.chamar-tv:hover{
+  background: var(--success-chip);
 }
 
-.fila-card-actions .btn.remover{
-  background: var(--danger);
-  color: var(--on-brand);
+/* REMOVER: ícone discreto no cabeçalho */
+.fila-card-head .btn.remover{
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
 
-  box-shadow: 0 8px 16px rgba(239,68,68,.18);
+  padding: 0;
+
+  border-radius: 12px;
+  border: 1px solid var(--line);
+
+  color: var(--danger-ink);
+  background: transparent;
+
+  box-shadow: none;
 }
 
-.fila-card-actions .btn.atender:hover,
-.fila-card-actions .btn.remover:hover{
-  transform: translateY(-1px);
+.fila-card-head .btn.remover:hover{
+  background: var(--danger-soft);
+}
+
+/* "Chamado 10:32" */
+.fila-card-top-actions{
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.chamado-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 4px 10px;
+
+  border-radius: 999px;
+
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+
+  color: var(--success-chip-ink);
+  background: var(--success-chip);
+}
+
+.chamado-chip[hidden]{
+  display: none;
+}
+
+.chamado-chip::before{
+  content: "";
+
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Mensagens (substituem o alert() bloqueante) */
+.att-toasts{
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  max-width: min(420px, calc(100vw - 36px));
+}
+
+.att-toast{
+  padding: 12px 14px;
+
+  border-radius: 14px;
+  border: 1px solid var(--line);
+
+  font-weight: 700;
+  font-size: .92rem;
+  line-height: 1.35;
+
+  color: var(--text);
+  background: var(--surface);
+
+  box-shadow: var(--shadow-md);
+
+  cursor: pointer;
+}
+
+.att-toast--error{
+  color: var(--danger-ink);
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+}
+
+.att-toast--ok{
+  color: var(--success-ink);
+  background: var(--success-soft);
+  border-color: var(--success-line);
 }
 
 /* =========================================================
@@ -791,11 +873,10 @@ body{
     width: 100%;
   }
 
-  .fila-card-actions .btn.atender,
-  .fila-card-actions .btn.remover{
-    flex: 1;
-    width: auto;
-    min-width: 0;
+  /* toque: alvos maiores */
+  .fila-card-actions .btn{
+    height: 48px;
+    min-height: 48px;
   }
 }
 
@@ -834,7 +915,10 @@ body{
   #btnLimparFila,
   #btnImprimir,
   .queue-pagination,
-  .fila-card-actions{
+  .fila-card-actions,
+  .fila-card-head-actions,
+  .chamado-chip,
+  .att-toasts{
     display: none !important;
   }
 

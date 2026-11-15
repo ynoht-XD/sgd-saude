@@ -86,7 +86,37 @@
     const data = contentType.includes("application/json") ? await res.json() : null;
 
     if (!res.ok || data?.ok === false) {
-      throw new Error(data?.error || data?.erro || data?.message || `Erro HTTP ${res.status}`);
+      const err = new Error(data?.error || data?.erro || data?.message || `Erro HTTP ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+
+    return data;
+  }
+
+  // Chamada na TV: nao usa jfetch porque precisa distinguir sessao expirada (login em HTML com 200) e falta de permissao (403).
+  async function chamarNaTv(payload) {
+    const res = await fetch(API.chamarTv, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+
+    const tipo = (res.headers.get("content-type") || "").toLowerCase();
+    const falha = (msg, status) => Object.assign(new Error(msg), { status });
+
+    if (res.status === 401 || res.redirected || (res.ok && !tipo.includes("application/json"))) {
+      throw falha("Sua sessão expirou. Entre novamente para chamar pacientes na TV.", 401);
+    }
+    if (res.status === 403) {
+      throw falha("Você não tem permissão para chamar pacientes na TV. Fale com o administrador.", 403);
+    }
+
+    const data = tipo.includes("application/json") ? await res.json() : null;
+
+    if (!res.ok || !data || data.ok !== true) {
+      throw falha(data?.erro || data?.error || `Não foi possível chamar na TV (erro ${res.status}).`, res.status);
     }
 
     return data;
@@ -133,12 +163,70 @@
   }
 
   function toast(msg, type = "info") {
-    if (type === "error") {
-      alert(msg);
-      return;
+    console.log(`[${type}] ${msg}`);
+
+    let box = document.getElementById("attToasts");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "attToasts";
+      box.className = "att-toasts";
+      box.setAttribute("role", "status");
+      box.setAttribute("aria-live", "polite");
+      document.body.appendChild(box);
     }
 
-    console.log(`[${type}] ${msg}`);
+    const el = document.createElement("div");
+    el.className = `att-toast att-toast--${type}`;
+    el.textContent = msg;
+    el.addEventListener("click", () => el.remove());
+    box.appendChild(el);
+
+    while (box.children.length > 3) box.firstElementChild.remove();
+
+    setTimeout(() => el.remove(), type === "error" ? 7000 : 3500);
+  }
+
+  // ---- "Chamado 10:32": lembrado por item da fila, por 12 h (mesmo padrao das remocoes locais)
+  function chamadaStorageKey(filaId) {
+    return filaId ? `fila_chamada:id:${filaId}` : "";
+  }
+
+  function rememberChamada(filaId, quando) {
+    const k = chamadaStorageKey(filaId);
+    if (k) localStorage.setItem(k, String(quando));
+  }
+
+  function chamadaTs(filaId) {
+    const k = chamadaStorageKey(filaId);
+    if (!k) return 0;
+
+    const ts = Number(localStorage.getItem(k) || 0);
+    if (!ts) return 0;
+
+    if (Date.now() - ts > 12 * 60 * 60 * 1000) {
+      localStorage.removeItem(k);
+      return 0;
+    }
+
+    return ts;
+  }
+
+  function horaChamada(ts) {
+    return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function chamadoChipHtml(filaId) {
+    const ts = chamadaTs(filaId);
+    return ts
+      ? `<span class="chamado-chip" data-chamado-chip>Chamado ${horaChamada(ts)}</span>`
+      : `<span class="chamado-chip" data-chamado-chip hidden></span>`;
+  }
+
+  function atualizarChip(card, ts) {
+    const chip = card.querySelector("[data-chamado-chip]");
+    if (!chip) return;
+    chip.textContent = `Chamado ${horaChamada(ts)}`;
+    chip.hidden = false;
   }
 
   function isFromAgenda(item) {
@@ -243,21 +331,10 @@
     `;
   }
 
+  // cabecalho do card: so o Remover (icone discreto). Atender e Chamar na TV ficam no rodape (footerButtonsHtml).
   function actionButtonsHtml(pacienteNome) {
     return `
       <div class="fila-card-head-actions">
-        <button
-          type="button"
-          class="btn atender"
-          data-acao="atender"
-          aria-label="Atender ${escapeHtml(pacienteNome)}"
-          title="Atender"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
-          </svg>
-        </button>
-
         <button
           type="button"
           class="btn remover"
@@ -275,6 +352,38 @@
           </svg>
         </button>
       </div>
+    `;
+  }
+
+  function footerButtonsHtml(pacienteId, pacienteNome, profissionalNome) {
+    return `
+      <button
+        type="button"
+        class="btn atender"
+        data-acao="atender"
+        aria-label="Atender ${escapeHtml(pacienteNome)}"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4Zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4Z" fill="currentColor"/>
+        </svg>
+        Atender
+      </button>
+
+      <button
+        type="button"
+        class="btn chamar-tv"
+        data-acao="chamar-tv"
+        data-paciente-id="${escapeHtml(pacienteId)}"
+        data-paciente-nome="${escapeHtml(pacienteNome)}"
+        data-profissional-nome="${escapeHtml(profissionalNome)}"
+        data-setor="Recepção"
+        aria-label="Chamar ${escapeHtml(pacienteNome)} na TV"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M3 10v4h3l5 4V6L6 10H3Zm13.5 2a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-8.7v2.1a7 7 0 0 1 0 13.2v2.1a9 9 0 0 0 0-17.4Z" fill="currentColor"/>
+        </svg>
+        Chamar na TV
+      </button>
     `;
   }
 
@@ -316,6 +425,7 @@
           <div class="fila-card-top-actions">
             ${isFromAgenda(item) ? `<span class="from-agenda" title="Vindo da agenda">📅</span>` : ""}
             ${badgePrio(item.prioridade)}
+            ${chamadoChipHtml(id)}
             ${actionButtonsHtml(pacienteNome)}
           </div>
         </header>
@@ -364,18 +474,7 @@
         </div>
 
         <footer class="fila-card-actions">
-          <button
-            type="button"
-            class="btn chamar-tv"
-            data-acao="chamar-tv"
-            data-paciente-id="${escapeHtml(pacienteId)}"
-            data-paciente-nome="${escapeHtml(pacienteNome)}"
-            data-profissional-nome="${escapeHtml(profissionalNome)}"
-            data-setor="Recepção"
-            aria-label="Chamar ${escapeHtml(pacienteNome)} na TV"
-          >
-            📢 Chamar na TV
-          </button>
+          ${footerButtonsHtml(pacienteId, pacienteNome, profissionalNome)}
         </footer>
       </article>
     `;
@@ -690,7 +789,7 @@
     ev.preventDefault();
 
     if (acao === "chamar-tv") {
-      const oldText = btn.innerHTML;
+      const oldHtml = btn.innerHTML;
 
       const payload = {
         paciente_id: btn.dataset.pacienteId || "",
@@ -700,28 +799,36 @@
       };
 
       if (!payload.paciente_nome) {
-        alert("Paciente inválido para chamada.");
+        toast("Paciente inválido para chamada.", "error");
         return;
       }
 
+      // chamado ha menos de 30 s: pede confirmacao (evita a TV repetir o mesmo paciente por clique duplo)
+      const ultima = chamadaTs(id);
+      if (ultima && Date.now() - ultima < 30 * 1000) {
+        const seg = Math.max(1, Math.round((Date.now() - ultima) / 1000));
+        if (!confirm(`${payload.paciente_nome} foi chamado(a) há ${seg} s. Chamar novamente?`)) return;
+      }
+
       btn.disabled = true;
-      btn.innerHTML = "Chamando...";
+      btn.textContent = "Chamando...";
 
       try {
-        await jfetch(API.chamarTv, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        await chamarNaTv(payload);
 
-        btn.innerHTML = "✅ Chamado!";
+        // relogio do proprio navegador (a janela de 30 s e o "Chamado 10:32" nao dependem do fuso/relogio do servidor)
+        const quando = Date.now();
+        rememberChamada(id, quando);
+        atualizarChip(card, quando);
+
+        btn.textContent = "✅ Chamado!";
         setTimeout(() => {
-          btn.innerHTML = oldText;
+          btn.innerHTML = oldHtml;
           btn.disabled = false;
         }, 1500);
       } catch (err) {
-        alert(err.message || "Falha ao chamar na TV.");
-        btn.innerHTML = oldText;
+        toast(err.message || "Falha ao chamar na TV.", "error");
+        btn.innerHTML = oldHtml;
         btn.disabled = false;
       }
 
@@ -729,7 +836,7 @@
     }
 
     if (!id) {
-      alert("Item da fila sem ID. Verifique o retorno da API.");
+      toast("Item da fila sem ID. Verifique o retorno da API.", "error");
       return;
     }
 
@@ -738,7 +845,7 @@
       const pacienteNome = card.querySelector("[data-pid] strong")?.textContent?.trim() || "";
 
       if (!pacienteId) {
-        alert("Paciente não identificado para atendimento.");
+        toast("Paciente não identificado para atendimento.", "error");
         return;
       }
 
