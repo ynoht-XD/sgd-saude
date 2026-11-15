@@ -698,7 +698,28 @@ def split_codes_csv(raw: str | None) -> list[str]:
     return items
 
 
-def get_paciente_cids(conn, paciente_id: str | int | None) -> list[str]:
+def get_paciente_cids(conn, paciente_id: str | int | None, cid_pontual: str | None = None) -> list[str]:
+    """CIDs que valem para a regra CBO x CID do procedimento: UNIAO (sem repetir) de
+       1) CIDs do cadastro do paciente (cid..cid5), 2) condicoes ATIVAS do paciente (paciente_cids_ativos) e
+       3) o CID pontual do atendimento em curso (opcional). Como a regra e 'qualquer CID combina', unir so AMPLIA a lista de
+       procedimentos compativeis: nunca bloqueia o que o cadastro ja liberava."""
+    if not paciente_id or not has_table(conn, "pacientes"):
+        return []
+
+    coletados = _get_paciente_cids_cadastro(conn, paciente_id)
+    vistos = set(coletados)
+
+    for cid in list(get_cids_ativos_codigos(conn, paciente_id)) + [cid_pontual or ""]:
+        norm = cid_norm_py(cid)
+        if norm and norm not in vistos:
+            vistos.add(norm)
+            coletados.append(norm)
+
+    return coletados
+
+
+def _get_paciente_cids_cadastro(conn, paciente_id: str | int | None) -> list[str]:
+    """So os CIDs do cadastro do paciente (comportamento anterior de get_paciente_cids)."""
     if not paciente_id or not has_table(conn, "pacientes"):
         return []
 
@@ -750,6 +771,152 @@ def get_paciente_cids(conn, paciente_id: str | int | None) -> list[str]:
             coletados.append(norm)
 
     return coletados
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# CID ATIVO DO PACIENTE (condicoes cronicas/permanentes; ex.: autismo, diabetes)
+# O CID PONTUAL continua so em atendimentos.cid_codigo. Aqui fica a lista que persiste entre atendimentos. Sem FK (padrao do
+# projeto). Nao pode haver duas linhas 'ativo' do mesmo CID para o mesmo paciente: validado na aplicacao (com lock por paciente).
+# ---------------------------------------------------------------------------------------------------------------------
+CID_STATUS_ATIVO = "ativo"
+CID_STATUS_RESOLVIDO = "resolvido"
+
+
+def ensure_paciente_cids_ativos_schema(conn) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS paciente_cids_ativos (
+            id SERIAL PRIMARY KEY,
+            clinica_id INTEGER NOT NULL,
+            paciente_id INTEGER NOT NULL,
+            cid_codigo VARCHAR(10) NOT NULL,
+            origem_atendimento_id INTEGER,
+            status VARCHAR(20) NOT NULL DEFAULT 'ativo',
+            data_inicio DATE NOT NULL DEFAULT CURRENT_DATE,
+            data_resolucao DATE,
+            resolvido_por_usuario_id INTEGER,
+            criado_por_usuario_id INTEGER,
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_paciente_cids_ativos_paciente ON paciente_cids_ativos(paciente_id, status)")
+    conn.commit()
+
+
+_SQL_CID_NORM = "REGEXP_REPLACE(UPPER(cid_codigo), '[^A-Z0-9]', '', 'g')"
+
+
+def get_cids_ativos_codigos(conn, paciente_id: str | int | None) -> list[str]:
+    """Codigos (como gravados) dos CIDs ATIVOS do paciente na clinica da sessao. Tabela ainda nao criada = lista vazia."""
+    if not paciente_id or not has_table(conn, "paciente_cids_ativos"):
+        return []
+    clinica_id = current_clinica_id()
+    if not clinica_id:
+        return []
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT cid_codigo FROM paciente_cids_ativos
+         WHERE clinica_id = %s AND paciente_id = %s AND status = 'ativo'
+         ORDER BY data_inicio, id
+        """,
+        (clinica_id, int(paciente_id)),
+    )
+    return [(_row_get(r, "cid_codigo", 0, "") or "").strip() for r in (cur.fetchall() or [])]
+
+
+def _linha_cid_ativo(r: Any) -> dict:
+    def iso(v):
+        return v.isoformat() if hasattr(v, "isoformat") else (str(v) if v else None)
+    return {
+        "id": _row_get(r, "id", 0),
+        "paciente_id": _row_get(r, "paciente_id", 1),
+        "cid_codigo": (_row_get(r, "cid_codigo", 2, "") or "").strip(),
+        "descricao": (_row_get(r, "descricao", 3, "") or "").strip(),
+        "status": _row_get(r, "status", 4, ""),
+        "data_inicio": iso(_row_get(r, "data_inicio", 5)),
+        "data_resolucao": iso(_row_get(r, "data_resolucao", 6)),
+        "origem_atendimento_id": _row_get(r, "origem_atendimento_id", 7),
+    }
+
+
+def listar_cids_ativos(conn, clinica_id: int, paciente_id: int, status: str | None = CID_STATUS_ATIVO) -> list[dict]:
+    """Linhas do paciente (isoladas por clinica). status=None traz todas. 'descricao' vem do catalogo de CID-10 se existir."""
+    if not has_table(conn, "paciente_cids_ativos"):
+        return []
+    com_catalogo = has_table(conn, "cid_catalogo")
+    desc_sql = (
+        "COALESCE((SELECT c.no_cid FROM cid_catalogo c WHERE REPLACE(c.co_cid, '.', '') = REPLACE(p.cid_codigo, '.', '') LIMIT 1), '')"
+        if com_catalogo else "''"
+    )
+    filtro_status = "AND p.status = %s" if status else ""
+    params: list[Any] = [clinica_id, int(paciente_id)] + ([status] if status else [])
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT p.id, p.paciente_id, p.cid_codigo, {desc_sql} AS descricao, p.status, p.data_inicio, p.data_resolucao,
+               p.origem_atendimento_id
+          FROM paciente_cids_ativos p
+         WHERE p.clinica_id = %s AND p.paciente_id = %s {filtro_status}
+         ORDER BY (p.status = 'ativo') DESC, p.data_inicio DESC, p.id DESC
+        """,
+        params,
+    )
+    return [_linha_cid_ativo(r) for r in (cur.fetchall() or [])]
+
+
+def registrar_cid_ativo(conn, clinica_id: int, paciente_id: int, cid_codigo: str, usuario_id: int | None,
+                        origem_atendimento_id: int | None = None) -> tuple[str, int]:
+    """Cria a condicao ativa. Retorna ('criado'|'ja_ativo', id). NAO faz commit (quem chama decide: o salvar do atendimento
+    grava junto com o atendimento). O lock por paciente serializa duas gravacoes simultaneas, entao nunca ha 2 'ativo' iguais."""
+    cur = conn.cursor()
+    cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"cid_ativo:{clinica_id}:{int(paciente_id)}",))
+    cur.execute(
+        f"""
+        SELECT id FROM paciente_cids_ativos
+         WHERE clinica_id = %s AND paciente_id = %s AND status = 'ativo' AND {_SQL_CID_NORM} = %s
+         LIMIT 1
+        """,
+        (clinica_id, int(paciente_id), cid_norm_py(cid_codigo)),
+    )
+    existente = cur.fetchone()
+    if existente:
+        return "ja_ativo", _row_get(existente, "id", 0)
+    cur.execute(
+        """
+        INSERT INTO paciente_cids_ativos (clinica_id, paciente_id, cid_codigo, origem_atendimento_id, criado_por_usuario_id)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (clinica_id, int(paciente_id), cid_codigo[:10], origem_atendimento_id, usuario_id),
+    )
+    return "criado", _row_get(cur.fetchone(), "id", 0)
+
+
+def encerrar_cid_ativo(conn, clinica_id: int, cid_ativo_id: int, usuario_id: int | None) -> tuple[str, int | None]:
+    """Marca como resolvido (data_resolucao = hoje). Retorna ('ok'|'ja_resolvido'|'nao_encontrado', paciente_id). Sem commit."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT paciente_id, status FROM paciente_cids_ativos WHERE id = %s AND clinica_id = %s FOR UPDATE",
+        (int(cid_ativo_id), clinica_id),
+    )
+    row = cur.fetchone()
+    if not row:
+        return "nao_encontrado", None
+    paciente_id = _row_get(row, "paciente_id", 0)
+    if _row_get(row, "status", 1) != CID_STATUS_ATIVO:
+        return "ja_resolvido", paciente_id
+    cur.execute(
+        """
+        UPDATE paciente_cids_ativos
+           SET status = 'resolvido', data_resolucao = CURRENT_DATE, resolvido_por_usuario_id = %s
+         WHERE id = %s AND clinica_id = %s AND status = 'ativo'
+        """,
+        (usuario_id, int(cid_ativo_id), clinica_id),
+    )
+    return "ok", paciente_id
 
 
 def get_procedimentos_competencia_vigente(conn) -> str:

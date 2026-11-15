@@ -29,6 +29,8 @@ from .helpers import (
     ensure_atendimentos_schema,
     ensure_atendimento_procedimentos_schema,
     ensure_fila_table,
+    ensure_paciente_cids_ativos_schema,
+    registrar_cid_ativo,
     listar_combos_ativos_para_template,
     buscar_combo_ativo_paciente,
     recalcular_saldo_combo,
@@ -171,6 +173,7 @@ def ensure_atendimentos_multi_schema(conn):
     ensure_atendimento_procedimentos_schema(conn)
     ensure_fila_table(conn)
     ensure_evolucoes_ocultas_schema(conn)
+    ensure_paciente_cids_ativos_schema(conn)   # CID ativo do paciente (tabela nova, idempotente)
 
     if has_table(conn, "atendimentos"):
         _ensure_col(conn, "atendimentos", "clinica_id", "INTEGER")
@@ -375,7 +378,10 @@ def api_procedimentos_sugeridos():
             _, _, _, prof_cbo = resolve_prof_dados(conn, profissional_id)
             prof_cbo = (prof_cbo or "").strip()
 
-            pac_cids = get_paciente_cids(conn, paciente_id)
+            # CID pontual do atendimento em curso (opcional): so vale se for um CID valido (formato + catalogo)
+            from documentos.cid import valida_cid_atendimento
+            cid_pontual, _erro_cid = valida_cid_atendimento(conn, request.args.get("cid"))
+            pac_cids = get_paciente_cids(conn, paciente_id, cid_pontual=cid_pontual)
             items = listar_procedimentos_compativeis_db(conn, prof_cbo, pac_cids)
             competencia_vigente = get_procedimentos_competencia_vigente(conn)
 
@@ -799,7 +805,7 @@ def salvar_atendimento_view():
                 flash(msg)
                 return redirect(url_for("atendimentos.pagina_atendimento"))
 
-        pac_cids = get_paciente_cids(conn, paciente_id)
+        pac_cids = get_paciente_cids(conn, paciente_id, cid_pontual=cid_codigo)   # cadastro + condicoes ativas + CID deste atendimento
         competencia_vigente = get_procedimentos_competencia_vigente(conn)
         permitidos = listar_procedimentos_compativeis_db(conn, prof_cbo, pac_cids)
 
@@ -997,6 +1003,13 @@ def salvar_atendimento_view():
                      WHERE id = %s
                 """, (fila_id,))
 
+        # "Marcar como condicao ativa/cronica": grava junto com o atendimento (mesma transacao). Ja ativo = nao duplica.
+        cid_ativo_resultado = None
+        if cid_codigo and (request.form.get("cid_marcar_ativo") or "").strip() == "1":
+            cid_ativo_resultado, _cid_ativo_id = registrar_cid_ativo(
+                conn, clinica_id, int(paciente_id), cid_codigo, (_to_int(_usuario_id_atual()) or None), origem_atendimento_id=atendimento_id
+            )
+
         conn.commit()
 
         if combo_plano_id:
@@ -1036,6 +1049,7 @@ def salvar_atendimento_view():
                 "cbo": prof_cbo,
                 "paciente_cids": pac_cids,
                 "salvo_sem_procedimento": not bool(procedimentos),
+                "cid_ativo": cid_ativo_resultado,   # None | "criado" | "ja_ativo"
                 "evolucao_oculta_salva": bool(evolucao_oculta),
             })
 
