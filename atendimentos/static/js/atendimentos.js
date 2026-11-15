@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initModalSugestoes();
   initHistoricoProcedimentos();
   initVozEvolucao();
+  initCidAtendimento();
   initSalvar();
 });
 
@@ -890,11 +891,21 @@ function initSalvar() {
 
   form.dataset.bound = "1";
 
+  const btnEmitir = qs("#btnSalvarEmitirDocs");
+  if (btnEmitir) {
+    btnEmitir.addEventListener("click", () => {
+      form.dataset.emitirDocs = "1";
+      form.requestSubmit(qs(".btn-salvar", form));
+    });
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    // "Salvar e emitir documentos": mesmo salvamento; so muda o destino depois de salvar
-    const emitirDocs = e.submitter?.dataset?.emitirDocs === "1";
+    // "Salvar e emitir documentos": mesmo salvamento; so muda o destino depois de salvar.
+    // O botao NAO e de envio (type=button): assim o Enter num campo continua acionando o "Salvar atendimento".
+    const emitirDocs = form.dataset.emitirDocs === "1";
+    delete form.dataset.emitirDocs;
 
     const pacienteId = getPacienteId();
 
@@ -904,6 +915,8 @@ function initSalvar() {
     }
 
     setValue("nomePaciente", pacienteId);
+
+    if (!cidAtendimentoPronto()) return;
 
     const btns = qsa('[type="submit"]', form);
     const btn = { set disabled(v) { btns.forEach((b) => { b.disabled = v; }); }, get disabled() { return btns.some((b) => b.disabled); } };
@@ -969,6 +982,89 @@ function initSalvar() {
 // ====== EXTRA FINAL ======
 
 // CANCELAR
+/* ==========================================================
+   CID DO ATENDIMENTO (opcional)
+   A busca usa o MESMO endpoint dos documentos: GET /api/cid10/buscar.
+   O servidor e quem valida de verdade (formato e catalogo); aqui so ajudamos a escolher.
+========================================================== */
+
+const RE_CID_ATENDIMENTO = /^[A-Za-z]\d{2}(\.?[0-9A-Za-z]{1,4})?$/;
+
+function initCidAtendimento() {
+  const busca = qs("#cidAtendimentoBusca");
+  const oculto = qs("#cidAtendimento");
+  const caixa = qs("#cidAtendimentoSug");
+  const msg = qs("#cidAtendimentoMsg");
+  if (!busca || !oculto || !caixa) return;
+
+  const url = busca.dataset.urlCid;
+  let timer = null;
+
+  const mostrarMsg = (texto, erro = false) => {
+    msg.textContent = texto || "";
+    msg.classList.toggle("is-erro", !!erro);
+  };
+
+  const escolher = (item) => {
+    oculto.value = item.codigo;
+    busca.value = `${item.codigo} — ${item.descricao}`;
+    caixa.hidden = true;
+    mostrarMsg("");
+  };
+
+  busca.addEventListener("input", () => {
+    oculto.value = "";               // editou o texto: a escolha anterior deixa de valer
+    mostrarMsg("");
+    clearTimeout(timer);
+    const q = busca.value.trim();
+    if (q.length < 2) { caixa.hidden = true; return; }
+
+    timer = setTimeout(async () => {
+      try {
+        const resp = await fetch(`${url}?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
+        const data = await resp.json();
+        const itens = Array.isArray(data.items) ? data.items : [];
+
+        caixa.innerHTML = itens.length
+          ? itens.map((it, i) => `<button type="button" data-i="${i}">${escapeHtmlCid(it.label)}</button>`).join("")
+          : `<small>Nenhum CID encontrado (a base pode não estar importada). O CID é opcional: se souber o código, digite-o.</small>`;
+        caixa.hidden = false;
+        qsa("button", caixa).forEach((b) => b.addEventListener("click", () => escolher(itens[Number(b.dataset.i)])));
+      } catch (e) {
+        caixa.hidden = true;
+      }
+    }, 250);
+  });
+
+  busca.addEventListener("blur", () => setTimeout(() => { caixa.hidden = true; }, 180));
+}
+
+function escapeHtmlCid(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+/* Antes de salvar: devolve true se o campo CID esta ok (vazio, escolhido da lista ou com cara de codigo). */
+function cidAtendimentoPronto() {
+  const busca = qs("#cidAtendimentoBusca");
+  const oculto = qs("#cidAtendimento");
+  const msg = qs("#cidAtendimentoMsg");
+  if (!busca || !oculto) return true;
+
+  const texto = busca.value.trim();
+  if (!texto || oculto.value) return true;
+
+  // digitou um codigo sem clicar na sugestao (ex.: base de CID ainda nao importada): o servidor confere
+  if (RE_CID_ATENDIMENTO.test(texto)) {
+    oculto.value = texto.toUpperCase();
+    return true;
+  }
+
+  msg.textContent = "Escolha um CID da lista de sugestões, digite o código (ex.: F84.0) ou deixe o campo vazio.";
+  msg.classList.add("is-erro");
+  busca.focus();
+  return false;
+}
+
 function initCancelar() {
   const btn = qs("#btnCancelarAtendimento");
   if (!btn) return;

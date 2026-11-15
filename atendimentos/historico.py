@@ -267,7 +267,8 @@ def ver_atendimento_json(aid: int):
                     COALESCE(mod, '') AS mod,
                     COALESCE(status_paciente, '') AS status_paciente,
                     COALESCE(anexo_atestado, '') AS anexo_atestado,
-                    combo_plano_id
+                    combo_plano_id,
+                    COALESCE(cid_codigo, '') AS cid_codigo
                 FROM atendimentos a
                 WHERE id = %s
                   {filtro_clinica_atend}
@@ -296,6 +297,7 @@ def ver_atendimento_json(aid: int):
             status_paciente = _row_get(row, "status_paciente", 9, "") or ""
             anexo_atestado = _row_get(row, "anexo_atestado", 10, "") or ""
             combo_plano_id = _row_get(row, "combo_plano_id", 11)
+            cid_codigo = _row_get(row, "cid_codigo", 12, "") or ""
 
             prontuario = ""
 
@@ -371,6 +373,7 @@ def ver_atendimento_json(aid: int):
             "status_paciente": status_paciente,
             "profissional_nome": profissional_nome,
             "anexo_atestado": anexo_atestado,
+            "cid_codigo": cid_codigo,
             "procedimento": primeiro_proc,
             "codigo_sigtap": primeiro_cod,
             "procedimentos": procs,
@@ -473,7 +476,8 @@ def api_historico():
                     COALESCE(a.cns_profissional, '') AS cns_profissional,
                     COALESCE(a.cbo_profissional, '') AS cbo_profissional,
 
-                    a.combo_plano_id
+                    a.combo_plano_id,
+                    COALESCE(a.cid_codigo, '') AS cid_codigo
                 FROM atendimentos a
                 LEFT JOIN atendimento_procedimentos ap
                        ON ap.atendimento_id = a.id
@@ -517,6 +521,7 @@ def api_historico():
                     "profissional_cns": _row_get(r, "cns_profissional", 8, "") or "",
                     "profissional_cbo": _row_get(r, "cbo_profissional", 9, "") or "",
                     "combo_plano_id": _row_get(r, "combo_plano_id", 10),
+                    "cid_codigo": _row_get(r, "cid_codigo", 11, "") or "",
                 }
                 for r in rows
             ]

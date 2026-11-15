@@ -9,6 +9,7 @@ from datetime import date, datetime
 from flask import abort, jsonify, render_template, request, session, url_for
 
 from . import documentos_bp
+from .cid import descricao_oficial
 from .schema import ensure_documentos_schema, invalidar_schema
 from .validacao import TIPOS, valida_documento
 from atendimentos.helpers import _row_get, has_table, table_columns
@@ -132,19 +133,6 @@ def _profissional_snapshot(conn, usuario_id: int | None, clinica_id: int) -> dic
             v = _row_get(row, c, i, "")
             snap[mapa[c]] = str(v).strip() if v is not None else ""
     return snap
-
-
-def _cid_do_catalogo(conn, codigo: str) -> str | None:
-    """Descricao oficial do CID no catalogo; None se o catalogo nao existe / esta vazio / nao tem o codigo."""
-    if not has_table(conn, "cid_catalogo"):
-        return None
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT no_cid FROM cid_catalogo WHERE REPLACE(co_cid, '.', '') = REPLACE(%s, '.', '') LIMIT 1",
-        (codigo,),
-    )
-    row = cur.fetchone()
-    return (_row_get(row, "no_cid", 0, "") or "").strip() or None if row else None
 
 
 def _confere_exames(conn, conteudo: dict) -> list[str]:
@@ -366,7 +354,7 @@ def criar_documento(atendimento_id: int):
             # CID: se o catalogo conhece o codigo, a descricao oficial vence a do navegador
             cid = doc["cid"]
             if cid:
-                oficial = _cid_do_catalogo(conn, cid["codigo"])
+                oficial = descricao_oficial(conn, cid["codigo"])
                 if oficial:
                     cid["descricao"] = oficial
             if doc["tipo"] == "solicitacao_exame":

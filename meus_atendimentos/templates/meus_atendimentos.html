@@ -150,7 +150,7 @@
         >
           <div class="ma-card-top">
             <strong>{{ a.paciente or "-" }}</strong>
-            <span>{{ a.data or "-" }}</span>
+            <span>{{ a.data or "-" }}{% if a.cid %} · <b class="ma-cid" title="CID do atendimento">CID {{ a.cid }}</b>{% endif %}</span>
           </div>
 
           <div class="ma-card-evo">

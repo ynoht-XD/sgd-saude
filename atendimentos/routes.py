@@ -777,6 +777,17 @@ def salvar_atendimento_view():
             flash(msg)
             return redirect(url_for("atendimentos.pagina_atendimento"))
 
+        # CID do atendimento (opcional): formato + catalogo (so exige o catalogo se ele ja foi importado).
+        # Import tardio: documentos importa atendimentos.helpers (evita ciclo na carga dos pacotes).
+        from documentos.cid import valida_cid_atendimento
+        cid_codigo, cid_erro = valida_cid_atendimento(conn, request.form.get("cid_codigo"))
+
+        if cid_erro:
+            if is_fetch:
+                return jsonify({"ok": False, "error": cid_erro}), 400
+            flash(cid_erro)
+            return redirect(url_for("atendimentos.pagina_atendimento"))
+
         nome = _row_get(paciente, "nome", 0, "") or ""
         prontuario = _row_get(paciente, "prontuario", 1, "") or ""
         mod = _row_get(paciente, "mod", 2, "") or ""
@@ -904,6 +915,7 @@ def salvar_atendimento_view():
                 cbo_profissional,
                 combo_plano_id,
                 contabiliza_sessao,
+                cid_codigo,
                 created_at,
                 atualizado_em
             )
@@ -912,7 +924,7 @@ def salvar_atendimento_view():
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s,
+                %s, %s, %s,
                 CURRENT_TIMESTAMP,
                 CURRENT_TIMESTAMP
             )
@@ -934,6 +946,7 @@ def salvar_atendimento_view():
             prof_cbo,
             combo_plano_id,
             1 if combo_plano_id and contabiliza_sessao else 0,
+            cid_codigo,
         ))
 
         atendimento_id = _row_get(cursor.fetchone(), "id", 0)
@@ -1033,6 +1046,7 @@ def salvar_atendimento_view():
                 "data_atendimento": data_atendimento,
                 "status": status_atend,
                 "procedimentos": codigos,
+                "cid_codigo": cid_codigo,
                 "combo_plano_id": combo_plano_id,
                 "contabiliza_sessao": 1 if combo_plano_id and contabiliza_sessao else 0,
                 "evolucao_oculta_salva": bool(evolucao_oculta),
