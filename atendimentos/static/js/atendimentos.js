@@ -893,6 +893,9 @@ function initSalvar() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
+    // "Salvar e emitir documentos": mesmo salvamento; so muda o destino depois de salvar
+    const emitirDocs = e.submitter?.dataset?.emitirDocs === "1";
+
     const pacienteId = getPacienteId();
 
     if (!pacienteId) {
@@ -902,8 +905,9 @@ function initSalvar() {
 
     setValue("nomePaciente", pacienteId);
 
-    const btn = form.querySelector('[type="submit"]');
-    if (btn) btn.disabled = true;
+    const btns = qsa('[type="submit"]', form);
+    const btn = { set disabled(v) { btns.forEach((b) => { b.disabled = v; }); }, get disabled() { return btns.some((b) => b.disabled); } };
+    btn.disabled = true;
 
     try {
       garantirProcedimentoPadrao();
@@ -945,6 +949,11 @@ function initSalvar() {
 
       if (!resp.ok || !data?.ok) {
         throw new Error(data?.error || "Falha ao salvar atendimento.");
+      }
+
+      if (emitirDocs && data.atendimento_id) {
+        window.location.href = `/atendimentos/${encodeURIComponent(data.atendimento_id)}/documentos`;
+        return;
       }
 
       window.location.href = data.redirect || "/atendimentos/";

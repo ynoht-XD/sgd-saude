@@ -116,6 +116,7 @@ function renderHistorico(items) {
       <div class="hist-cell" data-label="Status">${it.status||''}</div>
       <div class="hist-cell action">
         <button class="hist-btn" data-aid="${it.id}">Ver</button>
+        <a class="hist-btn" style="text-decoration:none;display:inline-block;margin-left:6px" href="/atendimentos/${it.id}/documentos">Documentos</a>
       </div>
     `;
     // click em "Ver" → abre modal
