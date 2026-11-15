@@ -460,6 +460,17 @@ body{
   color: var(--ink-2);
 }
 
+.cid-chip{
+  align-self:flex-start;
+  margin-top:2px;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:800;
+  color:var(--info-chip-ink);
+  background:var(--info-chip);
+}
+
 .muted-mini{
   color: var(--muted);
   font-size: 12px;

@@ -207,6 +207,7 @@
                 <div class="fila-card-main" data-pid="{{ item.paciente_id }}">
                   <strong>{{ item.paciente_nome }}</strong>
                   <span class="muted-mini">ID: {{ item.paciente_id or '—' }}</span>
+                  {% if item.ultimo_cid %}<span class="cid-chip" title="CID do último atendimento deste paciente">Último CID {{ item.ultimo_cid }}</span>{% endif %}
                 </div>
               </section>
 
