@@ -200,6 +200,7 @@ def ensure_atendimentos_schema(conn) -> None:
     ensure_column(conn, "atendimentos", "nome_profissional", "TEXT")
     ensure_column(conn, "atendimentos", "cns_profissional", "TEXT")
     ensure_column(conn, "atendimentos", "cbo_profissional", "TEXT")
+    ensure_column(conn, "atendimentos", "cid_codigo", "VARCHAR(10)")   # CID do atendimento (estatistica/producao SUS); sem FK, opcional
     ensure_column(conn, "atendimentos", "combo_plano_id", "INTEGER")
     ensure_column(conn, "atendimentos", "contabiliza_sessao", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "atendimentos", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
