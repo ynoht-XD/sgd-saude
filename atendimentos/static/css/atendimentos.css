@@ -66,76 +66,84 @@ body{
   box-shadow:var(--shadow);
 }
 
-/* RESUMO */
-.atd-overview-grid{
-  display:grid;
-  grid-template-columns:2fr repeat(5, minmax(120px, 1fr));
-  gap:12px;
+/* TITULO DA PAGINA */
+.atd-head{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
 }
 
-.atd-mini-card{
-  border:1px solid var(--line);
-  border-radius:18px;
-  padding:14px;
-  background:var(--surface);
-  box-shadow:var(--shadow-xs);
-  transition:.18s ease;
-  min-width:0;
-}
-
-.atd-mini-card:hover{
-  transform:translateY(-2px);
-  box-shadow:var(--shadow);
-}
-
-.atd-mini-label{
-  display:block;
-  font-size:.76rem;
-  color:var(--muted);
-  font-weight:900;
+.atd-kicker{
+  align-self:flex-start;
+  padding:3px 10px;
+  border-radius:999px;
+  font-size:var(--fs-xs);
+  font-weight:800;
+  letter-spacing:.05em;
   text-transform:uppercase;
-  letter-spacing:.08em;
-  margin-bottom:8px;
+  color:var(--info-chip-ink);
+  background:var(--info-chip);
 }
 
-.atd-mini-card strong{
-  display:block;
-  color:var(--text);
-  font-size:1rem;
+.atd-head h2{
+  margin:0;
+  font-size:var(--fs-xl);
+  line-height:1.2;
+}
+
+/* FAIXA DO PACIENTE (resumo + ultimo atendimento) */
+.atd-patient-strip{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px 14px;
+  padding:12px 16px;
+}
+
+.atd-strip-name{
+  font-size:var(--fs-lg);
   line-height:1.3;
+  color:var(--text);
   overflow-wrap:anywhere;
 }
 
-/* HISTÓRICO RÁPIDO */
-.atd-inline-bar{
-  padding-top:14px;
-  padding-bottom:14px;
-}
-
-.atd-last-inline-row{
+.atd-strip-chips{
   display:flex;
-  align-items:center;
-  gap:16px;
   flex-wrap:wrap;
+  gap:8px;
+  flex:1 1 360px;
 }
 
-.atd-last-inline-item{
-  display:flex;
-  align-items:center;
+.atd-pchip{
+  display:inline-flex;
+  align-items:baseline;
   gap:6px;
-  min-height:40px;
-  padding:0 12px;
+  padding:4px 10px;
   border-radius:999px;
-  border:1px solid var(--line);
-  background:var(--surface);
-  box-shadow:var(--shadow-xs);
-  font-size:13px;
+  background:var(--surface-3);
+  font-size:var(--fs-xs);
+  color:var(--text-2);
+  white-space:nowrap;
 }
 
-#btnVerUltimo{ margin-left:auto; }
+.atd-pchip i{
+  font-style:normal;
+  font-weight:700;
+  color:var(--muted);
+}
+
+.atd-pchip b{
+  font-weight:800;
+  color:var(--text);
+}
+
+.atd-strip-last{ margin-left:auto; }
+.atd-strip-last b{ color:var(--text); }
 
 /* COMBO COLAPSÁVEL */
 .atd-combo-panel{ padding:14px; }
+.atd-combo-panel--slim{ padding:8px 10px; }
+.atd-combo-panel--slim .atd-collapse-toggle{ min-height:40px; padding:6px 12px; border-radius:12px; }
 
 .atd-collapse-toggle{
   width:100%;
@@ -143,8 +151,8 @@ body{
   border:1px solid var(--line);
   background:linear-gradient(180deg,var(--surface),var(--surface-2));
   border-radius:18px;
-  min-height:58px;
-  padding:12px 16px;
+  min-height:48px;
+  padding:10px 14px;
   display:grid;
   grid-template-columns:auto 1fr auto;
   align-items:center;
@@ -160,18 +168,18 @@ body{
 }
 
 .atd-collapse-title{
-  font-size:14px;
+  font-size:var(--fs-md);
   font-weight:950;
 }
 
 .atd-collapse-sub{
-  font-size:13px;
+  font-size:var(--fs-sm);
   color:var(--muted);
   text-align:left;
 }
 
 .atd-collapse-icon{
-  font-size:18px;
+  font-size:var(--fs-lg);
   color:var(--muted);
   transition:.18s ease;
 }
@@ -224,7 +232,7 @@ body{
 }
 
 .combo-nome{
-  font-size:14px;
+  font-size:var(--fs-md);
   font-weight:950;
   color:#0f5132;
   color:light-dark(#0f5132, var(--success-ink));
@@ -243,26 +251,26 @@ body{
   min-height:30px;
   padding:0 10px;
   border-radius:999px;
-  font-size:.78rem;
+  font-size:var(--fs-xs);
   font-weight:900;
 }
 
 .atd-badge--soft{
   background:var(--surface-3);
   color:var(--text-2);
-  border:1px solid #e2e8f0;
+  border:1px solid var(--line);
 }
 
 .combo-stats{
   gap:14px;
-  font-size:13px;
+  font-size:var(--fs-sm);
 }
 
 .combo-stats strong{ font-weight:950; }
 
 .atd-combo-help{
   margin:0;
-  font-size:13px;
+  font-size:var(--fs-sm);
   color:var(--muted);
   line-height:1.45;
 }
@@ -275,7 +283,7 @@ body{
 
 .atd-switch-label{
   color:var(--muted);
-  font-size:11px;
+  font-size:var(--fs-xs);
   font-weight:900;
   text-transform:uppercase;
   letter-spacing:.04em;
@@ -296,7 +304,7 @@ body{
   width:52px;
   height:30px;
   border-radius:999px;
-  background:#dbe4ef;
+  background:var(--line-strong);
   position:relative;
   transition:.18s ease;
 }
@@ -352,7 +360,7 @@ body{
 .atd-cid-sug button{
   appearance:none; display:block; width:100%; padding:9px 12px;
   border:0; border-bottom:1px solid var(--line-soft);
-  background:transparent; color:var(--text); font:inherit; font-size:13px; text-align:left; cursor:pointer;
+  background:transparent; color:var(--text); font:inherit; font-size:var(--fs-sm); text-align:left; cursor:pointer;
 }
 .atd-cid-sug button:hover, .atd-cid-sug button:focus{ background:var(--brand-tint); }
 .atd-cid-sug small{ display:block; padding:9px 12px; color:var(--muted); }
@@ -361,7 +369,7 @@ body{
 .atd-field--full{ grid-column:1 / -1; }
 
 .atd-field label{
-  font-size:12px;
+  font-size:var(--fs-xs);
   font-weight:900;
   color:var(--muted);
 }
@@ -375,7 +383,7 @@ body{
   border:1px solid var(--line-strong);
   border-radius:14px;
   background:var(--surface);
-  font-size:13px;
+  font-size:var(--fs-sm);
   color:var(--text);
   transition:.15s ease;
 }
@@ -407,7 +415,7 @@ body{
 .atd-section-sub{
   margin:4px 0 0;
   color:var(--muted);
-  font-size:.9rem;
+  font-size:var(--fs-sm);
   line-height:1.45;
 }
 
@@ -486,7 +494,7 @@ body{
   background:var(--surface);
   border-radius:999px;
   padding:8px 11px;
-  font-size:12px;
+  font-size:var(--fs-xs);
   font-weight:850;
   cursor:pointer;
   transition:.18s ease;
@@ -497,68 +505,195 @@ body{
   box-shadow:var(--shadow-xs);
 }
 
-/* BOTÕES */
+/* BOTÕES · um unico sistema (.atd-btn) com variantes. Os nomes antigos (.btn-outline, .btn, .btn--ghost, .btn-salvar)
+   continuam existindo como alias, porque outras telas que carregam este CSS (historico) ainda os usam. */
+.atd-btn,
 .btn-outline,
 .btn,
 .btn--ghost{
   appearance:none;
-  background:linear-gradient(180deg,var(--surface),var(--surface-2));
-  border:1px solid var(--line);
-  color:var(--text);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
   min-height:42px;
-  padding:0 13px;
-  border-radius:14px;
-  font-weight:900;
+  padding:0 16px;
+  border:1px solid var(--line-strong);
+  border-radius:12px;
+  background:var(--surface);
+  color:var(--text);
+  font:inherit;
+  font-size:var(--fs-md);
+  font-weight:700;
+  line-height:1;
   cursor:pointer;
-  transition:.18s ease;
+  text-decoration:none;
+  transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
+.atd-btn:hover,
 .btn-outline:hover,
 .btn:hover,
 .btn--ghost:hover{
-  transform:translateY(-1px);
-  border-color:color-mix(in srgb, var(--brand) 35%, transparent);
-  box-shadow:var(--shadow-soft);
+  background:var(--surface-3);
+  border-color:color-mix(in srgb, var(--brand) 40%, var(--line-strong));
 }
 
-.btn-outline--icon{
-  min-width:42px;
-  width:42px;
-  padding:0;
-  font-size:20px;
+.atd-btn:focus-visible,
+.atd-collapse-toggle:focus-visible{
+  outline:2px solid var(--brand);
+  outline-offset:2px;
 }
 
-.btnRemoveProc{
-  color:var(--danger-fg);
-}
+.atd-btn:disabled{ opacity:.6; cursor:not-allowed; }
 
-.btnRemoveProc:hover{
-  background:var(--danger);
-  color:var(--on-brand);
-}
+.atd-btn--sm{ min-height:34px; padding:0 12px; font-size:var(--fs-sm); }
+.atd-btn--icon{ min-width:42px; width:42px; padding:0; }
 
-.atd-form-actions{
-  margin-top:22px;
-  display:flex;
-  justify-content:flex-end;
-}
-
+/* primario: UM por tela */
+.atd-btn--primary,
 .btn-salvar{
-  border:none;
+  border-color:transparent;
   background:linear-gradient(135deg,var(--primary),var(--primary-600));
   color:var(--on-brand);
-  min-height:50px;
-  padding:0 24px;
-  border-radius:16px;
-  font-weight:950;
-  font-size:14px;
-  cursor:pointer;
-  transition:.18s ease;
+  min-height:44px;
+  padding:0 22px;
+  font-weight:800;
 }
 
+.atd-btn--primary:hover,
 .btn-salvar:hover{
-  box-shadow:0 16px 34px color-mix(in srgb, var(--brand) 22%, transparent);
-  transform:translateY(-1px);
+  background:linear-gradient(135deg,var(--primary),var(--primary-600));
+  border-color:transparent;
+  box-shadow:0 10px 24px color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+/* secundario: contorno da marca */
+.atd-btn--secondary{
+  border-color:var(--brand);
+  background:transparent;
+  color:var(--brand-fg, var(--brand));
+}
+
+.atd-btn--secondary:hover{
+  background:var(--brand-tint);
+  border-color:var(--brand);
+}
+
+/* discreto: sem borda (Cancelar) */
+.atd-btn--quiet{
+  border-color:transparent;
+  background:transparent;
+  color:var(--muted);
+}
+
+.atd-btn--quiet:hover{
+  background:var(--surface-3);
+  border-color:transparent;
+  color:var(--text);
+}
+
+.atd-btn--danger-quiet{
+  border-color:transparent;
+  background:transparent;
+  color:var(--danger-ink);
+}
+
+.atd-btn--danger-quiet:hover{
+  background:var(--danger-soft);
+  border-color:transparent;
+}
+
+.btnRemoveProc{ color:var(--danger-ink); }
+
+/* BARRA DE ACOES FIXA: Salvar (primario) > Salvar e emitir (secundario) > Cancelar (discreto) */
+.atd-form-card{ overflow:visible; }   /* o overflow:hidden do .atd-card desligava o position:sticky */
+
+.atd-form-actions{
+  position:sticky;
+  bottom:0;
+  z-index:5;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+  margin:20px -18px -18px;
+  padding:12px 18px;
+  border-top:1px solid var(--line);
+  border-radius:0 0 var(--radius-xl) var(--radius-xl);
+  background:color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter:blur(6px);
+}
+
+.atd-actions-spacer{ flex:1 1 auto; }
+
+/* SECOES DO FORMULARIO */
+.atd-section-title{
+  grid-column:1 / -1;
+  padding-top:6px;
+  border-top:1px solid var(--line-soft);
+}
+
+.atd-section-title:first-child{ padding-top:0; border-top:0; }
+
+.atd-section-title h3{
+  margin:0;
+  font-size:var(--fs-lg);
+  font-weight:800;
+  color:var(--text);
+}
+
+.atd-section-title .atd-section-sub{ margin-top:2px; }
+
+.atd-section-title--row{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+/* MENSAGENS (substituem alert) */
+.atd-toasts{
+  position:fixed;
+  right:18px;
+  bottom:84px;
+  z-index:9999;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-width:min(420px, calc(100vw - 36px));
+}
+
+.atd-toast{
+  padding:12px 14px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--surface);
+  color:var(--text);
+  box-shadow:var(--shadow-soft);
+  font-size:var(--fs-sm);
+  font-weight:700;
+  line-height:1.4;
+  cursor:pointer;
+}
+
+.atd-toast--error{
+  color:var(--danger-ink);
+  background:var(--danger-soft);
+  border-color:var(--danger-line);
+}
+
+/* CONFIRMACAO */
+.atd-dialog--sm{ width:min(440px, calc(100vw - 28px)); }
+
+.atd-confirm p{ margin:0; color:var(--text-2); line-height:1.5; }
+
+.atd-confirm-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  padding:12px 20px 18px;
 }
 
 /* EVOLUÇÃO COM VOZ */
@@ -575,35 +710,29 @@ body{
   right:14px;
   bottom:14px;
   z-index:3;
-  min-height:38px;
-  padding:0 14px;
   border-radius:999px;
-  border:1px solid rgba(22,163,74,.30);
-  background:linear-gradient(180deg,var(--surface),var(--success-soft));
-  color:var(--success-fg);
-  font-size:12px;
-  font-weight:950;
-  cursor:pointer;
-  box-shadow:0 8px 18px rgba(22,163,74,.12);
-  transition:.18s ease;
+  border-color:var(--success-line);
+  background:var(--success-soft);
+  color:var(--success-ink);
 }
 
 .atd-voice-btn:hover{
-  transform:translateY(-1px);
-  box-shadow:0 12px 24px rgba(22,163,74,.18);
+  background:var(--success-chip);
+  border-color:var(--success-line);
 }
 
 .atd-voice-btn.is-listening{
-  border-color:rgba(220,38,38,.35);
-  background:linear-gradient(180deg,var(--surface),var(--danger-soft));
-  color:#b91c1c;
-  color:light-dark(#b91c1c, var(--danger-fg));
+  border-color:var(--danger-line);
+  background:var(--danger-soft);
+  color:var(--danger-ink);
   animation:voiceGlow 1.2s ease infinite;
 }
 
 @keyframes voiceGlow{
   50%{ box-shadow:0 0 0 5px rgba(220,38,38,.10); }
 }
+
+.atd-voice-status[hidden]{ display:none; }
 
 .atd-voice-status{
   position:absolute;
@@ -619,7 +748,7 @@ body{
   background:rgba(220,38,38,.08);
   border:1px solid rgba(220,38,38,.16);
   font-weight:900;
-  font-size:12px;
+  font-size:var(--fs-xs);
 }
 
 .atd-voice-status::before{
@@ -672,7 +801,7 @@ body{
 }
 
 .atd-dialog-head strong{
-  font-size:18px;
+  font-size:var(--fs-lg);
   font-weight:950;
 }
 
@@ -680,7 +809,7 @@ body{
   display:block;
   margin-top:4px;
   color:var(--muted);
-  font-size:12px;
+  font-size:var(--fs-xs);
 }
 
 .atd-dialog-tools{
@@ -729,12 +858,6 @@ body{
 }
 
 /* RESPONSIVO */
-@media (max-width:1180px){
-  .atd-overview-grid{
-    grid-template-columns:repeat(3,minmax(0,1fr));
-  }
-}
-
 @media (max-width:920px){
   .atd-form-grid{
     grid-template-columns:repeat(6,minmax(0,1fr));
@@ -760,11 +883,7 @@ body{
     border-radius:18px;
   }
 
-  .atd-overview-grid{
-    grid-template-columns:1fr 1fr;
-  }
-
-  #btnVerUltimo{
+  .atd-strip-last{
     margin-left:0;
   }
 
@@ -785,25 +904,20 @@ body{
     grid-template-columns:1fr;
   }
 
-  .atd-form-actions{
-    justify-content:stretch;
+  .atd-form-actions .atd-btn--primary{
+    flex:1 1 100%;
+    order:-1;
   }
 
-  .btn-salvar{
-    width:100%;
-  }
+  .atd-actions-spacer{ display:none; }
 }
 
 @media (max-width:520px){
-  .atd-overview-grid{
-    grid-template-columns:1fr;
-  }
-
   .proc-input-inline{
     grid-template-columns:1fr;
   }
 
-  .btn-outline--icon{
+  .atd-btn--icon{
     width:100%;
   }
 }
@@ -857,14 +971,14 @@ body{
 
 .proc-inline-item strong{
   color:var(--brand-fg);
-  font-size:12px;
+  font-size:var(--fs-xs);
   font-weight:950;
   font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .proc-inline-item span{
   color:var(--text);
-  font-size:12px;
+  font-size:var(--fs-xs);
   font-weight:800;
   line-height:1.35;
 }
@@ -904,9 +1018,11 @@ body{
 }
 
 .atd-secret-rules > strong{
-  font-size:13px;
+  font-size:var(--fs-sm);
   color:var(--text);
 }
+
+.atd-radio-card small{ font-size:var(--fs-xs); }
 
 .atd-radio-card{
   display:grid;
@@ -933,7 +1049,7 @@ body{
 
 .atd-radio-card b{
   display:block;
-  font-size:13px;
+  font-size:var(--fs-sm);
 }
 
 .atd-radio-card small{

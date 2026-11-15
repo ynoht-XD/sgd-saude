@@ -10,62 +10,33 @@
 
 <div class="atd-page">
 
-  <!-- RESUMO DO PACIENTE -->
-  <section class="atd-card atd-patient-overview">
-    <div class="atd-overview-grid">
-      <article class="atd-mini-card atd-mini-card--main">
-        <span class="atd-mini-label">Nome</span>
-        <strong id="info-nome">{{ paciente_nome or request.args.get('paciente_nome','—') }}</strong>
-      </article>
+  <!-- TITULO -->
+  <header class="atd-head">
+    <span class="atd-kicker">SGD · Atendimento</span>
+    <h2>Registrar atendimento</h2>
+  </header>
 
-      <article class="atd-mini-card">
-        <span class="atd-mini-label">Prontuário</span>
-        <strong id="info-prontuario">—</strong>
-      </article>
+  <!-- FAIXA DO PACIENTE (resumo + ultimo atendimento): os ids info-*, ua-* e btnVerUltimo sao usados pelo atendimentos.js -->
+  <section class="atd-card atd-patient-strip" aria-label="Paciente">
+    <strong class="atd-strip-name" id="info-nome">{{ paciente_nome or request.args.get('paciente_nome','—') }}</strong>
 
-      <article class="atd-mini-card">
-        <span class="atd-mini-label">Modalidade</span>
-        <strong id="info-mod">—</strong>
-      </article>
-
-      <article class="atd-mini-card">
-        <span class="atd-mini-label">Nascimento</span>
-        <strong id="info-nascimento">—</strong>
-      </article>
-
-      <article class="atd-mini-card">
-        <span class="atd-mini-label">Idade</span>
-        <strong id="info-idade">—</strong>
-      </article>
-
-      <article class="atd-mini-card">
-        <span class="atd-mini-label">CID</span>
-        <strong id="info-cid">—</strong>
-      </article>
+    <div class="atd-strip-chips">
+      <span class="atd-pchip"><i>Prontuário</i><b id="info-prontuario">—</b></span>
+      <span class="atd-pchip"><i>Modalidade</i><b id="info-mod">—</b></span>
+      <span class="atd-pchip"><i>Nascimento</i><b id="info-nascimento">—</b></span>
+      <span class="atd-pchip"><i>Idade</i><b id="info-idade">—</b></span>
+      <span class="atd-pchip" title="CID registrado no cadastro do paciente (não é o CID deste atendimento)"><i>CID do cadastro</i><b id="info-cid">—</b></span>
     </div>
-  </section>
 
-  <!-- HISTÓRICO RÁPIDO -->
-  <section class="atd-card atd-inline-bar">
-    <div class="atd-last-inline-row">
-      <div class="atd-last-inline-item">
-        <span>📅</span>
-        <strong id="ua-data">—</strong>
-      </div>
-
-      <div class="atd-last-inline-item">
-        <span>👨‍⚕️</span>
-        <strong id="ua-profissional">—</strong>
-      </div>
-
-      <button type="button" class="btn-outline" id="btnVerUltimo">
-        Ver atendimento
-      </button>
-    </div>
+    <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm atd-strip-last" id="btnVerUltimo"
+            title="Abrir o último atendimento deste paciente">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 8v5l3 2m6-3a9 9 0 1 1-3-6.7M21 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Último atendimento: <b id="ua-data">—</b> · <span id="ua-profissional">—</span></span>
+    </button>
   </section>
 
   <!-- COMBO / PLANO -->
-  <section class="atd-card atd-combo-panel" id="comboPanel">
+  <section class="atd-card atd-combo-panel atd-combo-panel--slim" id="comboPanel">
     <button type="button"
             class="atd-collapse-toggle"
             id="btnToggleComboPanel"
@@ -119,7 +90,6 @@
   <section class="atd-card atd-form-card">
     <form method="post"
           action="{{ url_for('atendimentos.salvar_atendimento') }}"
-          enctype="multipart/form-data"
           id="form-atendimento"
           class="atd-form">
 
@@ -136,15 +106,19 @@
 
       <div class="atd-form-grid">
 
+        <div class="atd-section-title atd-field--full">
+          <h3>Dados do atendimento</h3>
+        </div>
+
         <!-- DATA / STATUS -->
         <div class="atd-field">
-          <label>Data</label>
-          <input type="date" name="dataAtendimento" value="{{ data_hoje }}">
+          <label for="dataAtendimento">Data</label>
+          <input type="date" id="dataAtendimento" name="dataAtendimento" value="{{ data_hoje }}">
         </div>
 
         <div class="atd-field">
-          <label>Status</label>
-          <select name="status_justificativa">
+          <label for="statusAtendimento">Status</label>
+          <select id="statusAtendimento" name="status_justificativa">
             <option value="Realizado">Realizado</option>
             <option value="Admissão">Admissão</option>
             <option value="Falta">Falta</option>
@@ -171,15 +145,13 @@
         </div>
 
         <!-- EVOLUÇÃO -->
+        <div class="atd-section-title atd-field--full">
+          <h3>Evolução</h3>
+          <p class="atd-section-sub">Evolução comum do atendimento.</p>
+        </div>
+
         <div class="atd-field atd-field--full">
-          <div class="atd-section-head">
-            <div>
-              <label for="evolucao">Evolução</label>
-              <p class="atd-section-sub">
-                Evolução comum do atendimento.
-              </p>
-            </div>
-          </div>
+          <label class="sr-only" for="evolucao">Evolução</label>
 
           <div class="atd-textarea-voice-wrap">
             <textarea id="evolucao"
@@ -187,13 +159,14 @@
                       placeholder="Descreva a evolução do atendimento..."></textarea>
 
             <button type="button"
-                    class="atd-voice-btn"
+                    class="atd-btn atd-btn--ghost atd-btn--sm atd-voice-btn"
                     id="btnFalarEvolucao"
                     aria-pressed="false">
-              🎙️ Falar
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Falar</span>
             </button>
 
-            <small class="atd-voice-status" id="voiceStatus" hidden style="display:none;">
+            <small class="atd-voice-status" id="voiceStatus" hidden>
               Ouvindo...
             </small>
           </div>
@@ -275,25 +248,26 @@
         </div>
 
         <!-- PROCEDIMENTOS -->
-        <div class="atd-field atd-field--full">
-          <div class="atd-section-head">
-            <div>
-              <label>Procedimentos</label>
-              <p class="atd-section-sub" id="hint-procs">
-                Digite o código ou parte do procedimento para receber sugestões compatíveis.
-              </p>
-            </div>
-
-            <div class="atd-section-actions">
-              <button type="button" class="btn-outline" id="btnAbrirSugestoesProc">
-                Sugestões por CID/CBO
-              </button>
-
-              <button type="button" class="btn-outline" id="btnUsarUltimosProcs">
-                Usar últimos
-              </button>
-            </div>
+        <div class="atd-section-title atd-section-title--row atd-field--full">
+          <div>
+            <h3 id="tituloProcedimentos">Procedimentos</h3>
+            <p class="atd-section-sub" id="hint-procs">
+              Digite o código ou parte do procedimento para receber sugestões compatíveis.
+            </p>
           </div>
+
+          <div class="atd-section-actions">
+            <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" id="btnAbrirSugestoesProc">
+              Sugestões por CID/CBO
+            </button>
+
+            <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" id="btnUsarUltimosProcs">
+              Usar últimos
+            </button>
+          </div>
+        </div>
+
+        <div class="atd-field atd-field--full">
 
           <div id="historicoProcedimentosBox" class="atd-procs-suggestions" hidden>
             <div class="atd-procs-suggestions-head">
@@ -307,22 +281,23 @@
           <div id="procedimentosWrap" class="atd-procs-wrap">
             <div class="proc-row atd-proc-row">
               <div class="proc-col proc-col--desc">
-                <label class="sr-only">Procedimento</label>
+                <label class="sr-only" for="procInput0">Procedimento</label>
 
                 <div class="proc-input-inline">
                   <input type="text"
+                         id="procInput0"
                          name="procedimento[]"
                          class="input proc-input"
-                         value="CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)"
+                         value=""
                          placeholder="Digite o código ou nome do procedimento"
                          autocomplete="off">
 
                   <button type="button"
                           id="btnAddProcedimento"
-                          class="btn-outline btn-outline--icon"
+                          class="atd-btn atd-btn--ghost atd-btn--icon"
                           title="Adicionar procedimento"
                           aria-label="Adicionar procedimento">
-                    +
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                   </button>
                 </div>
 
@@ -332,11 +307,12 @@
               <input type="hidden"
                      name="codigoProcedimento[]"
                      class="proc-codigo"
-                     value="0301010048">
+                     value="">
 
               <div class="proc-col proc-col--qtd">
-                <label class="sr-only">Quantidade</label>
+                <label class="sr-only" for="procQtd0">Quantidade</label>
                 <input type="number"
+                       id="procQtd0"
                        name="quantidadeProcedimento[]"
                        class="input proc-qtd"
                        min="1"
@@ -346,7 +322,7 @@
 
               <div class="proc-col proc-col--actions">
                 <button type="button"
-                        class="btn btn--ghost btnRemoveProc"
+                        class="atd-btn atd-btn--danger-quiet atd-btn--sm btnRemoveProc"
                         title="Remover procedimento"
                         aria-label="Remover procedimento">
                   Remover
@@ -359,16 +335,19 @@
       </div>
 
       <div class="atd-form-actions">
-        <button type="button" class="btn-outline" id="btnCancelarAtendimento">
+        <button type="button" class="atd-btn atd-btn--quiet" id="btnCancelarAtendimento">
           Cancelar
         </button>
 
-        <button type="button" class="btn-outline" id="btnSalvarEmitirDocs" data-emitir-docs="1"
+        <span class="atd-actions-spacer"></span>
+
+        <button type="button" class="atd-btn atd-btn--secondary" id="btnSalvarEmitirDocs" data-emitir-docs="1"
                 title="Salva o atendimento e abre a tela para emitir receita, atestado, declaração, encaminhamento ou solicitação de exame">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 13h6M9 17h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Salvar e emitir documentos
         </button>
 
-        <button type="submit" class="btn-salvar">
+        <button type="submit" class="atd-btn atd-btn--primary btn-salvar" id="btnSalvarAtendimento">
           Salvar atendimento
         </button>
       </div>
@@ -386,7 +365,7 @@
         <span id="sugestoesProcResumo">CID do paciente + CBO do profissional</span>
       </div>
 
-      <button type="button" class="btn btn--ghost" id="btnFecharSugestoesProc">
+      <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" id="btnFecharSugestoesProc">
         Fechar
       </button>
     </div>
@@ -397,7 +376,7 @@
              class="input"
              placeholder="Filtrar por código ou descrição">
 
-      <button type="button" class="btn-outline" id="btnAdicionarSelecionadosProc">
+      <button type="button" class="atd-btn atd-btn--secondary atd-btn--sm" id="btnAdicionarSelecionadosProc">
         Adicionar selecionados
       </button>
     </div>
@@ -408,6 +387,20 @@
       </div>
     </div>
   </div>
+</dialog>
+
+<!-- CONFIRMACAO (substitui o confirm() nativo) -->
+<dialog class="atd-dialog atd-dialog--sm" id="atdConfirmDialog" aria-labelledby="atdConfirmTitulo">
+  <form method="dialog" class="atd-dialog-card atd-confirm">
+    <div class="atd-dialog-head">
+      <div><strong id="atdConfirmTitulo">Confirmar</strong></div>
+    </div>
+    <div class="atd-dialog-body"><p id="atdConfirmTexto"></p></div>
+    <div class="atd-confirm-actions">
+      <button type="button" class="atd-btn atd-btn--quiet" id="atdConfirmNao">Voltar</button>
+      <button type="button" class="atd-btn atd-btn--primary" id="atdConfirmSim">Confirmar</button>
+    </div>
+  </form>
 </dialog>
 
 {% endblock %}
