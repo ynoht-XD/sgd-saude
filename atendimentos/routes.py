@@ -33,6 +33,7 @@ from .helpers import (
     buscar_combo_ativo_paciente,
     recalcular_saldo_combo,
     listar_procedimentos_compativeis_db,
+    procedimento_padrao_para_cbo,
     normalize_procs_from_form,
     resolve_logged_profissional_id,
     resolve_prof_dados,
@@ -385,6 +386,7 @@ def api_procedimentos_sugeridos():
             competencia=competencia_vigente,
             total=len(items),
             items=items,
+            padrao=procedimento_padrao_para_cbo(prof_cbo, items),   # procedimento pre-preenchido (None = comeca vazio)
         )
 
     except Exception as e:
