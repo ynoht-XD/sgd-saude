@@ -340,7 +340,7 @@ body{
 .atd-field--wide{ grid-column:span 4; }
 
 /* CID do atendimento (autocomplete) */
-.atd-opcional{ font-weight:600; color:var(--muted-2); }
+.atd-opcional{ font-weight:600; color:var(--muted); }
 .atd-cid-wrap{ position:relative; }
 .atd-cid-sug{
   position:absolute; z-index:30; left:0; right:0; top:100%; margin-top:4px;

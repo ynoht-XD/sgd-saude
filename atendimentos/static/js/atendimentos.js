@@ -891,11 +891,21 @@ function initSalvar() {
 
   form.dataset.bound = "1";
 
+  const btnEmitir = qs("#btnSalvarEmitirDocs");
+  if (btnEmitir) {
+    btnEmitir.addEventListener("click", () => {
+      form.dataset.emitirDocs = "1";
+      form.requestSubmit(qs(".btn-salvar", form));
+    });
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    // "Salvar e emitir documentos": mesmo salvamento; so muda o destino depois de salvar
-    const emitirDocs = e.submitter?.dataset?.emitirDocs === "1";
+    // "Salvar e emitir documentos": mesmo salvamento; so muda o destino depois de salvar.
+    // O botao NAO e de envio (type=button): assim o Enter num campo continua acionando o "Salvar atendimento".
+    const emitirDocs = form.dataset.emitirDocs === "1";
+    delete form.dataset.emitirDocs;
 
     const pacienteId = getPacienteId();
 
