@@ -801,6 +801,43 @@ def procedimento_compativel(cbo_prof: str, paciente_cids: list[str], proc_row: A
     return any(cid in proc_set for cid in pac_norms)
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# PROCEDIMENTO PADRAO POR CBO
+# Antes: um procedimento fixo (consulta de nivel superior, EXCETO medico) era colocado para TODO profissional, e o medico
+# (CBO 225125) nao conseguia salvar sem troca-lo. Agora o padrao e escolhido entre as CONSULTAS da tabela SIGTAP e so vale
+# se for compativel (CBO x CID, a mesma regra do salvar): a lista de compativeis vem do catalogo `procedimentos`, entao o
+# padrao nunca bloqueia o salvamento. Sem compativel (CBO tecnico, catalogo nao importado, regra de CID) = vazio.
+# ---------------------------------------------------------------------------------------------------------------------
+CONSULTA_MEDICA_AE = "0301010072"          # SIGTAP: consulta medica em atencao especializada
+CONSULTA_NIVEL_SUPERIOR_AE = "0301010048"  # SIGTAP: consulta de profissionais de nivel superior na AE (exceto medico)
+
+
+def categoria_cbo(cbo: str | None) -> str:
+    """'medico' (CBO 225xxx e o antigo 2231xx) ou 'outro'. Serve so para ORDENAR os candidatos; quem decide e o catalogo."""
+    c = "".join(ch for ch in (cbo or "") if ch.isdigit())
+    return "medico" if c.startswith("225") or c.startswith("2231") else "outro"
+
+
+def procedimento_padrao_para_cbo(cbo: str | None, compativeis: list[dict]) -> dict | None:
+    """Primeiro candidato (por categoria do CBO) que esta na lista de procedimentos compativeis; None se nenhum."""
+    if not compativeis:
+        return None
+
+    candidatos = (
+        [CONSULTA_MEDICA_AE, CONSULTA_NIVEL_SUPERIOR_AE]
+        if categoria_cbo(cbo) == "medico"
+        else [CONSULTA_NIVEL_SUPERIOR_AE, CONSULTA_MEDICA_AE]
+    )
+    por_codigo = {(x.get("codigo") or "").strip(): x for x in compativeis if (x.get("codigo") or "").strip()}
+
+    for codigo in candidatos:
+        item = por_codigo.get(codigo)
+        if item:
+            return {"codigo": codigo, "descricao": item.get("descricao") or "", "quantidade": 1}
+
+    return None
+
+
 def listar_procedimentos_compativeis_db(conn, cbo: str, paciente_cids: list[str]) -> list[dict]:
     cbo = (cbo or "").strip()
 

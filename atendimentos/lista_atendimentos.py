@@ -180,6 +180,21 @@ def _listar_fila(conn, clinica_id: int, apenas_hoje: bool = True) -> list[dict]:
 
     filtro_data = "AND DATE(f.created_at) = CURRENT_DATE" if apenas_hoje else ""
 
+    # CID do ULTIMO atendimento do paciente (quem esta na fila ainda nao tem atendimento hoje). A coluna so existe depois
+    # que o ensure do atendimento rodou: sem ela a consulta simplesmente nao traz o campo (a Lista nunca quebra por isso).
+    if has_column(conn, "atendimentos", "cid_codigo"):
+        ultimo_cid_sql = """COALESCE((
+                SELECT a.cid_codigo
+                  FROM atendimentos a
+                 WHERE a.clinica_id = f.clinica_id
+                   AND a.paciente_id = f.paciente_id
+                   AND COALESCE(a.cid_codigo, '') <> ''
+                 ORDER BY a.data_atendimento DESC NULLS LAST, a.id DESC
+                 LIMIT 1
+            ), '')"""
+    else:
+        ultimo_cid_sql = "''"
+
     cur.execute(f"""
         SELECT
             f.id,
@@ -203,7 +218,8 @@ def _listar_fila(conn, clinica_id: int, apenas_hoje: bool = True) -> list[dict]:
             COALESCE(p.cpf, '') AS cpf,
             COALESCE(p.cns, '') AS cns,
             COALESCE(p.mod, '') AS mod,
-            COALESCE(p.status, '') AS status_paciente
+            COALESCE(p.status, '') AS status_paciente,
+            {ultimo_cid_sql} AS ultimo_cid
         FROM fila_atendimentos f
         LEFT JOIN pacientes p
                ON p.id = f.paciente_id

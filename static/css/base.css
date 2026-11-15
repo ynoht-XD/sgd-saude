@@ -15,6 +15,13 @@
   --sidebar-w: 280px;
   --sidebar-w-collapsed: 84px;
 
+  /* Escala tipografica (5 tamanhos): telas novas devem usar estes em vez de px soltos */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
   --bg: #f4f7fb;
   --bg-soft: #eef4ff;
   --surface: #ffffff;
@@ -392,8 +399,9 @@ textarea{
   font-weight:900;
   letter-spacing:.5px;
   color:#fff;
+  /* UX: era --brand -> #38bdf8 (branco sobre a ponta clara = 2,1:1; no texto 3,0-3,4:1). Agora --brand -> --brand-2: >= 5,2:1 em todo o gradiente */
   background:
-    linear-gradient(135deg, var(--brand), #38bdf8);
+    linear-gradient(135deg, var(--brand), var(--brand-2));
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.22),
     0 10px 22px rgba(37,99,235,.32);
@@ -456,7 +464,7 @@ textarea{
   font-weight:800;
   font-size:14px;
   color:#fff;
-  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));   /* era #2563eb -> #0ea5e9 (branco 2,8:1 na ponta); agora >= 5,2:1 */
   box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
   flex:0 0 auto;
 }

@@ -436,6 +436,7 @@
             <div class="fila-card-main" data-pid="${escapeHtml(pacienteId)}">
               <strong>${escapeHtml(pacienteNome)}</strong>
               <span class="muted-mini">ID: ${escapeHtml(pacienteId || "—")}</span>
+              ${item.ultimo_cid ? `<span class="cid-chip" title="CID do último atendimento deste paciente">Último CID ${escapeHtml(item.ultimo_cid)}</span>` : ""}
             </div>
           </section>
 

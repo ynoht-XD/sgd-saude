@@ -1,10 +1,8 @@
 // sgd/atendimentos/static/js/atendimentos.js
 
-const PROC_PADRAO = {
-  codigo: "0301010048",
-  descricao: "CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)",
-  quantidade: 1,
-};
+// Procedimento padrao: vem do SERVIDOR (por CBO do profissional logado, so se for compativel); null = a linha comeca vazia.
+let procPadrao = null;
+let procSeq = 1;   // ids unicos para ligar <label for> as linhas de procedimento
 
 let sugestoesCache = [];
 let ultimoAtendimentoCache = null;
@@ -25,6 +23,70 @@ document.addEventListener("DOMContentLoaded", () => {
   initCidAtendimento();
   initSalvar();
 });
+
+/* ==========================================================
+   MENSAGENS E CONFIRMACAO (substituem alert() e confirm() nativos)
+========================================================== */
+
+function toast(msg, tipo = "info") {
+  let box = qs("#atdToasts");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "atdToasts";
+    box.className = "atd-toasts";
+    box.setAttribute("role", "status");
+    box.setAttribute("aria-live", "polite");
+    document.body.appendChild(box);
+  }
+
+  const el = document.createElement("div");
+  el.className = `atd-toast atd-toast--${tipo}`;
+  el.textContent = msg;
+  el.addEventListener("click", () => el.remove());
+  box.appendChild(el);
+
+  while (box.children.length > 3) box.firstElementChild.remove();
+
+  setTimeout(() => el.remove(), tipo === "error" ? 7000 : 4000);
+}
+
+/* Pergunta Sim/Nao dentro da pagina. Devolve Promise<boolean>; Esc ou "Voltar" = false. */
+function perguntar(mensagem, { titulo = "Confirmar", sim = "Confirmar", nao = "Voltar" } = {}) {
+  const dlg = qs("#atdConfirmDialog");
+  if (!dlg || typeof dlg.showModal !== "function") return Promise.resolve(window.confirm(mensagem));   // so se o <dialog> nao existir
+
+  qs("#atdConfirmTitulo", dlg).textContent = titulo;
+  qs("#atdConfirmTexto", dlg).textContent = mensagem;
+  qs("#atdConfirmSim", dlg).textContent = sim;
+  qs("#atdConfirmNao", dlg).textContent = nao;
+
+  return new Promise((resolve) => {
+    const fim = (valor) => {
+      dlg.removeEventListener("cancel", aoEsc);
+      qs("#atdConfirmSim", dlg).onclick = null;
+      qs("#atdConfirmNao", dlg).onclick = null;
+      if (dlg.open) dlg.close();
+      resolve(valor);
+    };
+    const aoEsc = (ev) => { ev.preventDefault(); fim(false); };
+
+    dlg.addEventListener("cancel", aoEsc);
+    qs("#atdConfirmSim", dlg).onclick = () => fim(true);
+    qs("#atdConfirmNao", dlg).onclick = () => fim(false);
+    dlg.showModal();
+    qs("#atdConfirmSim", dlg).focus();
+  });
+}
+
+/* Botao de voz: icone SVG (em vez de emoji) + texto */
+const ICONE_MIC = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V7a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICONE_REC = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>';
+
+function rotuloVoz(btn, estado) {
+  const mapa = { falar: [ICONE_MIC, "Falar"], ouvindo: [ICONE_REC, "Ouvindo"], indisponivel: [ICONE_MIC, "Indisponível"] };
+  const [icone, texto] = mapa[estado] || mapa.falar;
+  btn.innerHTML = `${icone}<span>${texto}</span>`;
+}
 
 /* ==========================================================
    HELPERS
@@ -164,6 +226,7 @@ function preencherUltimo(info) {
     if (btn) {
       btn.dataset.id = info.id || "";
       btn.disabled = false;
+      btn.title = "Abrir o último atendimento deste paciente";
     }
   } else {
     setText("ua-data", "—");
@@ -171,7 +234,8 @@ function preencherUltimo(info) {
 
     if (btn) {
       btn.dataset.id = "";
-      btn.disabled = false;
+      btn.disabled = true;
+      btn.title = "Este paciente ainda não tem atendimento anterior";
     }
   }
 }
@@ -216,21 +280,22 @@ function initPacienteFromURL() {
     const aid = qs("#btnVerUltimo")?.dataset.id;
 
     if (!aid) {
-      alert("Nenhum atendimento encontrado para este paciente.");
+      toast("Nenhum atendimento anterior encontrado para este paciente.");
       return;
     }
 
     try {
       const j = await fetchJSON(`/atendimentos/${aid}.json`);
 
+      // a modal "Ultimo atendimento" ja vem incluida na pagina (ultima_consulta.html)
       if (window.UCModal) {
         window.UCModal.fill(j);
         window.UCModal.open();
       } else {
-        alert(`Último atendimento:\n\nData: ${fmtISOToBR(j.data_atendimento)}\nProfissional: ${j.profissional_nome || "—"}`);
+        toast(`Último atendimento: ${fmtISOToBR(j.data_atendimento)} · ${j.profissional_nome || "—"}`);
       }
     } catch (e) {
-      alert(e.message || "Erro ao abrir o atendimento.");
+      toast(e.message || "Erro ao abrir o atendimento.", "error");
     }
   });
 }
@@ -381,12 +446,15 @@ function criarLinhaProcedimento(proc = {}) {
   const row = document.createElement("div");
   row.className = "proc-row atd-proc-row";
 
+  const n = ++procSeq;
+
   row.innerHTML = `
     <div class="proc-col proc-col--desc">
-      <label class="sr-only">Procedimento</label>
+      <label class="sr-only" for="procInput${n}">Procedimento</label>
 
       <div class="proc-input-inline">
         <input type="text"
+               id="procInput${n}"
                name="procedimento[]"
                class="input proc-input"
                placeholder="Digite o código ou nome do procedimento"
@@ -403,8 +471,9 @@ function criarLinhaProcedimento(proc = {}) {
            value="${escapeHTML(proc.codigo_sigtap || proc.codigo || "")}">
 
     <div class="proc-col proc-col--qtd">
-      <label class="sr-only">Quantidade</label>
+      <label class="sr-only" for="procQtd${n}">Quantidade</label>
       <input type="number"
+             id="procQtd${n}"
              name="quantidadeProcedimento[]"
              class="input proc-qtd"
              min="1"
@@ -412,7 +481,7 @@ function criarLinhaProcedimento(proc = {}) {
     </div>
 
     <div class="proc-col proc-col--actions">
-      <button type="button" class="btn btn--ghost btnRemoveProc">
+      <button type="button" class="atd-btn atd-btn--danger-quiet atd-btn--sm btnRemoveProc">
         Remover
       </button>
     </div>
@@ -421,28 +490,27 @@ function criarLinhaProcedimento(proc = {}) {
   return row;
 }
 
-function garantirProcedimentoPadrao() {
+/* Padrao por CBO (vem do servidor em /api/procedimentos_sugeridos, campo `padrao`; null = nada a pre-preencher).
+   Aplica UMA vez, so se a primeira linha ainda estiver vazia. Nunca e reaplicado ao salvar: assim, quem apaga o
+   procedimento recebe o aviso "Nenhum procedimento selecionado" em vez de o campo ser preenchido de novo. */
+function aplicarProcedimentoPadrao() {
   const wrap = qs("#procedimentosWrap");
-  if (!wrap) return;
+  if (!wrap || !procPadrao || wrap.dataset.padraoAplicado === "1") return;
 
   const rows = qsa(".proc-row", wrap);
 
-  if (!rows.length) {
-    wrap.appendChild(criarLinhaProcedimento(PROC_PADRAO));
-    return;
-  }
-
-  if (isProcRowEmpty(rows[0])) {
-    setProcRow(rows[0], PROC_PADRAO);
+  if (rows.length === 1 && isProcRowEmpty(rows[0])) {
+    setProcRow(rows[0], procPadrao);
+    wrap.dataset.padraoAplicado = "1";
   }
 }
 
-function limparProcedimentos({ comPadrao = true } = {}) {
+function limparProcedimentos() {
   const wrap = qs("#procedimentosWrap");
   if (!wrap) return;
 
   wrap.innerHTML = "";
-  wrap.appendChild(criarLinhaProcedimento(comPadrao ? PROC_PADRAO : {}));
+  wrap.appendChild(criarLinhaProcedimento({}));
 }
 
 function adicionarProcedimento(proc = {}) {
@@ -505,12 +573,14 @@ async function carregarSugestoesProcedimentos(showAlert = true) {
   const pacienteId = getPacienteId();
 
   if (!pacienteId) {
-    if (showAlert) alert("Paciente não identificado.");
+    if (showAlert) toast("Paciente não identificado.", "error");
     return [];
   }
 
   const j = await fetchSugestoesProcedimentos(pacienteId);
   sugestoesCache = j?.items || [];
+  procPadrao = j?.padrao || null;
+  aplicarProcedimentoPadrao();
 
   const cids = (j?.paciente_cids || []).join(", ") || "—";
   const resumo = qs("#sugestoesProcResumo");
@@ -528,8 +598,6 @@ function initProcedimentos() {
   const btnAdd = qs("#btnAddProcedimento");
 
   if (!wrap) return;
-
-  garantirProcedimentoPadrao();
 
   btnAdd?.addEventListener("click", () => adicionarProcedimento({}));
 
@@ -580,7 +648,7 @@ function initProcedimentos() {
     row?.remove();
 
     if (!qsa(".proc-row", wrap).length) {
-      wrap.appendChild(criarLinhaProcedimento(PROC_PADRAO));
+      wrap.appendChild(criarLinhaProcedimento({}));
     }
   });
 
@@ -648,7 +716,7 @@ function initModalSugestoes() {
     const marcados = qsa("#listaSugestoesProc input:checked");
 
     if (!marcados.length) {
-      alert("Selecione pelo menos um procedimento.");
+      toast("Marque pelo menos um procedimento.", "error");
       return;
     }
 
@@ -725,7 +793,7 @@ function initHistoricoProcedimentos() {
     const pacienteId = getPacienteId();
 
     if (!pacienteId) {
-      alert("Paciente não identificado.");
+      toast("Paciente não identificado.", "error");
       return;
     }
 
@@ -736,11 +804,11 @@ function initHistoricoProcedimentos() {
     const procs = ultimoAtendimentoCache?.procedimentos || [];
 
     if (!procs.length) {
-      alert("Nenhum procedimento anterior encontrado para este paciente.");
+      toast("Nenhum procedimento anterior encontrado para este paciente.");
       return;
     }
 
-    limparProcedimentos({ comPadrao: false });
+    limparProcedimentos();
 
     procs.forEach((p, idx) => {
       const item = {
@@ -768,14 +836,13 @@ function initVozEvolucao() {
 
   if (status) {
     status.hidden = true;
-    status.style.display = "none";
   }
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
     btn.disabled = true;
-    btn.textContent = "🎙️ Indisponível";
+    rotuloVoz(btn, "indisponivel");
     return;
   }
 
@@ -792,11 +859,10 @@ function initVozEvolucao() {
     listening = on;
     btn.setAttribute("aria-pressed", on ? "true" : "false");
     btn.classList.toggle("is-listening", on);
-    btn.textContent = on ? "🔴 Ouvindo" : "🎙️ Falar";
+    rotuloVoz(btn, on ? "ouvindo" : "falar");
 
     if (status) {
       status.hidden = !on;
-      status.style.display = on ? "inline-flex" : "none";
     }
   }
 
@@ -895,7 +961,7 @@ function initSalvar() {
   if (btnEmitir) {
     btnEmitir.addEventListener("click", () => {
       form.dataset.emitirDocs = "1";
-      form.requestSubmit(qs(".btn-salvar", form));
+      form.requestSubmit(qs("#btnSalvarAtendimento", form));
     });
   }
 
@@ -910,7 +976,7 @@ function initSalvar() {
     const pacienteId = getPacienteId();
 
     if (!pacienteId) {
-      alert("Paciente não informado. Volte pela fila ou selecione um paciente.");
+      toast("Paciente não informado. Volte pela fila ou selecione um paciente.", "error");
       return;
     }
 
@@ -923,8 +989,7 @@ function initSalvar() {
     btn.disabled = true;
 
     try {
-      garantirProcedimentoPadrao();
-
+      // (o procedimento padrao NAO e mais reaplicado aqui: se a pessoa apagou, vale o aviso logo abaixo)
       const fd = new FormData(form);
 
       fd.set("nomePaciente", pacienteId);
@@ -940,10 +1005,14 @@ function initSalvar() {
       );
 
       if (!hasProcedimento()) {
-        const ok = confirm("Nenhum procedimento foi selecionado. Deseja salvar mesmo assim?");
+        const ok = await perguntar(
+          "Nenhum procedimento foi selecionado. Deseja salvar mesmo assim?",
+          { titulo: "Salvar sem procedimento?", sim: "Salvar sem procedimento", nao: "Voltar e escolher" }
+        );
 
         if (!ok) {
-          if (btn) btn.disabled = false;
+          btn.disabled = false;
+          qs('input[name="procedimento[]"]')?.focus();
           return;
         }
 
@@ -952,13 +1021,29 @@ function initSalvar() {
         fd.set("enviar_sem_procedimento", "0");
       }
 
-      const resp = await fetch(form.action, {
+      const enviar = () => fetch(form.action, {
         method: "POST",
         body: fd,
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
 
-      const data = await resp.json().catch(() => null);
+      let resp = await enviar();
+      let data = await resp.json().catch(() => null);
+
+      // o servidor tambem pede confirmacao quando nao ha procedimento (rede de seguranca): pergunta e reenvia
+      if (resp.status === 409 && data?.requires_confirmation) {
+        const ok = await perguntar(data.error || "Nenhum procedimento foi selecionado. Deseja salvar mesmo assim?",
+          { titulo: "Salvar sem procedimento?", sim: "Salvar sem procedimento", nao: "Voltar e escolher" });
+
+        if (!ok) {
+          btn.disabled = false;
+          return;
+        }
+
+        fd.set("enviar_sem_procedimento", "1");
+        resp = await enviar();
+        data = await resp.json().catch(() => null);
+      }
 
       if (!resp.ok || !data?.ok) {
         throw new Error(data?.error || "Falha ao salvar atendimento.");
@@ -972,9 +1057,9 @@ function initSalvar() {
       window.location.href = data.redirect || "/atendimentos/";
     } catch (err) {
       console.error(err);
-      alert(err.message || "Erro ao salvar atendimento.");
+      toast(err.message || "Erro ao salvar atendimento.", "error");
 
-      if (btn) btn.disabled = false;
+      btn.disabled = false;
     }
   });
 }
@@ -1069,10 +1154,12 @@ function initCancelar() {
   const btn = qs("#btnCancelarAtendimento");
   if (!btn) return;
 
-  btn.addEventListener("click", () => {
-    if (confirm("Deseja cancelar o atendimento?")) {
-      window.location.href = "/atendimentos/";
-    }
+  btn.addEventListener("click", async () => {
+    const ok = await perguntar("O que foi preenchido neste atendimento será descartado.", {
+      titulo: "Cancelar o atendimento?", sim: "Descartar e sair", nao: "Continuar editando",
+    });
+
+    if (ok) window.location.href = "/atendimentos/";
   });
 }
 
@@ -1197,7 +1284,7 @@ function initVozEvolucaoMelhorado() {
 
   function toggle(on) {
     listening = on;
-    btn.textContent = on ? "🔴 Ouvindo" : "🎙️ Falar";
+    rotuloVoz(btn, on ? "ouvindo" : "falar");
     btn.classList.toggle("is-listening", on);
 
     if (status) {
