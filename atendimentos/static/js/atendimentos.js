@@ -6,6 +6,7 @@ let procSeq = 1;   // ids unicos para ligar <label for> as linhas de procediment
 
 let sugestoesCache = [];
 let ultimoAtendimentoCache = null;
+let vezCarga = 0;   // numero da carga de paciente mais recente: resposta de carga antiga (troca rapida de paciente) e descartada
 let cidsAtivos = [];   // condicoes ativas/cronicas do paciente (paciente_cids_ativos)
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -176,7 +177,9 @@ async function fetchJSON(url, options = {}) {
   const data = await resp.json().catch(() => null);
 
   if (!resp.ok) {
-    throw new Error(data?.error || `Erro HTTP ${resp.status}`);
+    const err = new Error(data?.error || `Erro HTTP ${resp.status}`);
+    err.status = resp.status;   // quem chama pode distinguir "sem permissao" (403) de falha de rede/servidor
+    throw err;
   }
 
   return data;
@@ -260,6 +263,9 @@ function preencherUltimo(info) {
 }
 
 async function carregarPacienteCompleto(id) {
+  const vez = ++vezCarga;
+  const atual = () => vez === vezCarga;   // false se o usuario ja trocou de paciente enquanto esta carga ainda respondia
+
   if (!id) {
     resetCombo();
     preencherUltimo({ ok: true, found: false });
@@ -272,19 +278,22 @@ async function carregarPacienteCompleto(id) {
   ultimoAtendimentoCache = null;
 
   const tarefas = [
-    fetchPaciente(id).then((paciente) => { if (paciente) preencherPaciente(paciente); }),
+    fetchPaciente(id).then((paciente) => { if (atual() && paciente) preencherPaciente(paciente); }),
     fetchUltimo(id).then((ultimo) => {
+      if (!atual()) return;
       ultimoAtendimentoCache = ultimo;
       preencherUltimo(ultimo);
       renderHistoricoProcedimentos(ultimo);
     }),
-    fetchCombo(id).then((combo) => preencherCombo(combo)),
+    fetchCombo(id).then((combo) => { if (atual()) preencherCombo(combo); }),
     carregarCidsAtivos(id),
     carregarSugestoesProcedimentos(false),
   ];
 
   const resultados = await Promise.allSettled(tarefas);
   resultados.forEach((r) => { if (r.status === "rejected") console.error(r.reason); });
+
+  if (!atual()) return;   // outra carga assumiu: ela dispara o proprio evento
 
   document.dispatchEvent(new CustomEvent("paciente:selecionado", {
     detail: { pacienteId: id }
@@ -601,7 +610,9 @@ async function carregarSugestoesProcedimentos(showAlert = true) {
     return [];
   }
 
+  const vez = vezCarga;
   const j = await fetchSugestoesProcedimentos(pacienteId);
+  if (vez !== vezCarga) return sugestoesCache;   // trocou de paciente no meio: nao aplica o padrao/lista do anterior
   sugestoesCache = j?.items || [];
   procPadrao = j?.padrao || null;
   aplicarProcedimentoPadrao();
@@ -824,7 +835,15 @@ function initHistoricoProcedimentos() {
     }
 
     if (!ultimoAtendimentoCache) {
-      ultimoAtendimentoCache = await fetchUltimo(pacienteId);
+      try {
+        ultimoAtendimentoCache = await fetchUltimo(pacienteId);
+      } catch (e) {
+        // o "ultimo atendimento" exige a permissao do modulo Historico de atendimentos (alem da de atendimentos): sem ela vem 403
+        toast(e.status === 403
+          ? "Você não tem permissão para ver o histórico de atendimentos deste paciente."
+          : "Não foi possível carregar os últimos procedimentos agora.", "error");
+        return;
+      }
     }
 
     const procs = ultimoAtendimentoCache?.procedimentos || [];
@@ -1219,16 +1238,19 @@ let cidsAtivosFalhou = false;
 let podeGerirCids = false;   // atendimentos:editar (o servidor decide e confere de novo em cada POST)
 
 async function carregarCidsAtivos(pacienteId) {
+  const vez = vezCarga;
   cidsAtivos = [];
   cidsAtivosFalhou = false;
   podeGerirCids = false;
   try {
     if (pacienteId) {
       const j = await fetchJSON(`/atendimentos/api/pacientes/${encodeURIComponent(pacienteId)}/cids_ativos`);
+      if (vez !== vezCarga) return;   // trocou de paciente no meio: a carga nova cuida da lista
       cidsAtivos = Array.isArray(j?.items) ? j.items : [];
       podeGerirCids = !!j?.pode_gerir;
     }
   } catch (e) {
+    if (vez !== vezCarga) return;
     cidsAtivosFalhou = true;
     console.error(e);
   }
