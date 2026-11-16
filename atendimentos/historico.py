@@ -434,13 +434,65 @@ def historico_page():
 # API · HISTÓRICO DO PACIENTE
 # ============================================================
 
+def _paciente_do_historico(conn, paciente_id: str, clinica_id: int) -> dict | None:
+    """Dados de identificacao do paciente para o cabecalho do historico (mesmo modulo/permissao e mesmo isolamento por clinica)."""
+    if not has_table(conn, "pacientes"):
+        return None
+
+    from .helpers import table_columns
+    cols = table_columns(conn, "pacientes")
+    sel = lambda c: f"COALESCE({c}::text, '')" if c in cols else "''"
+    nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else None)
+    filtro = _filtro_clinica_sql(conn, "pacientes", "p")
+    params = [paciente_id] + _params_clinica(conn, "pacientes", clinica_id)
+
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT id,
+               COALESCE(nome, '') AS nome,
+               {sel("prontuario")} AS prontuario,
+               {sel(nasc) if nasc else "''"} AS nascimento,
+               {sel("mod")} AS modalidade,
+               {sel("status")} AS status,
+               {sel("cid")} AS cid,
+               {sel("cpf")} AS cpf,
+               {sel("cns")} AS cns
+          FROM pacientes p
+         WHERE id = %s
+           {filtro}
+         LIMIT 1
+        """,
+        params,
+    )
+    r = cur.fetchone()
+    if not r:
+        return None
+
+    return {
+        "id": _row_get(r, "id", 0),
+        "nome": _row_get(r, "nome", 1, "") or "",
+        "prontuario": _row_get(r, "prontuario", 2, "") or "",
+        "nascimento": (_row_get(r, "nascimento", 3, "") or "")[:10],
+        "modalidade": _row_get(r, "modalidade", 4, "") or "",
+        "status": _row_get(r, "status", 5, "") or "",
+        "cid": _row_get(r, "cid", 6, "") or "",
+        "cpf": _row_get(r, "cpf", 7, "") or "",
+        "cns": _row_get(r, "cns", 8, "") or "",
+    }
+
+
 @atendimentos_bp.route("/api/historico")
 @require_permission("historico_atendimentos", "ver")
 def api_historico():
+    """Historico do paciente: UM item por atendimento (os procedimentos vem numa lista) + dados do paciente.
+
+    Antes a consulta fazia LEFT JOIN com os procedimentos e devolvia uma linha por procedimento: um atendimento com 3 procedimentos
+    aparecia 3 vezes no historico."""
     clinica_id = _clinica_id_atual()
     paciente_id = (request.args.get("paciente_id") or "").strip()
 
-    if not paciente_id:
+    if not paciente_id.isdigit():
         return jsonify({
             "ok": False,
             "error": "Parâmetro 'paciente_id' é obrigatório."
@@ -452,8 +504,9 @@ def api_historico():
             ensure_atendimento_procedimentos_schema(conn)
 
             if not has_table(conn, "atendimentos"):
-                return jsonify({"ok": True, "items": []})
+                return jsonify({"ok": True, "items": [], "paciente": None})
 
+            paciente = _paciente_do_historico(conn, paciente_id, clinica_id)
             cur = conn.cursor()
 
             filtro_clinica_atend = _filtro_clinica_sql(conn, "atendimentos", "a")
@@ -464,35 +517,47 @@ def api_historico():
                 SELECT
                     a.id AS atendimento_id,
                     a.data_atendimento AS data_atendimento,
-
-                    COALESCE(ap.procedimento, '') AS procedimento,
-                    COALESCE(ap.codigo_sigtap, '') AS codigo_sigtap,
-
                     COALESCE(a.status, '') AS status,
                     COALESCE(a.justificativa, '') AS justificativa,
                     COALESCE(a.evolucao, '') AS evolucao,
-
+                    COALESCE(a.anexo_atestado, '') AS anexo_atestado,
                     COALESCE(a.nome_profissional, '') AS nome_profissional,
                     COALESCE(a.cns_profissional, '') AS cns_profissional,
                     COALESCE(a.cbo_profissional, '') AS cbo_profissional,
-
                     a.combo_plano_id,
                     COALESCE(a.cid_codigo, '') AS cid_codigo
                 FROM atendimentos a
-                LEFT JOIN atendimento_procedimentos ap
-                       ON ap.atendimento_id = a.id
                 WHERE a.paciente_id = %s
                   {filtro_clinica_atend}
                 ORDER BY
                     a.data_atendimento DESC NULLS LAST,
-                    a.id DESC,
-                    ap.id ASC
-                LIMIT 800
+                    a.id DESC
+                LIMIT 400
                 """,
                 params,
             )
 
             rows = cur.fetchall() or []
+            ids = [_row_get(r, "atendimento_id", 0) for r in rows]
+
+            procs_por_atend: dict = {}
+            if ids and has_table(conn, "atendimento_procedimentos"):
+                cur.execute(
+                    """
+                    SELECT atendimento_id,
+                           COALESCE(procedimento, '') AS procedimento,
+                           COALESCE(codigo_sigtap, '') AS codigo_sigtap
+                      FROM atendimento_procedimentos
+                     WHERE atendimento_id = ANY(%s)
+                     ORDER BY atendimento_id, id
+                    """,
+                    (ids,),
+                )
+                for pr in (cur.fetchall() or []):
+                    procs_por_atend.setdefault(_row_get(pr, "atendimento_id", 0), []).append({
+                        "procedimento": _row_get(pr, "procedimento", 1, "") or "",
+                        "codigo_sigtap": _row_get(pr, "codigo_sigtap", 2, "") or "",
+                    })
 
         registrar_log(
             modulo="historico_atendimentos",
@@ -506,26 +571,29 @@ def api_historico():
             },
         )
 
-        return jsonify({
-            "ok": True,
-            "items": [
-                {
-                    "atendimento_id": _row_get(r, "atendimento_id", 0),
-                    "data_atendimento": str(_row_get(r, "data_atendimento", 1) or ""),
-                    "procedimento": _row_get(r, "procedimento", 2, "") or "",
-                    "codigo_sigtap": _row_get(r, "codigo_sigtap", 3, "") or "",
-                    "status": _row_get(r, "status", 4, "") or "",
-                    "justificativa": _row_get(r, "justificativa", 5, "") or "",
-                    "evolucao": _row_get(r, "evolucao", 6, "") or "",
-                    "profissional": _row_get(r, "nome_profissional", 7, "") or "—",
-                    "profissional_cns": _row_get(r, "cns_profissional", 8, "") or "",
-                    "profissional_cbo": _row_get(r, "cbo_profissional", 9, "") or "",
-                    "combo_plano_id": _row_get(r, "combo_plano_id", 10),
-                    "cid_codigo": _row_get(r, "cid_codigo", 11, "") or "",
-                }
-                for r in rows
-            ]
-        })
+        itens = []
+        for r in rows:
+            aid = _row_get(r, "atendimento_id", 0)
+            procs = procs_por_atend.get(aid, [])
+            itens.append({
+                "atendimento_id": aid,
+                "data_atendimento": str(_row_get(r, "data_atendimento", 1) or "")[:10],
+                "status": _row_get(r, "status", 2, "") or "",
+                "justificativa": _row_get(r, "justificativa", 3, "") or "",
+                "evolucao": _row_get(r, "evolucao", 4, "") or "",
+                "anexo_atestado": _row_get(r, "anexo_atestado", 5, "") or "",
+                "profissional": _row_get(r, "nome_profissional", 6, "") or "—",
+                "profissional_cns": _row_get(r, "cns_profissional", 7, "") or "",
+                "profissional_cbo": _row_get(r, "cbo_profissional", 8, "") or "",
+                "combo_plano_id": _row_get(r, "combo_plano_id", 9),
+                "cid_codigo": _row_get(r, "cid_codigo", 10, "") or "",
+                "procedimentos": procs,
+                # compat: o primeiro procedimento nos campos antigos
+                "procedimento": procs[0]["procedimento"] if procs else "",
+                "codigo_sigtap": procs[0]["codigo_sigtap"] if procs else "",
+            })
+
+        return jsonify({"ok": True, "paciente": paciente, "items": itens})
 
     except Exception as e:
         log_erro(
@@ -538,4 +606,5 @@ def api_historico():
                 "paciente_id": paciente_id,
             },
         )
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": "Não foi possível carregar o histórico agora."}), 500
+
