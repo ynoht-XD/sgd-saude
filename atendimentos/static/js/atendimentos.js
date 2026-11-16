@@ -266,25 +266,29 @@ async function carregarPacienteCompleto(id) {
     return;
   }
 
-  try {
-    const paciente = await fetchPaciente(id);
-    if (paciente) preencherPaciente(paciente);
+  // Tudo em PARALELO e cada pedido trata o proprio resultado ao chegar. Antes eram 5 chamadas em serie e a caixa
+  // "Ultimos procedimentos" so aparecia depois da mais lenta (a lista de sugestoes, que carrega o catalogo inteiro).
+  // Agora ela aparece assim que o "ultimo atendimento" chega; um pedido que falha nao derruba os outros.
+  ultimoAtendimentoCache = null;
 
-    const ultimo = await fetchUltimo(id);
-    preencherUltimo(ultimo);
+  const tarefas = [
+    fetchPaciente(id).then((paciente) => { if (paciente) preencherPaciente(paciente); }),
+    fetchUltimo(id).then((ultimo) => {
+      ultimoAtendimentoCache = ultimo;
+      preencherUltimo(ultimo);
+      renderHistoricoProcedimentos(ultimo);
+    }),
+    fetchCombo(id).then((combo) => preencherCombo(combo)),
+    carregarCidsAtivos(id),
+    carregarSugestoesProcedimentos(false),
+  ];
 
-    const combo = await fetchCombo(id);
-    preencherCombo(combo);
+  const resultados = await Promise.allSettled(tarefas);
+  resultados.forEach((r) => { if (r.status === "rejected") console.error(r.reason); });
 
-    await carregarCidsAtivos(id);
-    await carregarSugestoesProcedimentos(false);
-
-    document.dispatchEvent(new CustomEvent("paciente:selecionado", {
-      detail: { pacienteId: id }
-    }));
-  } catch (e) {
-    console.error(e);
-  }
+  document.dispatchEvent(new CustomEvent("paciente:selecionado", {
+    detail: { pacienteId: id }
+  }));
 }
 
 function initPacienteFromURL() {
@@ -786,9 +790,11 @@ function renderHistoricoProcedimentos(info) {
 }
 
 function initHistoricoProcedimentos() {
+  // (a caixa ja foi desenhada por carregarPacienteCompleto assim que o "ultimo atendimento" chegou; aqui so cobre o
+  //  caso de o evento vir de outro ponto sem o cache preenchido)
   document.addEventListener("paciente:selecionado", async (ev) => {
     const pacienteId = ev.detail?.pacienteId;
-    if (!pacienteId) return;
+    if (!pacienteId || ultimoAtendimentoCache) return;
 
     try {
       ultimoAtendimentoCache = await fetchUltimo(pacienteId);
@@ -1210,14 +1216,17 @@ function cidAtendimentoAtual() {
 }
 
 let cidsAtivosFalhou = false;
+let podeGerirCids = false;   // atendimentos:editar (o servidor decide e confere de novo em cada POST)
 
 async function carregarCidsAtivos(pacienteId) {
   cidsAtivos = [];
   cidsAtivosFalhou = false;
+  podeGerirCids = false;
   try {
     if (pacienteId) {
       const j = await fetchJSON(`/atendimentos/api/pacientes/${encodeURIComponent(pacienteId)}/cids_ativos`);
       cidsAtivos = Array.isArray(j?.items) ? j.items : [];
+      podeGerirCids = !!j?.pode_gerir;
     }
   } catch (e) {
     cidsAtivosFalhou = true;
@@ -1229,7 +1238,24 @@ async function carregarCidsAtivos(pacienteId) {
 function desenharCidsAtivos() {
   // a faixa do paciente e fixa e mostra sempre: sem condicoes ativas aparece "Nenhuma"; se a consulta falhou, "indisponivel" (nunca "Nenhuma")
   setText("info-cids-ativos", cidsAtivosFalhou ? "indisponível" : (cidsAtivos.map((c) => c.cid_codigo).join(" · ") || "Nenhuma"));
+  desenharListaCondicoes();
   atualizarCidAtivoBox();
+}
+
+/* Lista "Condicoes ativas do paciente": uma linha por condicao, cada uma com o proprio "Resolver" (so quem tem atendimentos:editar) */
+function desenharListaCondicoes() {
+  const bloco = qs("#blocoCondicoesAtivas");
+  const ul = qs("#listaCondicoesAtivas");
+  if (!bloco || !ul) return;
+
+  bloco.hidden = !cidsAtivos.length;
+  ul.innerHTML = cidsAtivos.map((c) => `
+    <li class="atd-condicao" data-id="${escapeHtmlCid(c.id)}">
+      <span class="atd-condicao-cid">${escapeHtmlCid(c.cid_codigo)}</span>
+      <span class="atd-condicao-desc">${escapeHtmlCid(c.descricao || "")}</span>
+      <span class="atd-condicao-desde">desde ${escapeHtmlCid(fmtISOToBR(c.data_inicio))}</span>
+      ${podeGerirCids ? `<button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" data-resolver="${escapeHtmlCid(c.id)}" aria-label="Resolver a condição ${escapeHtmlCid(c.cid_codigo)}">Resolver</button>` : ""}
+    </li>`).join("");
 }
 
 function atualizarCidAtivoBox() {
@@ -1276,42 +1302,48 @@ function aoMudarCidAtendimento() {
   timerCidMudou = setTimeout(() => { if (getPacienteId()) carregarSugestoesProcedimentos(false); }, 350);
 }
 
+/* Encerra (resolve) uma condicao ativa do paciente. Mesmo caminho para o botao da caixa do CID digitado e para os "Resolver" da lista. */
+async function resolverCondicao(id, botao) {
+  const ativa = cidsAtivos.find((c) => String(c.id) === String(id));
+  if (!ativa) return;
+
+  const ok = await perguntar(
+    `${ativa.cid_codigo} deixa de ser uma condição ativa deste paciente (o histórico fica guardado). Confirmar?`,
+    { titulo: "Marcar como resolvido?", sim: "Marcar como resolvido", nao: "Voltar" }
+  );
+  if (!ok) return;
+
+  if (botao) botao.disabled = true;
+  try {
+    const resp = await fetch(`/atendimentos/api/cids_ativos/${encodeURIComponent(id)}/resolver`, {
+      method: "POST",
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    });
+    const data = await resp.json().catch(() => null);
+
+    if (resp.status === 403) { toast("Você não tem permissão para encerrar condições do paciente.", "error"); return; }
+    if (Array.isArray(data?.items)) cidsAtivos = data.items;
+    if (!resp.ok || !data?.ok) { toast(data?.error || "Não foi possível encerrar a condição agora.", "error"); desenharCidsAtivos(); return; }
+
+    toast(`Condição ${ativa.cid_codigo} marcada como resolvida.`, "ok");
+    desenharCidsAtivos();
+    aoMudarCidAtendimento();
+  } catch (e) {
+    console.error(e);
+    toast("Não foi possível encerrar a condição agora.", "error");
+  } finally {
+    if (botao) botao.disabled = false;
+  }
+}
+
 function initCidAtivo() {
   const btn = qs("#btnCidResolver");
-  if (!btn) return;
+  if (btn) btn.addEventListener("click", () => resolverCondicao(btn.dataset.id, btn));
 
-  btn.addEventListener("click", async () => {
-    const id = btn.dataset.id;
-    const ativa = cidsAtivos.find((c) => String(c.id) === String(id));
-    if (!ativa) return;
-
-    const ok = await perguntar(
-      `${ativa.cid_codigo} deixa de ser uma condição ativa deste paciente (o histórico fica guardado). Confirmar?`,
-      { titulo: "Marcar como resolvido?", sim: "Marcar como resolvido", nao: "Voltar" }
-    );
-    if (!ok) return;
-
-    btn.disabled = true;
-    try {
-      const resp = await fetch(`/atendimentos/api/cids_ativos/${encodeURIComponent(id)}/resolver`, {
-        method: "POST",
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      });
-      const data = await resp.json().catch(() => null);
-
-      if (resp.status === 403) { toast("Você não tem permissão para encerrar condições do paciente.", "error"); return; }
-      if (Array.isArray(data?.items)) cidsAtivos = data.items;
-      if (!resp.ok || !data?.ok) { toast(data?.error || "Não foi possível encerrar a condição agora.", "error"); desenharCidsAtivos(); return; }
-
-      toast(`Condição ${ativa.cid_codigo} marcada como resolvida.`, "ok");
-      desenharCidsAtivos();
-      aoMudarCidAtendimento();
-    } catch (e) {
-      console.error(e);
-      toast("Não foi possível encerrar a condição agora.", "error");
-    } finally {
-      btn.disabled = false;
-    }
+  // lista "Condicoes ativas do paciente": um "Resolver" por condicao (delegado: a lista e redesenhada)
+  qs("#listaCondicoesAtivas")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-resolver]");
+    if (b) resolverCondicao(b.dataset.resolver, b);
   });
 }
 
