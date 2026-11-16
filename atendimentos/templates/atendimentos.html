@@ -2,6 +2,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('atendimentos.static', filename='css/atendimentos.css') }}">
+<link rel="stylesheet" href="{{ url_for('documentos.static', filename='css/documentos.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -16,24 +17,29 @@
     <h2>Registrar atendimento</h2>
   </header>
 
-  <!-- FAIXA DO PACIENTE (resumo + ultimo atendimento): os ids info-*, ua-* e btnVerUltimo sao usados pelo atendimentos.js -->
-  <section class="atd-card atd-patient-strip" aria-label="Paciente">
-    <strong class="atd-strip-name" id="info-nome">{{ paciente_nome or request.args.get('paciente_nome','—') }}</strong>
+  <!-- FAIXA DO PACIENTE (fica fixa no topo ao rolar): os ids info-*, ua-* e btnVerUltimo sao usados pelo atendimentos.js -->
+  <section class="atd-card atd-patient-strip" id="patientStrip" aria-label="Paciente">
+    <div class="atd-strip-top">
+      <strong class="atd-strip-name" id="info-nome">{{ paciente_nome or request.args.get('paciente_nome','—') }}</strong>
 
-    <div class="atd-strip-chips">
-      <span class="atd-pchip"><i>Prontuário</i><b id="info-prontuario">—</b></span>
-      <span class="atd-pchip"><i>Modalidade</i><b id="info-mod">—</b></span>
-      <span class="atd-pchip"><i>Nascimento</i><b id="info-nascimento">—</b></span>
-      <span class="atd-pchip"><i>Idade</i><b id="info-idade">—</b></span>
-      <span class="atd-pchip" title="CID registrado no cadastro do paciente (não é o CID deste atendimento)"><i>CID do cadastro</i><b id="info-cid">—</b></span>
-      <span class="atd-pchip atd-pchip--ativo" id="chipCidsAtivos" hidden title="Condições ativas/crônicas do paciente (valem entre os atendimentos)"><i>Condições ativas</i><b id="info-cids-ativos">—</b></span>
-    </div>
-
-    <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm atd-strip-last" id="btnVerUltimo"
+      <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm atd-strip-last" id="btnVerUltimo"
             title="Abrir o último atendimento deste paciente">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 8v5l3 2m6-3a9 9 0 1 1-3-6.7M21 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Último atendimento: <b id="ua-data">—</b> · <span id="ua-profissional">—</span></span>
     </button>
+    </div>
+
+    <div class="atd-strip-chips">
+      <span class="atd-pchip"><i>Prontuário</i><b id="info-prontuario">—</b></span>
+      <span class="atd-pchip"><i>Nascimento</i><b id="info-nascimento">—</b></span>
+      <span class="atd-pchip"><i>Idade</i><b id="info-idade">—</b></span>
+      <span class="atd-pchip"><i>CNS</i><b id="info-cns">—</b></span>
+      <span class="atd-pchip"><i>CPF</i><b id="info-cpf">—</b></span>
+      <span class="atd-pchip atd-pchip--atual" title="CID informado neste atendimento (campo CID abaixo)"><i><span class="atd-lbl-full">CID deste atendimento</span><span class="atd-lbl-curto">CID atual</span></i><b id="info-cid-atendimento">—</b></span>
+      <span class="atd-pchip atd-pchip--ativo" id="chipCidsAtivos" title="Condições ativas/crônicas do paciente (valem entre os atendimentos)"><i><span class="atd-lbl-full">Condições ativas</span><span class="atd-lbl-curto">Ativas</span></i><b id="info-cids-ativos">—</b></span>
+      <span class="atd-pchip" title="CID registrado no cadastro do paciente (não é o CID deste atendimento)"><i>CID do cadastro</i><b id="info-cid">—</b></span>
+      <span class="atd-pchip"><i>Modalidade</i><b id="info-mod">—</b></span>
+    </div>
   </section>
 
   <!-- COMBO / PLANO -->
@@ -154,6 +160,12 @@
               <button type="button" class="atd-btn atd-btn--ghost atd-btn--sm" id="btnCidResolver">Marcar como resolvido</button>
             </div>
           </div>
+        </div>
+
+        <!-- CONDICOES ATIVAS DO PACIENTE: cada uma tem o proprio "Resolver" (independe do CID digitado neste atendimento) -->
+        <div class="atd-field atd-field--full atd-condicoes" id="blocoCondicoesAtivas" hidden>
+          <span class="atd-condicoes-titulo">Condições ativas do paciente</span>
+          <ul class="atd-condicoes-lista" id="listaCondicoesAtivas"></ul>
         </div>
 
         <!-- EVOLUÇÃO -->
@@ -366,6 +378,23 @@
     </form>
   </section>
 
+  <!-- DOCUMENTOS DO ATENDIMENTO (inline): fica oculto ate salvar com "Salvar e emitir documentos"; usa o MESMO painel/JS da pagina de documentos -->
+  <section class="atd-card atd-docs-painel" id="atdDocsPainel" aria-labelledby="atdDocsTitulo" hidden>
+    <div class="atd-docs-head">
+      <div>
+        <h3 id="atdDocsTitulo">Documentos do atendimento</h3>
+        <p class="atd-section-sub" id="atdDocsSub">Atendimento salvo. Emita os documentos abaixo; ficam vinculados a este atendimento.</p>
+      </div>
+      <a class="atd-btn atd-btn--primary" id="btnConcluirAtendimento" href="{{ url_for('atendimentos.lista_atendimentos') }}">Concluir e voltar à lista</a>
+    </div>
+
+    <div class="doc-page atd-docs-wrap" id="docPage"
+         data-url-cid="{{ url_for('documentos.buscar_cid10') }}"
+         data-url-proc="{{ url_for('documentos.buscar_procedimentos') }}">
+      {% include '_documentos_painel.html' %}
+    </div>
+  </section>
+
 </div>
 
 <!-- MODAL CENTRAL · SUGESTÕES DE PROCEDIMENTO -->
@@ -418,5 +447,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('documentos.static', filename='js/documentos.js') }}" defer></script>
 <script src="{{ url_for('atendimentos.static', filename='js/atendimentos.js') }}"></script>
 {% endblock %}

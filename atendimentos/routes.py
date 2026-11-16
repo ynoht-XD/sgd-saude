@@ -326,8 +326,11 @@ def pagina_atendimento():
             },
         )
 
+        from documentos.validacao import TIPOS as _DOC_TIPOS   # os 5 tipos de documento (painel "emitir documentos" da propria tela)
+
         return render_template(
             "atendimentos.html",
+            tipos=[{"valor": k, "rotulo": v["rotulo"]} for k, v in _DOC_TIPOS.items()],
             pacientes=pacientes,
             profissionais=[],
             data_hoje=date.today().isoformat(),
@@ -654,6 +657,8 @@ def api_paciente():
             col_mod = "mod" if "mod" in cols else "''"
             col_nasc = "nascimento" if "nascimento" in cols else ("data_nascimento" if "data_nascimento" in cols else "''")
             col_cid = "cid" if "cid" in cols else "''"
+            col_cpf = "cpf" if "cpf" in cols else "''"
+            col_cns = "cns" if "cns" in cols else "''"
             filtro_clinica = "AND clinica_id = %s" if "clinica_id" in cols else ""
 
             params = [pid]
@@ -670,7 +675,9 @@ def api_paciente():
                     COALESCE({col_stat}, '') AS status,
                     COALESCE({col_mod}, '') AS mod,
                     COALESCE({col_nasc}, '') AS nascimento,
-                    COALESCE({col_cid}, '') AS cid
+                    COALESCE({col_cid}, '') AS cid,
+                    COALESCE({col_cpf}, '') AS cpf,
+                    COALESCE({col_cns}, '') AS cns
                 FROM pacientes
                 WHERE id = %s
                 {filtro_clinica}
@@ -693,6 +700,8 @@ def api_paciente():
             "mod": _row_get(row, "mod", 4, "") or "",
             "nascimento": str(_row_get(row, "nascimento", 5, "") or ""),
             "cid": _row_get(row, "cid", 6, "") or "-",
+            "cpf": _row_get(row, "cpf", 7, "") or "",
+            "cns": _row_get(row, "cns", 8, "") or "",
         })
 
     except Exception as e:

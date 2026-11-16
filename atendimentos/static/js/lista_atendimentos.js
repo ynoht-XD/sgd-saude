@@ -982,7 +982,20 @@
     }
   });
 
+  // aviso deixado pela tela de registrar (ex.: "CID X marcado como condicao ativa"); aparece uma vez e some
+  function mostrarAvisoPendente() {
+    try {
+      const bruto = sessionStorage.getItem("sgd_toast");
+      if (!bruto) return;
+      sessionStorage.removeItem("sgd_toast");
+      const a = JSON.parse(bruto);
+      if (a && typeof a.texto === "string" && a.texto) toast(a.texto.slice(0, 200), a.tipo === "error" ? "error" : "ok");
+    } catch (_) { /* sem sessionStorage / valor invalido: ignora */ }
+  }
+
   async function boot() {
+    mostrarAvisoPendente();
+
     log("DOM OK:", {
       cards: !!dom.cards,
       form: !!dom.form,
