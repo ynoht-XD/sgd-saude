@@ -142,7 +142,7 @@
     const s = String(d).trim();
     if (!s) return "—";
 
-    const iso = s.slice(0, 10);
+    const iso = isoDate(s);
 
     if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
       const [y, m, dia] = iso.split("-");
@@ -152,8 +152,22 @@
     return s;
   }
 
+  // "2026-11-10", "2026-11-10T00:00:00" ou "Tue, 10 Nov 2026 00:00:00 GMT" (formato que a API manda) -> "2026-11-10"
+  function isoDate(v) {
+    const s = String(v ?? "").trim();
+    if (!s) return "";
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+
+    const t = Date.parse(s);
+    if (Number.isNaN(t)) return "";
+
+    const d = new Date(t);   // a data vem a meia-noite GMT: usa os campos UTC para nao voltar um dia
+    const p2 = (n) => String(n).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`;
+  }
+
   function toDateNumber(v) {
-    const s = String(v || "").slice(0, 10);
+    const s = isoDate(v);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return 0;
     return Number(s.replaceAll("-", ""));
   }
@@ -458,60 +472,104 @@
     return arr;
   }
 
+  function tagStatusReg(label) {
+    const l = String(label || "").toLowerCase();
+    const cls = /pres|realiz|alta/.test(l) ? "acd-tag--ok" : /falt|[óo]bito|deslig/.test(l) ? "acd-tag--falta" : /just|remarc|admiss/.test(l) ? "acd-tag--alerta" : "";
+    return label && label !== "—" ? `<span class="acd-tag ${cls}">${escapeHtml(label)}</span>` : "";
+  }
+
   function renderCards(rows) {
     if (!cardsWrap) return;
 
     if (!rows || !rows.length) {
-      cardsWrap.innerHTML = `<div class="empty-state">Nenhum registro encontrado.</div>`;
+      cardsWrap.innerHTML = `<p class="acd-vazio">Nenhum registro encontrado.</p>`;
       return;
     }
 
-    cardsWrap.innerHTML = rows.map((r) => {
+    cardsWrap.innerHTML = rows.map((r, i) => {
+      const aid = String(r.id ?? r.atendimento_id ?? `i${i}`);
       const paciente = pacienteNameFrom(r);
-      const cns = cnsFrom(r);
       const dtRaw = dataFrom(r);
       const dt = dtRaw ? fmtDataBR(dtRaw) : "—";
       const prof = profNameFrom(r);
-      const status = normalizeStatusLabel(pick(r, ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], ""));
+      const statusLbl = normalizeStatusLabel(pick(r, ["status", "situacao", "comparecimento", "paciente_status", "pac__status"], ""));
       const cid = pick(r, ["pac__cid", "paciente_cid", "cid", "cid_principal", "cid10"], "");
       const cidAtend = pick(r, ["cid_codigo"], "");
-      const proc = pick(r, ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"], "");
-
+      const just = String(pick(r, ["status_justificativa", "justificativa", "motivo"], "") || "").trim();
+      const evo = String(pick(r, ["evolucao", "evolucao_texto", "observacao", "observacoes"], "") || "").trim();
+      const procs = Array.isArray(r.__procs) ? r.__procs : [];
+      const p1 = procs[0];
+      const cbo = pick(r, ["profissional_cbo", "cbo_profissional", "cbo", "ag__prof_cbo"], "");
+      const profCns = pick(r, ["profissional_cns", "cns_profissional"], "");
       const info = evoOcultaInfo(r);
-      const privClass =
-        info.tipo === "visivel" ? "is-visible" :
-        info.tipo === "restrita" ? "is-restricted" :
-        "is-empty";
-
-      const privIcon =
-        info.tipo === "visivel" ? "🔓" :
-        info.tipo === "restrita" ? "🔒" :
-        "—";
-
+      const pacId = r.paciente_id ?? "";
       const dataRow = JSON.stringify(r).replaceAll('"', "&quot;");
 
+      const subProc = p1
+        ? `${p1.codigo ? `<code>${escapeHtml(p1.codigo)}</code>` : ""}${escapeHtml(p1.procedimento)}${procs.length > 1 ? ` <span class="acd-mais">+${procs.length - 1} procedimento(s)</span>` : ""}`
+        : `<span class="acd-mais">Sem procedimento registrado</span>`;
+
+      const tags = [
+        tagStatusReg(statusLbl),
+        cidAtend ? `<span class="acd-tag acd-tag--info" title="CID do atendimento">CID ${escapeHtml(cidAtend)}</span>` : "",
+        info.tipo === "visivel" ? `<span class="acd-tag acd-tag--info" title="${escapeAttr(info.sub)}">Evolução restrita liberada</span>` : "",
+        info.tipo === "restrita" ? `<span class="acd-tag acd-tag--alerta" title="${escapeAttr(info.sub)}">Evolução restrita</span>` : "",
+      ].filter(Boolean).join("");
+
+      const procHtml = procs.length
+        ? `<ul class="acd-lista-proc">${procs.map((p) => `<li>${p.codigo ? `<code>${escapeHtml(p.codigo)}</code>` : ""}<span>${escapeHtml(p.procedimento || "—")}</span></li>`).join("")}</ul>`
+        : `<p class="acd-texto acd-texto--vazio">Nenhum procedimento registrado neste atendimento.</p>`;
+
+      const restritaHtml = info.tipo === "sem" ? "" : `
+        <div class="acd-bloco"><span class="acd-rot">Evolução restrita</span>
+          ${info.tipo === "visivel"
+            ? `<pre class="acd-texto">${escapeHtml(info.texto)}</pre>`
+            : `<p class="acd-texto acd-texto--vazio">${escapeHtml(info.sub)}</p>`}
+        </div>`;
+
       return `
-        <article class="registro-card" data-row="${dataRow}">
-          <div class="registro-top">
-            <strong title="${escapeAttr(paciente)}">${escapeHtml(paciente)}</strong>
-            <span class="badge">${escapeHtml(statusEmoji(status))} ${escapeHtml(status)}</span>
-          </div>
+        <article class="acd-item" data-aid="${escapeAttr(aid)}" data-row="${dataRow}">
+          <button type="button" class="acd-head" id="acd-h-${escapeAttr(aid)}" aria-expanded="false" aria-controls="acd-p-${escapeAttr(aid)}">
+            <span class="acd-col acd-col--data"><b>${escapeHtml(dt)}</b></span>
+            <span class="acd-col acd-col--main">
+              <span class="acd-titulo">${escapeHtml(paciente)}</span>
+              <span class="acd-sub">${escapeHtml(prof)} · ${subProc}</span>
+              ${tags ? `<span class="acd-tags">${tags}</span>` : ""}
+            </span>
+            <span class="acd-chevron" aria-hidden="true"></span>
+          </button>
 
-          <div class="registro-meta">
-            <span>📅 ${escapeHtml(dt)}</span>
-            <span>👤 ${escapeHtml(prof)}</span>
-            ${cidAtend ? `<span title="CID do atendimento">🏷️ CID atend. ${escapeHtml(cidAtend)}</span>` : ""}
-            ${cid ? `<span title="CID do cadastro do paciente">🏷️ CID ${escapeHtml(cid)}</span>` : ""}
-            ${proc ? `<span class="registro-proc">🧾 ${escapeHtml(proc)}</span>` : ""}
-          </div>
+          <div class="acd-panel" id="acd-p-${escapeAttr(aid)}" role="region" aria-labelledby="acd-h-${escapeAttr(aid)}" hidden>
+            <div class="acd-grid">
+              <div class="acd-card">
+                <span class="acd-rot">Profissional</span>
+                <div class="acd-val">${escapeHtml(prof)}<small>${cbo ? `CBO ${escapeHtml(cbo)}` : "CBO não informado"}${profCns ? ` · CNS ${escapeHtml(profCns)}` : ""}</small></div>
+              </div>
+              <div class="acd-card">
+                <span class="acd-rot">Diagnóstico (CID do atendimento)</span>
+                <div class="acd-val">${cidAtend ? `<span class="acd-cid">${escapeHtml(cidAtend)}</span>` : `<span class="acd-val--vazio">Não informado</span>`}${cid ? `<small>CID do cadastro: ${escapeHtml(cid)}</small>` : ""}</div>
+              </div>
+              <div class="acd-card">
+                <span class="acd-rot">Situação</span>
+                <div class="acd-val">${tagStatusReg(statusLbl) || `<span class="acd-val--vazio">—</span>`}${just ? `<small>${escapeHtml(just)}</small>` : ""}</div>
+              </div>
+              <div class="acd-card">
+                <span class="acd-rot">Paciente</span>
+                <div class="acd-val">${escapeHtml(paciente)}<small>CNS ${escapeHtml(cnsFrom(r))}</small></div>
+              </div>
+            </div>
 
-          <div class="registro-extra">
-            <span>CNS: ${escapeHtml(cns)}</span>
-            <span class="grid-priv ${privClass}" title="${escapeAttr(info.pill)}">${privIcon}</span>
-          </div>
+            <div class="acd-bloco"><span class="acd-rot">Procedimentos realizados</span>${procHtml}</div>
 
-          <div class="registro-actions">
-            <button class="btn primary" type="button" data-act="ver-card">Ver mais</button>
+            <div class="acd-bloco"><span class="acd-rot">Evolução</span>
+              ${evo ? `<pre class="acd-texto">${escapeHtml(evo)}</pre>` : `<p class="acd-texto acd-texto--vazio">Sem evolução registrada.</p>`}
+            </div>
+            ${restritaHtml}
+
+            <div class="acd-acoes">
+              <button type="button" class="acd-link" data-act="ver-card">Ficha completa (paciente e evolução restrita)</button>
+              ${pacId ? `<a class="acd-link" href="/atendimentos/historico?paciente_id=${encodeURIComponent(pacId)}&paciente_nome=${encodeURIComponent(paciente)}">Histórico do paciente</a>` : ""}
+            </div>
           </div>
         </article>
       `;
@@ -645,12 +703,39 @@
     return `/registros/api/list${qs ? "?" + qs : ""}`;
   }
 
+  // A API devolve UMA linha por procedimento (JOIN): um atendimento com 3 procedimentos vinha 3 vezes. Aqui vira 1 item com a lista
+  // de procedimentos, e a data fica em ISO (formatacao e ordenacao por data dependiam disso).
+  function agruparPorAtendimento(rows) {
+    const mapa = new Map();
+    const saida = [];
+
+    rows.forEach((r) => {
+      const dt = isoDate(dataFrom(r));
+      const proc = String(pick(r, ["procedimento", "procedimento_nome", "procedimento_desc", "ap_procedimento"], "") || "").trim();
+      const cod = String(pick(r, ["codigo_sigtap", "cod_sigtap", "sigtap", "ap_codigo_sigtap"], "") || "").trim();
+      const chave = r.id ?? r.atendimento_id ?? null;
+
+      let item = chave != null ? mapa.get(chave) : null;
+      if (!item) {
+        item = { ...r, ...(dt ? { data_atendimento: dt } : {}), __procs: [] };
+        if (chave != null) mapa.set(chave, item);
+        saida.push(item);
+      }
+
+      if ((proc || cod) && !item.__procs.some((x) => x.procedimento === proc && x.codigo === cod)) {
+        item.__procs.push({ procedimento: proc, codigo: cod });
+      }
+    });
+
+    return saida;
+  }
+
   async function listar() {
     try {
       const resp = await fetch(buildListURL(), { credentials: "same-origin" });
       const rows = await resp.json();
 
-      allRows = Array.isArray(rows) ? rows : [];
+      allRows = agruparPorAtendimento(Array.isArray(rows) ? rows : []);
       currentPage = 1;
       renderPagina();
     } catch (err) {
@@ -943,10 +1028,24 @@
     });
 
     document.addEventListener("click", (e) => {
+      const head = e.target.closest("#cardsRegistros .acd-head");
+
+      if (head) {
+        const item = head.closest(".acd-item");
+        const painel = item?.querySelector(".acd-panel");
+        if (painel) {
+          const abrir = head.getAttribute("aria-expanded") !== "true";
+          head.setAttribute("aria-expanded", abrir ? "true" : "false");
+          painel.hidden = !abrir;
+          item.classList.toggle("is-aberto", abrir);
+        }
+        return;
+      }
+
       const cardBtn = e.target.closest("[data-act='ver-card']");
 
       if (cardBtn) {
-        const card = cardBtn.closest(".registro-card");
+        const card = cardBtn.closest(".acd-item");
         const obj = decodeDataRow(card?.getAttribute("data-row") || "{}");
         openModalFromObj(obj);
         return;

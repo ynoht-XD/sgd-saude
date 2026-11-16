@@ -4,6 +4,7 @@
 
 {% block extra_css %}
   {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/acordeao.css') }}">
   <link rel="stylesheet" href="{{ url_for('registros.static', filename='css/registros.css') }}">
 {% endblock %}
 
@@ -159,7 +160,7 @@
       </div>
     </div>
 
-    <div id="cardsRegistros" class="registros-cards"></div>
+    <div id="cardsRegistros" class="acd-list"></div>
 
     <div class="paginacao" id="paginacao" aria-label="Paginação">
       <div class="pag-info">
