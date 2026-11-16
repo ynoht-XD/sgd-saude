@@ -208,8 +208,24 @@ async function fetchSugestoesProcedimentos(id) {
    PACIENTE
 ========================================================== */
 
+const apenasDigitos = (v) => String(v ?? "").replace(/\D/g, "");
+
+/* CPF 000.000.000-00 e CNS 000 0000 0000 0000; se nao tem o tamanho esperado, mostra como veio ("—" se vazio) */
+function fmtCPF(v) {
+  const d = apenasDigitos(v);
+  return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : (String(v ?? "").trim() || "—");
+}
+
+function fmtCNS(v) {
+  const d = apenasDigitos(v);
+  return d.length === 15 ? d.replace(/(\d{3})(\d{4})(\d{4})(\d{4})/, "$1 $2 $3 $4") : (String(v ?? "").trim() || "—");
+}
+
 function preencherPaciente(dados) {
   if (!dados) return;
+
+  setText("info-cpf", fmtCPF(dados.cpf));
+  setText("info-cns", fmtCNS(dados.cns));
 
   setText("info-nome", dados.nome || "—");
   setText("info-prontuario", dados.prontuario || "—");
@@ -955,6 +971,35 @@ function hasProcedimento() {
   return qsa('input[name="procedimento[]"]').some((el) => (el.value || "").trim());
 }
 
+/* Retorno do "marcar como condicao ativa": o servidor responde cid_ativo = "criado" | "ja_ativo" | null */
+function mensagemCidAtivo(data, cid) {
+  if (!cid || !data?.cid_ativo) return "";
+  return data.cid_ativo === "criado"
+    ? `CID ${cid} marcado como condição ativa deste paciente.`
+    : `CID ${cid} já era uma condição ativa deste paciente.`;
+}
+
+/* "Salvar e emitir documentos": o atendimento ja esta gravado; abre o painel de documentos NESTA tela (mesmas rotas da
+   pagina de documentos) e trava o formulario para nao gravar o atendimento duas vezes. Devolve false se o painel nao existe. */
+function abrirPainelDocumentos(form, data, avisoCid) {
+  const painel = qs("#atdDocsPainel");
+  if (!painel || !window.SGDDocumentos) return false;
+
+  form.dataset.salvo = "1";
+  form.inert = true;                                   // nada mais clicavel/focavel no formulario salvo
+  qs(".atd-form-card")?.classList.add("is-salvo");     // esconde a barra de salvar e deixa o formulario so para consulta
+  qsa('[type="submit"]', form).forEach((b) => { b.disabled = true; });
+
+  setText("atdDocsSub", `Atendimento nº ${data.atendimento_id} salvo. Emita os documentos abaixo; ficam vinculados a ele.`);
+  painel.hidden = false;
+  window.SGDDocumentos.ativar({ atendimentoId: data.atendimento_id, dataAtendimento: qs('input[name="dataAtendimento"]')?.value || "" });
+
+  toast(avisoCid ? `Atendimento salvo. ${avisoCid}` : "Atendimento salvo. Emita os documentos abaixo.", "ok");
+  painel.scrollIntoView({ behavior: "smooth", block: "start" });
+  qs(".doc-tipo", painel)?.focus({ preventScroll: true });
+  return true;
+}
+
 function initSalvar() {
   const form = qs("#form-atendimento");
   if (!form || form.dataset.bound === "1") return;
@@ -987,6 +1032,9 @@ function initSalvar() {
     setValue("nomePaciente", pacienteId);
 
     if (!cidAtendimentoPronto()) return;
+
+    if (form.dataset.salvo === "1") return;   // ja salvo: o painel de documentos esta aberto; nao grava de novo
+    const cidSalvo = cidAtendimentoAtual();
 
     const btns = qsa('[type="submit"]', form);
     const btn = { set disabled(v) { btns.forEach((b) => { b.disabled = v; }); }, get disabled() { return btns.some((b) => b.disabled); } };
@@ -1053,11 +1101,16 @@ function initSalvar() {
         throw new Error(data?.error || "Falha ao salvar atendimento.");
       }
 
+      const avisoCid = mensagemCidAtivo(data, cidSalvo);
+
       if (emitirDocs && data.atendimento_id) {
-        window.location.href = `/atendimentos/${encodeURIComponent(data.atendimento_id)}/documentos`;
+        if (abrirPainelDocumentos(form, data, avisoCid)) return;   // fica na MESMA tela
+        window.location.href = `/atendimentos/${encodeURIComponent(data.atendimento_id)}/documentos`;   // so se o painel nao existir
         return;
       }
 
+      // vai para a lista: guarda o aviso para ela mostrar (a pagina muda, um toast aqui sumiria)
+      if (avisoCid) { try { sessionStorage.setItem("sgd_toast", JSON.stringify({ texto: avisoCid, tipo: "ok" })); } catch (_) { /* sem sessionStorage: segue sem o aviso */ } }
       window.location.href = data.redirect || "/atendimentos/";
     } catch (err) {
       console.error(err);
@@ -1088,6 +1141,7 @@ function initCidAtendimento() {
 
   const url = busca.dataset.urlCid;
   let timer = null;
+  let vezBusca = 0;   // identifica a busca mais recente; blur/edicao invalidam as anteriores
 
   const mostrarMsg = (texto, erro = false) => {
     msg.textContent = texto || "";
@@ -1110,10 +1164,13 @@ function initCidAtendimento() {
     const q = busca.value.trim();
     if (q.length < 2) { caixa.hidden = true; atualizarCidAtivoBox(); return; }
 
+    const minhaVez = ++vezBusca;
     timer = setTimeout(async () => {
       try {
         const resp = await fetch(`${url}?q=${encodeURIComponent(q)}`, { credentials: "same-origin" });
         const data = await resp.json();
+        // resposta velha/fora de foco: se a pessoa ja digitou outra coisa ou saiu do campo, nao reabre a lista
+        if (minhaVez !== vezBusca || document.activeElement !== busca) return;
         const itens = Array.isArray(data.items) ? data.items : [];
 
         caixa.innerHTML = itens.length
@@ -1129,7 +1186,10 @@ function initCidAtendimento() {
     }, 250);
   });
 
-  busca.addEventListener("blur", () => setTimeout(() => { caixa.hidden = true; atualizarCidAtivoBox(); }, 180));
+  busca.addEventListener("blur", () => {
+    vezBusca++; clearTimeout(timer);   // saiu do campo: nenhuma busca pendente pode reabrir a lista
+    setTimeout(() => { caixa.hidden = true; atualizarCidAtivoBox(); }, 180);   // atraso: da tempo de clicar numa sugestao
+  });
 }
 
 /* ==========================================================
@@ -1149,29 +1209,32 @@ function cidAtendimentoAtual() {
   return RE_CID_ATENDIMENTO.test(texto) ? texto.toUpperCase() : "";
 }
 
+let cidsAtivosFalhou = false;
+
 async function carregarCidsAtivos(pacienteId) {
   cidsAtivos = [];
+  cidsAtivosFalhou = false;
   try {
     if (pacienteId) {
       const j = await fetchJSON(`/atendimentos/api/pacientes/${encodeURIComponent(pacienteId)}/cids_ativos`);
       cidsAtivos = Array.isArray(j?.items) ? j.items : [];
     }
   } catch (e) {
+    cidsAtivosFalhou = true;
     console.error(e);
   }
   desenharCidsAtivos();
 }
 
 function desenharCidsAtivos() {
-  const chip = qs("#chipCidsAtivos");
-  if (chip) {
-    chip.hidden = !cidsAtivos.length;
-    setText("info-cids-ativos", cidsAtivos.map((c) => c.cid_codigo).join(" · ") || "—");
-  }
+  // a faixa do paciente e fixa e mostra sempre: sem condicoes ativas aparece "Nenhuma"; se a consulta falhou, "indisponivel" (nunca "Nenhuma")
+  setText("info-cids-ativos", cidsAtivosFalhou ? "indisponível" : (cidsAtivos.map((c) => c.cid_codigo).join(" · ") || "Nenhuma"));
   atualizarCidAtivoBox();
 }
 
 function atualizarCidAtivoBox() {
+  setText("info-cid-atendimento", cidAtendimentoAtual() || "—");   // faixa fixa do paciente: CID deste atendimento, ao vivo
+
   const box = qs("#cidAtivoBox");
   if (!box) return;
 
@@ -1179,7 +1242,9 @@ function atualizarCidAtivoBox() {
   const chk = qs("#cidMarcarAtivo");
   const ja = qs("#cidAtivoJa");
   const cid = cidAtendimentoAtual();
-  const listaAberta = !!qs("#cidAtendimentoSug") && !qs("#cidAtendimentoSug").hidden;   // a lista de sugestoes fica POR CIMA: espera fechar
+  // a lista de sugestoes fica POR CIMA: espera fechar. So conta se o campo ainda tem o foco (lista "solta" sem foco nao esconde a caixa)
+  const sug = qs("#cidAtendimentoSug");
+  const listaAberta = !!sug && !sug.hidden && document.activeElement === qs("#cidAtendimentoBusca");
 
   if (!cid || !getPacienteId() || listaAberta) {
     box.hidden = true; lblMarcar.hidden = true; ja.hidden = true;

@@ -56,13 +56,13 @@
   <div class="cadastro-container">
     <h2>Visualização de Paciente</h2>
 
+    {# Condicoes ativas (CID): no topo (como na edicao), so leitura aqui; adicionar/encerrar fica na edicao do paciente #}
+    {% set modo_leitura = true %}
+    {% include '_cids_ativos.html' %}
+
     <form class="form-grid">
       {% include 'formulario_visualizacao.html' %}
     </form>
-
-    {# Condicoes ativas (CID): so leitura aqui; adicionar/encerrar fica na edicao do paciente #}
-    {% set modo_leitura = true %}
-    {% include '_cids_ativos.html' %}
 
     {# ==================== Seção: Agendamentos ==================== #}
     <section class="section-card" aria-labelledby="agds-title">

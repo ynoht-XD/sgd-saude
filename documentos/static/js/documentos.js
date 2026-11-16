@@ -6,14 +6,15 @@
   const page = document.getElementById("docPage");
   if (!page) return;
 
+  // Lidos na hora do uso (getters): na tela de registrar o atendimento so tem id DEPOIS de salvar (ver SGDDocumentos.ativar no fim).
   const CFG = {
-    atendimentoId: page.dataset.atendimentoId,
-    dataAtendimento: page.dataset.dataAtendimento || "",
-    urlLista: page.dataset.urlLista,
-    urlCriar: page.dataset.urlCriar,
-    urlBase: page.dataset.urlBase,
-    urlCid: page.dataset.urlCid,
-    urlProc: page.dataset.urlProc,
+    get atendimentoId() { return page.dataset.atendimentoId || ""; },
+    get dataAtendimento() { return page.dataset.dataAtendimento || ""; },
+    get urlLista() { return page.dataset.urlLista; },
+    get urlCriar() { return page.dataset.urlCriar; },
+    get urlBase() { return page.dataset.urlBase; },
+    get urlCid() { return page.dataset.urlCid; },
+    get urlProc() { return page.dataset.urlProc; },
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -332,5 +333,19 @@
     }
   });
 
-  carregar();
+  // Pagina propria de documentos: o atendimento ja existe, carrega a lista na hora.
+  if (CFG.atendimentoId) carregar();
+
+  // Tela de registrar atendimento: o painel e criado vazio e ativado depois de salvar (mesmas rotas, mesmo formulario).
+  window.SGDDocumentos = {
+    ativar({ atendimentoId, dataAtendimento = "" }) {
+      const base = `/atendimentos/${encodeURIComponent(atendimentoId)}/documentos`;
+      page.dataset.atendimentoId = String(atendimentoId);
+      page.dataset.dataAtendimento = dataAtendimento;
+      page.dataset.urlBase = base;
+      page.dataset.urlCriar = base;
+      page.dataset.urlLista = `${base}/api`;
+      return carregar();
+    },
+  };
 })();

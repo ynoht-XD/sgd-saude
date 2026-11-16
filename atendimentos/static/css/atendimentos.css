@@ -91,13 +91,26 @@ body{
   line-height:1.2;
 }
 
-/* FAIXA DO PACIENTE (resumo + ultimo atendimento) */
+/* FAIXA DO PACIENTE: fica FIXA (sticky) logo abaixo da barra superior enquanto a pagina rola */
 .atd-patient-strip{
+  position:sticky;
+  top:var(--topbar-h, 64px);
+  z-index:12;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:10px 16px;
+  background:var(--panel);              /* opaco: o formulario rola por baixo sem aparecer */
+}
+
+/* foco/teclado e ancoras nao podem parar escondidos atras da faixa fixa */
+:root:has(.atd-patient-strip){ scroll-padding-top:calc(var(--topbar-h, 64px) + 150px); }
+
+.atd-strip-top{
   display:flex;
   flex-wrap:wrap;
   align-items:center;
-  gap:10px 14px;
-  padding:12px 16px;
+  gap:6px 14px;
 }
 
 .atd-strip-name{
@@ -110,15 +123,14 @@ body{
 .atd-strip-chips{
   display:flex;
   flex-wrap:wrap;
-  gap:8px;
-  flex:1 1 360px;
+  gap:6px 8px;
 }
 
 .atd-pchip{
   display:inline-flex;
   align-items:baseline;
   gap:6px;
-  padding:4px 10px;
+  padding:3px 10px;
   border-radius:999px;
   background:var(--surface-3);
   font-size:var(--fs-xs);
@@ -373,6 +385,7 @@ body{
 .atd-field .atd-cid-check input{ flex:0 0 auto; width:18px; height:18px; padding:0; margin:1px 0 0; border:0; border-radius:4px; box-shadow:none; accent-color:var(--brand); }
 .atd-cid-ja{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--surface-2); font-size:var(--fs-sm); }
 .atd-pchip--ativo b{ color:var(--brand); }
+.atd-pchip--atual b{ color:var(--brand); }
 .atd-field--full{ grid-column:1 / -1; }
 
 .atd-field label{
@@ -894,6 +907,21 @@ body{
     margin-left:0;
   }
 
+  .atd-patient-strip{ padding:8px 12px; gap:6px; }
+  .atd-strip-name{ font-size:var(--fs-md, 1rem); }
+  .atd-strip-chips{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    padding-bottom:2px;
+    scrollbar-width:thin;
+  }
+  .atd-pchip{ flex:0 0 auto; }
+  .atd-lbl-full{ display:none; }
+  .atd-lbl-curto{ display:inline; }
+  .atd-pchip--atual{ order:-2; }   /* no celular so cabem poucos chips sem rolar: os mais importantes vem primeiro */
+  .atd-pchip--ativo{ order:-1; }
+  :root:has(.atd-patient-strip){ scroll-padding-top:calc(var(--topbar-h, 64px) + 120px); }
+
   .atd-section-head,
   .atd-dialog-head{
     flex-direction:column;
@@ -1070,3 +1098,37 @@ body{
   display:none !important;
 }
 
+
+
+.atd-lbl-curto{ display:none; }
+
+/* DOCUMENTOS DO ATENDIMENTO (painel inline, depois de "Salvar e emitir documentos") */
+.atd-docs-painel{ margin-top:16px; }
+.atd-docs-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px 16px;
+  margin-bottom:12px;
+}
+.atd-docs-head h3{ margin:0 0 4px; font-size:var(--fs-lg); }
+.atd-docs-wrap.doc-page{ max-width:none; margin:0; padding:0; }   /* o .doc-page da pagina propria tem largura/margens; aqui o card ja cuida disso */
+.atd-docs-wrap .doc-card{ box-shadow:none; background:var(--surface-2, var(--surface)); }
+
+/* o painel de documentos usa a MESMA escala de fontes da tela de registrar (--fs-*), nao os rem/em da pagina propria de documentos */
+.atd-docs-wrap{ font-size:var(--fs-md); }
+.atd-docs-wrap .doc-card h3,
+.atd-docs-wrap .doc-dialog-head h3{ font-size:var(--fs-lg); }
+.atd-docs-wrap .doc-fechar,
+.atd-docs-wrap .doc-selecionado button{ font-size:var(--fs-xl); }
+.atd-docs-wrap .doc-item-meta,
+.atd-docs-wrap .doc-campo > span,
+.atd-docs-wrap .doc-legenda,
+.atd-docs-wrap .doc-dica,
+.atd-docs-wrap .doc-bloco-topo strong{ font-size:var(--fs-sm); }
+.atd-docs-wrap .doc-erros{ font-size:var(--fs-md); }
+
+/* formulario ja salvo: fica so para consulta (nao da para salvar de novo e duplicar o atendimento) */
+.atd-form-card.is-salvo .atd-form-actions{ display:none; }
+.atd-form-card.is-salvo form{ opacity:.72; }
