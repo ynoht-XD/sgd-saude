@@ -33,3 +33,4 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+data_base/ibge/*.txt
