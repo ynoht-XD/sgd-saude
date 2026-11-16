@@ -1,160 +1,203 @@
-// sgd/atendimentos/static/js/historico.js
+// atendimentos/static/js/historico.js
+// Historico de atendimentos em ACORDEAO: coluna 1 = data; coluna 2 = profissional + procedimento (com o codigo);
+// clicar na linha expande os detalhes. Os dados vem de UMA chamada (/atendimentos/api/historico): lista + paciente.
+(() => {
+  "use strict";
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Se vier por URL: ?paciente_id=123&paciente_nome=Fulano
-  const params = new URLSearchParams(location.search);
-  const pid = params.get('paciente_id') || '';
-  const nome = params.get('paciente_nome') || '';
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+  const digitos = (v) => String(v ?? "").replace(/\D/g, "");
 
-  // Pré-preenche lateral (reutiliza helpers do atendimentos.js):
-  if (nome) {
-    const spanNome = document.getElementById('infoNome');
-    if (spanNome) spanNome.textContent = nome;
-  }
-  if (pid) {
-    // Mostra lateral, busca último atendimento e demais infos básicas (reuso de funções)
-    const infoBox = document.getElementById('dadosPaciente');
-    if (infoBox) infoBox.style.display = 'block';
+  const toBR = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? iso.split("-").reverse().join("/") : (iso || "—"));
+  const diaSemana = (iso) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    const nome = new Date(y, m - 1, d).toLocaleDateString("pt-BR", { weekday: "long" });
+    return nome.charAt(0).toUpperCase() + nome.slice(1);   // "Terça-feira" (so a primeira letra)
+  };
+  const idade = (iso) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return "";
+    const [y, m, d] = iso.split("-").map(Number); const h = new Date();
+    let a = h.getFullYear() - y; if (h.getMonth() + 1 < m || (h.getMonth() + 1 === m && h.getDate() < d)) a--;
+    return a >= 0 ? `${a} ano(s)` : "";
+  };
+  const fmtCPF = (v) => { const d = digitos(v); return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : (String(v ?? "").trim() || "—"); };
+  const fmtCNS = (v) => { const d = digitos(v); return d.length === 15 ? d.replace(/(\d{3})(\d{4})(\d{4})(\d{4})/, "$1 $2 $3 $4") : (String(v ?? "").trim() || "—"); };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v ?? "") === "" ? "—" : v; };
 
-    // Reaproveita a mesma função do atendimentos.js se quiser (outra opção: duplicar lógica mínima aqui)
-    try {
-      // preencher "Último Atendimento" rapidamente
-      fetch(`/atendimentos/api/ultimo_atendimento?id=${encodeURIComponent(pid)}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(j => {
-          if (!j) return;
-          const toBR = (iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso||'') ? iso.split('-').reverse().join('/') : (iso || '-');
-          const spanUlt = document.getElementById('infoUltimaConsulta');
-          const spanProf = document.getElementById('infoProfissional');
-          if (spanUlt) spanUlt.textContent = j && j.ok && j.found ? toBR(j.data) : '-';
-          if (spanProf) spanProf.textContent = j && j.ok && j.found ? (j.profissional || '-') : '-';
+  let ITENS = [];
+  let PACIENTE_ID = "";
 
-          // botão ver atendimento (último)
-          const btnVer = document.querySelector('#blocoUltimoAtendimento .btn-outline');
-          if (btnVer) {
-            btnVer.onclick = async (ev) => {
-              ev.preventDefault();
-              if (!j || !j.ok || !j.found || !j.id) {
-                alert('Nenhum atendimento encontrado.');
-                return;
-              }
-              try {
-                const r = await fetch(`/atendimentos/${j.id}.json`);
-                if (!r.ok) throw new Error('Falha ao carregar atendimento');
-                const data = await r.json();
-                if (window.UCModal) {
-                  window.UCModal.fill(data);
-                  window.UCModal.open();
-                } else {
-                  window.open(`/atendimentos/${j.id}.json`, '_blank');
-                }
-              } catch (e) {
-                console.error(e);
-                alert('Não foi possível abrir o atendimento.');
-              }
-            };
-          }
-        });
-    } catch {}
+  // ---------------------------------------------------------------- paciente
+  function preencherPaciente(p, nomeUrl) {
+    set("hxNome", (p && p.nome) || nomeUrl || "—");
+    if (!p) return;
+    set("hxProntuario", p.prontuario);
+    set("hxNascimento", p.nascimento ? `${toBR(p.nascimento)}${idade(p.nascimento) ? " · " + idade(p.nascimento) : ""}` : "");
+    set("hxCns", fmtCNS(p.cns));
+    set("hxCpf", fmtCPF(p.cpf));
+    set("hxMod", p.modalidade);
+    set("hxStatus", p.status);
+    set("hxCid", p.cid && p.cid !== "-" ? p.cid : "");
   }
 
-  // Carregar histórico no container
-  carregarHistorico(pid);
-
-  // Filtro de busca
-  const filtro = document.getElementById('histSearch');
-  if (filtro) {
-    filtro.addEventListener('input', () => filtrarHistorico(filtro.value.trim().toLowerCase()));
-  }
-});
-
-let HIST_CACHE = [];
-
-async function carregarHistorico(pacienteId) {
-  const container = document.getElementById('histContainer');
-  if (!container) return;
-
-  if (!pacienteId) {
-    container.insertAdjacentHTML('beforeend', `<div class="hist-row"><div class="hist-cell" style="grid-column:1 / -1">Selecione um paciente para ver o histórico.</div></div>`);
-    return;
+  // ---------------------------------------------------------------- etiquetas
+  function tagStatus(status) {
+    const s = String(status || "").trim();
+    if (!s) return "";
+    const k = s.toLowerCase();
+    const cls = /^(realizado|presente|alta)/.test(k) ? "acd-tag--ok"
+      : /^(falt|[óo]bito|desligamento)/.test(k) ? "acd-tag--falta"
+      : /^(justificado|remarcado|admiss)/.test(k) ? "acd-tag--alerta" : "";
+    return `<span class="acd-tag ${cls}">${esc(s)}</span>`;
   }
 
-  try {
-    const r = await fetch(`/atendimentos/api/historico?paciente_id=${encodeURIComponent(pacienteId)}`);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'Erro ao carregar histórico');
+  const linkAnexo = (caminho) => {
+    const c = String(caminho || "").trim();
+    return c && /^[\w\-./ ]+$/.test(c) && !c.includes("..") ? `/${c}`.replace(/^\/+/, "/") : "";   // so caminho relativo simples
+  };
 
-    HIST_CACHE = j.items || [];
-    renderHistorico(HIST_CACHE);
-  } catch (e) {
-    console.error(e);
-    container.insertAdjacentHTML('beforeend', `<div class="hist-row"><div class="hist-cell" style="grid-column:1 / -1">Não foi possível carregar o histórico.</div></div>`);
-  }
-}
-
-function renderHistorico(items) {
-  const container = document.getElementById('histContainer');
-  if (!container) return;
-
-  // remove linhas existentes (menos o header)
-  [...container.querySelectorAll('.hist-row:not(.header)')].forEach(el => el.remove());
-
-  const toBR = (iso) => /^\d{4}-\d{2}-\d{2}$/.test(iso||'') ? iso.split('-').reverse().join('/') : (iso || '-');
-
-  if (!items || items.length === 0) {
-    container.insertAdjacentHTML('beforeend', `<div class="hist-row"><div class="hist-cell" style="grid-column:1 / -1">Sem atendimentos cadastrados.</div></div>`);
-    return;
-  }
-
-  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-
-  items.forEach(it => {
-    // a API devolve atendimento_id e profissional (antes o JS lia id e profissional_nome: "Ver" saia com id indefinido)
+  // ---------------------------------------------------------------- um item do acordeao
+  function itemHtml(it, aberto) {
     const aid = it.atendimento_id ?? it.id;
-    const prof = it.profissional_nome || it.profissional || '—';
-    const row = document.createElement('div');
-    row.className = 'hist-row';
-    row.innerHTML = `
-      <div class="hist-cell" data-label="Data">${esc(toBR(it.data_atendimento))}</div>
-      <div class="hist-cell" data-label="Procedimento" title="${esc((it.procedimento||'').trim())}">${esc((it.procedimento||'').trim())}</div>
-      <div class="hist-cell" data-label="CID" title="CID do atendimento">${esc(it.cid_codigo || '—')}</div>
-      <div class="hist-cell" data-label="Profissional" title="${esc(prof)}">${esc(prof)}</div>
-      <div class="hist-cell" data-label="Status">${esc(it.status||'')}</div>
-      <div class="hist-cell action">
-        <button class="hist-btn" data-aid="${esc(aid)}">Ver</button>
-        <a class="hist-btn" href="/atendimentos/${encodeURIComponent(aid)}/documentos">Documentos</a>
-      </div>
-    `;
-    // click em "Ver" → abre modal
-    row.querySelector('.hist-btn').addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      const aid = ev.currentTarget.getAttribute('data-aid');
-      try {
-        const r = await fetch(`/atendimentos/${aid}.json`);
-        if (!r.ok) throw new Error('Falha ao carregar atendimento');
-        const data = await r.json();
-        if (window.UCModal) {
-          window.UCModal.fill(data);
-          window.UCModal.open();
-        } else {
-          window.open(`/atendimentos/${aid}.json`, '_blank');
-        }
-      } catch (e) {
-        console.error(e);
-        alert('Não foi possível abrir o atendimento.');
-      }
+    const procs = Array.isArray(it.procedimentos) ? it.procedimentos : [];
+    const prof = it.profissional || "—";
+    const p1 = procs[0];
+    const subProc = p1
+      ? `${p1.codigo_sigtap ? `<code>${esc(p1.codigo_sigtap)}</code>` : ""}${esc(p1.procedimento || "")}${procs.length > 1 ? ` <span class="acd-mais">+${procs.length - 1} procedimento(s)</span>` : ""}`
+      : `<span class="acd-mais">Sem procedimento registrado</span>`;
+
+    const tags = [tagStatus(it.status), it.cid_codigo ? `<span class="acd-tag acd-tag--info" title="CID do atendimento">CID ${esc(it.cid_codigo)}</span>` : ""].filter(Boolean).join("");
+
+    const procHtml = procs.length
+      ? `<ul class="acd-lista-proc">${procs.map((p) => `<li>${p.codigo_sigtap ? `<code>${esc(p.codigo_sigtap)}</code>` : ""}<span>${esc(p.procedimento || "—")}</span></li>`).join("")}</ul>`
+      : `<p class="acd-texto acd-texto--vazio">Nenhum procedimento registrado neste atendimento.</p>`;
+
+    const anexo = linkAnexo(it.anexo_atestado);
+    const evo = (it.evolucao || "").trim();
+    const just = (it.justificativa || "").trim();
+
+    return `
+      <article class="acd-item${aberto ? " is-aberto" : ""}" data-aid="${esc(aid)}">
+        <button type="button" class="acd-head" id="acd-h-${esc(aid)}" aria-expanded="${aberto ? "true" : "false"}" aria-controls="acd-p-${esc(aid)}">
+          <span class="acd-col acd-col--data"><b>${esc(toBR(it.data_atendimento))}</b><small>${esc(diaSemana(it.data_atendimento))}</small></span>
+          <span class="acd-col acd-col--main">
+            <span class="acd-titulo">${esc(prof)}</span>
+            <span class="acd-sub">${subProc}</span>
+            ${tags ? `<span class="acd-tags">${tags}</span>` : ""}
+          </span>
+          <span class="acd-chevron" aria-hidden="true"></span>
+        </button>
+
+        <div class="acd-panel" id="acd-p-${esc(aid)}" role="region" aria-labelledby="acd-h-${esc(aid)}"${aberto ? "" : " hidden"}>
+          <div class="acd-grid">
+            <div class="acd-card">
+              <span class="acd-rot">Profissional</span>
+              <div class="acd-val">${esc(prof)}
+                <small>${it.profissional_cbo ? `CBO ${esc(it.profissional_cbo)}` : "CBO não informado"}${it.profissional_cns ? ` · CNS ${esc(fmtCNS(it.profissional_cns))}` : ""}</small>
+              </div>
+            </div>
+            <div class="acd-card">
+              <span class="acd-rot">Diagnóstico (CID do atendimento)</span>
+              <div class="acd-val">${it.cid_codigo ? `<span class="acd-cid">${esc(it.cid_codigo)}</span>` : `<span class="acd-val--vazio">Não informado</span>`}</div>
+            </div>
+            <div class="acd-card">
+              <span class="acd-rot">Situação</span>
+              <div class="acd-val">${tagStatus(it.status) || `<span class="acd-val--vazio">—</span>`}${just ? `<small>${esc(just)}</small>` : ""}</div>
+            </div>
+          </div>
+
+          <div class="acd-bloco"><span class="acd-rot">Procedimentos realizados</span>${procHtml}</div>
+
+          <div class="acd-bloco"><span class="acd-rot">Evolução</span>
+            ${evo ? `<pre class="acd-texto">${esc(evo)}</pre>` : `<p class="acd-texto acd-texto--vazio">Sem evolução registrada.</p>`}
+          </div>
+
+          <div class="acd-acoes">
+            <a class="acd-link" href="/atendimentos/${encodeURIComponent(aid)}/documentos">Documentos</a>
+            ${anexo ? `<a class="acd-link" href="${esc(anexo)}" target="_blank" rel="noopener">Abrir anexo</a>` : ""}
+          </div>
+        </div>
+      </article>`;
+  }
+
+  // ---------------------------------------------------------------- lista
+  function renderizar(itens, { abrirPrimeiro = false } = {}) {
+    const box = $("#histContainer");
+    if (!box) return;
+    if (!itens.length) {
+      box.innerHTML = `<p class="acd-vazio">${ITENS.length ? "Nenhum atendimento corresponde ao filtro." : "Sem atendimentos cadastrados para este paciente."}</p>`;
+      return;
+    }
+    box.innerHTML = itens.map((it, i) => itemHtml(it, abrirPrimeiro && i === 0)).join("");
+  }
+
+  function alternar(head) {
+    const item = head.closest(".acd-item");
+    const painel = item && $(".acd-panel", item);
+    if (!painel) return;
+    const abrir = head.getAttribute("aria-expanded") !== "true";
+    head.setAttribute("aria-expanded", abrir ? "true" : "false");
+    painel.hidden = !abrir;
+    item.classList.toggle("is-aberto", abrir);
+  }
+
+  function filtrar(q) {
+    const t = q.trim().toLowerCase();
+    const lista = !t ? ITENS : ITENS.filter((it) => {
+      const alvo = [
+        it.profissional, it.cid_codigo, it.status, toBR(it.data_atendimento), it.data_atendimento,
+        ...(it.procedimentos || []).flatMap((p) => [p.procedimento, p.codigo_sigtap]),
+      ].join(" ").toLowerCase();
+      return alvo.includes(t);
     });
+    renderizar(lista);
+  }
 
-    container.appendChild(row);
-  });
-}
+  function mensagem(texto) {
+    const box = $("#histContainer");
+    if (box) box.innerHTML = `<p class="acd-vazio">${esc(texto)}</p>`;
+  }
 
-function filtrarHistorico(q) {
-  const arr = !q ? HIST_CACHE : HIST_CACHE.filter(it => {
-    const p = (it.procedimento || '').toLowerCase();
-    const pr = (it.profissional_nome || it.profissional || '').toLowerCase();
-    const cid = (it.cid_codigo || '').toLowerCase();
-    return p.includes(q) || pr.includes(q) || cid.includes(q);
+  // ---------------------------------------------------------------- inicio
+  document.addEventListener("DOMContentLoaded", async () => {
+    const params = new URLSearchParams(location.search);
+    PACIENTE_ID = (params.get("paciente_id") || "").trim();
+    const nomeUrl = (params.get("paciente_nome") || "").trim();
+
+    $("#histContainer")?.addEventListener("click", (e) => {
+      const head = e.target.closest(".acd-head");
+      if (head) alternar(head);
+    });
+    $("#histSearch")?.addEventListener("input", (e) => filtrar(e.target.value));
+
+    if (!/^\d+$/.test(PACIENTE_ID)) {
+      mensagem("Selecione um paciente para ver o histórico.");
+      return;
+    }
+
+    const novo = $("#hxNovo");
+    if (novo) novo.href = `/atendimentos/registrar?paciente_id=${encodeURIComponent(PACIENTE_ID)}${nomeUrl ? `&paciente_nome=${encodeURIComponent(nomeUrl)}` : ""}`;
+    set("hxNome", nomeUrl);
+
+    try {
+      const r = await fetch(`/atendimentos/api/historico?paciente_id=${encodeURIComponent(PACIENTE_ID)}`, { credentials: "same-origin" });
+      if (r.status === 403) { mensagem("Você não tem permissão para ver o histórico de atendimentos."); return; }
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || `Erro ${r.status}`);
+
+      if (!j.paciente) { mensagem("Paciente não encontrado nesta clínica."); return; }
+
+      preencherPaciente(j.paciente, nomeUrl);
+      ITENS = j.items || [];
+      const resumo = $("#hxResumo");
+      if (resumo) resumo.textContent = ITENS.length
+        ? `${ITENS.length} atendimento(s) · mais recente em ${toBR(ITENS[0].data_atendimento)}`
+        : "";
+      renderizar(ITENS, { abrirPrimeiro: true });   // o mais recente ja vem aberto
+    } catch (e) {
+      console.error(e);
+      mensagem("Não foi possível carregar o histórico agora.");
+    }
   });
-  renderHistorico(arr);
-}
+})();

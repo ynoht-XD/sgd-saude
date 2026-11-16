@@ -1,0 +1,110 @@
+/* Lista em ACORDEAO (accordion): coluna 1 = data; coluna 2 = profissional + procedimento; clicar na linha expande os detalhes.
+   Usado pelo Historico de atendimentos e pelos Registros. So tokens do base.css (claro e escuro). */
+
+.acd-list{ display:flex; flex-direction:column; gap:8px; }
+
+.acd-item{
+  border:1px solid var(--line);
+  border-radius:var(--radius-md, 14px);
+  background:var(--surface);
+  box-shadow:var(--shadow-sm);
+  overflow:hidden;
+  transition:border-color .15s var(--ease, ease);
+}
+.acd-item.is-aberto{ border-color:var(--info-line, var(--line)); }
+
+/* cabecalho = o botao que abre/fecha */
+.acd-head{
+  appearance:none;
+  display:grid;
+  grid-template-columns:116px minmax(0, 1fr) 20px;
+  align-items:start;
+  gap:6px 14px;
+  width:100%;
+  padding:12px 14px;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.acd-head:hover{ background:var(--surface-2); }
+.acd-head:focus-visible{ outline:2px solid var(--brand); outline-offset:-2px; }
+
+.acd-col--data{ display:flex; flex-direction:column; gap:2px; }
+.acd-col--data b{ font-size:var(--fs-md); font-weight:800; }
+.acd-col--data small{ font-size:var(--fs-xs); color:var(--text-2); }
+
+.acd-col--main{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.acd-titulo{ font-size:var(--fs-md); font-weight:800; overflow-wrap:anywhere; }
+.acd-sub{ font-size:var(--fs-sm); color:var(--text-2); overflow-wrap:anywhere; }
+.acd-sub code{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:var(--fs-xs); font-weight:700; color:var(--info-chip-ink); margin-right:4px; }
+.acd-sub .acd-mais{ color:var(--muted); font-size:var(--fs-xs); white-space:nowrap; }
+.acd-tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:3px; }
+
+.acd-tag{
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 9px; border-radius:999px;
+  font-size:var(--fs-xs); font-weight:700; line-height:1.5;
+  background:var(--surface-3); color:var(--text-2);
+}
+.acd-tag--ok{ background:var(--success-chip); color:var(--success-chip-ink); }
+.acd-tag--alerta{ background:var(--warning-chip); color:var(--warning-chip-ink); }
+.acd-tag--falta{ background:var(--danger-chip); color:var(--danger-chip-ink); }
+.acd-tag--info{ background:var(--info-chip); color:var(--info-chip-ink); }
+
+/* seta (so CSS) */
+.acd-chevron{ width:20px; height:20px; position:relative; margin-top:2px; }
+.acd-chevron::before{
+  content:""; position:absolute; left:5px; top:4px; width:8px; height:8px;
+  border-right:2px solid var(--muted); border-bottom:2px solid var(--muted);
+  transform:rotate(45deg); transition:transform .15s var(--ease, ease);
+}
+.acd-head[aria-expanded="true"] .acd-chevron::before{ transform:rotate(-135deg); top:7px; }
+
+/* painel de detalhes */
+.acd-panel{ padding:4px 14px 16px; border-top:1px solid var(--line); background:var(--surface-2); }
+.acd-panel[hidden]{ display:none; }
+
+.acd-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-top:12px; }
+.acd-card{ padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-sm, 10px); background:var(--surface); min-width:0; }
+.acd-rot{ display:block; font-size:var(--fs-xs); font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:var(--text-2); margin-bottom:4px; }
+.acd-val{ font-size:var(--fs-md); font-weight:700; overflow-wrap:anywhere; }
+.acd-val small{ display:block; margin-top:2px; font-size:var(--fs-xs); font-weight:600; color:var(--text-2); }
+.acd-val--vazio{ color:var(--muted); font-weight:600; }
+
+/* codigo do diagnostico em destaque */
+.acd-cid{
+  display:inline-block; padding:2px 12px; border-radius:10px;
+  font-size:var(--fs-xl); font-weight:800; letter-spacing:.02em;
+  background:var(--info-chip); color:var(--info-chip-ink);
+}
+
+.acd-bloco{ margin-top:12px; }
+.acd-lista-proc{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.acd-lista-proc li{ display:flex; gap:10px; align-items:baseline; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-sm, 10px); background:var(--surface); font-size:var(--fs-sm); }
+.acd-lista-proc code{ flex:0 0 auto; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-weight:800; color:var(--info-chip-ink); }
+
+.acd-texto{ margin:0; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-sm, 10px); background:var(--surface); white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:var(--fs-sm); line-height:1.5; }
+.acd-texto--vazio{ color:var(--muted); }
+
+.acd-acoes{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.acd-link{
+  display:inline-flex; align-items:center; min-height:34px; padding:0 12px;
+  border:1px solid var(--line); border-radius:var(--radius-sm, 10px);
+  background:var(--surface); color:var(--text); font:inherit; font-size:var(--fs-sm); font-weight:700; text-decoration:none; cursor:pointer;
+}
+.acd-link:hover{ background:var(--surface-3); }
+.acd-link:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+
+.acd-vazio{ padding:28px 16px; text-align:center; color:var(--muted); border:1px dashed var(--line); border-radius:var(--radius-md, 14px); background:var(--surface); }
+
+@media (max-width:640px){
+  .acd-head{ grid-template-columns:84px minmax(0, 1fr) 18px; gap:4px 10px; padding:10px 12px; }
+  .acd-grid{ grid-template-columns:1fr; }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .acd-item, .acd-chevron::before{ transition:none; }
+}
